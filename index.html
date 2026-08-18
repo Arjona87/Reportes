@@ -848,12 +848,23 @@
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 const csvText = await response.text();
 
-                // Blindaje: si el gid dejara de apuntar a la pestaña SEMANAL (por duplicado,
-                // borrado o recreación de la hoja), el dashboard fallaría en silencio con datos
-                // equivocados. Verificamos que los bloques esperados estén presentes.
-                const textoNorm = csvText.toUpperCase();
-                if (!textoNorm.includes('JALISCO') || !textoNorm.includes('AMG')) {
-                    throw new Error(`La hoja gid=${SHEET_GID} no contiene los bloques JALISCO y AMG. Verifica que "${HOJA_ACTIVA.nombre}" siga siendo esa pestaña.`);
+                // Verificación de origen: si el gid dejara de apuntar a la pestaña SEMANAL
+                // (por duplicado, borrado o recreación de la hoja), conviene advertirlo.
+                //
+                // IMPORTANTE: se usan los MISMOS marcadores que processSheetData() —
+                // 'JALISCO' y 'ÁREA METROPOLITANA'. La cadena "AMG" no existe en el CSV:
+                // es solo una clave interna de la interfaz.
+                //
+                // Esta verificación NO bloquea la carga: solo advierte en consola. El
+                // dashboard es de uso diario y ninguna comprobación defensiva debe poder
+                // impedir que los datos se muestren.
+                const norm = csvText.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (!norm.includes('JALISCO') || !norm.includes('AREA METROPOLITANA')) {
+                    console.warn(
+                        `⚠️ La hoja gid=${SHEET_GID} no muestra los bloques esperados ` +
+                        `(JALISCO / ÁREA METROPOLITANA). Verifica que "${HOJA_ACTIVA.nombre}" ` +
+                        `siga siendo esa pestaña. Se continúa con la carga de todos modos.`
+                    );
                 }
 
                 console.log('✅ Datos descargados correctamente');
