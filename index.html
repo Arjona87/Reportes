@@ -7,6 +7,11 @@
     
     <!-- Chart.js para gráficas -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Poppins para la infografía (I11). Si no carga, Canvas usa Arial automáticamente. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     
     <style>
         /* ===== VARIABLES DE COLOR ===== */
@@ -757,6 +762,10 @@
                 <button id="descargarInfografiaBtn" style="background:linear-gradient(135deg,#27ae60,#1e8449); color:#fff; border:none; padding:10px 22px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px;">
                     ⬇️ Descargar JPG
                 </button>
+                <select id="formatoInfografiaSelect" title="Formato de la infografía" style="padding:9px 12px; border:1px solid #bdc3c7; border-radius:6px; font-size:14px; background:#fff;">
+                    <option value="9:16">📱 Vertical 9:16 (WhatsApp)</option>
+                    <option value="16:9">🖥️ Horizontal 16:9 (proyección)</option>
+                </select>
                 <span id="infografiaStatus" style="font-size:13px; color:#7f8c8d;"></span>
             </div>
             <div class="infografia-container" id="infografiaContainer">
@@ -1368,29 +1377,29 @@
         };
 
         const ROBOS_KEYS = [
-            { key: 'ROBO DE VEHÍCULOS PARTICULARES', label: 'Vehículos\nParticulares', icon: '🚗' },
-            { key: 'ROBO DE MOTOCICLETA', label: 'Motocicletas', icon: '🏍️' },
-            { key: 'ROBO A PERSONAS', label: 'A Personas', icon: '🚶' },
-            { key: 'ROBO A NEGOCIO', label: 'A Negocio', icon: '🏪' },
-            { key: 'ROBO A CASA HABITACIÓN', label: 'Casa\nHabitación', icon: '🏠' },
-            { key: 'ROBO A CUENTAHABIENTES', label: 'Cuentahabientes', icon: '💳' },
-            { key: 'ROBO A VEHÍCULO DE CARGA PESADA', label: 'Veh. Carga\nPesada', icon: '🚚' },
-            { key: 'ROBO A BANCOS', label: 'Bancos', icon: '🏦' }
+            { key: 'ROBO DE VEHÍCULOS PARTICULARES', label: 'Vehículos\nParticulares', icon: '🚙' },
+            { key: 'ROBO DE MOTOCICLETA', label: 'Motocicletas', icon: '🛵' },
+            { key: 'ROBO A PERSONAS', label: 'A Personas', icon: '👤' },
+            { key: 'ROBO A NEGOCIO', label: 'A Negocio', icon: '🏬' },
+            { key: 'ROBO A CASA HABITACIÓN', label: 'Casa\nHabitación', icon: '🏘️' },
+            { key: 'ROBO A CUENTAHABIENTES', label: 'Cuentahabientes', icon: '🏧' },
+            { key: 'ROBO A VEHÍCULO DE CARGA PESADA', label: 'Veh. Carga\nPesada', icon: '🚛' },
+            { key: 'ROBO A BANCOS', label: 'Bancos', icon: '🏛️' }
         ];
 
         const LIBERTAD_KEYS = [
-            { key: 'VIOLENCIA FAMILIAR', label: 'Violencia\nFamiliar', icon: '👨‍👩‍👧' },
-            { key: 'LESIONES DOLOSAS', label: 'Lesiones\nDolosas', icon: '✊' },
-            { key: 'ABUSO SEXUAL INFANTIL', label: 'Abuso Sexual\nInfantil', icon: '👶' },
-            { key: 'VIOLACIÓN', label: 'Violación', icon: '🏃' }
+            { key: 'VIOLENCIA FAMILIAR', label: 'Violencia\nFamiliar', icon: '⚠️' },
+            { key: 'LESIONES DOLOSAS', label: 'Lesiones\nDolosas', icon: '🩹' },
+            { key: 'ABUSO SEXUAL INFANTIL', label: 'Abuso Sexual\nInfantil', icon: '🛡️' },
+            { key: 'VIOLACIÓN', label: 'Violación', icon: '⛔' }
         ];
 
         const GRAVES_KEYS = [
-            { key: 'HOMICIDIOS DOLOSOS (VÍCTIMAS)', label: 'Homicidios\nDolosos', icon: '☠️' },
-            { key: 'PRIVACIÓN ILEGAL DE LA LIBERTAD', label: 'Privación Ilegal\nLibertad', icon: '🔗' },
-            { key: 'EXTORSIÓN', label: 'Extorsión', icon: '💲' },
-            { key: 'DESAPARICIÓN COMETIDA POR PARTICULARES', label: 'Desaparición\npor Particulares', icon: '🔍' },
-            { key: 'SECUESTRO (VÍCTIMAS)', label: 'Secuestro', icon: '☠️' },
+            { key: 'HOMICIDIOS DOLOSOS (VÍCTIMAS)', label: 'Homicidios\nDolosos', icon: '⚫' },
+            { key: 'PRIVACIÓN ILEGAL DE LA LIBERTAD', label: 'Privación Ilegal\nLibertad', icon: '⛓️' },
+            { key: 'EXTORSIÓN', label: 'Extorsión', icon: '📞' },
+            { key: 'DESAPARICIÓN COMETIDA POR PARTICULARES', label: 'Desaparición\npor Particulares', icon: '❓' },
+            { key: 'SECUESTRO (VÍCTIMAS)', label: 'Secuestro', icon: '🔒' },
             { key: 'FEMINICIDIO (VÍCTIMAS)', label: 'Feminicidio', icon: '♀️' }
         ];
 
@@ -1513,7 +1522,7 @@
             const marca = (conMarca !== false && esBaseBaja(d.val))
                 ? ' <span class="an-aviso" title="La semana anterior tuvo menos de ' + UMBRAL_BASE_BAJA + ' casos: el porcentaje no es estadísticamente interpretable">⚠️ base baja</span>'
                 : '';
-            return `${nombre} (${pct}, de ${d.val.ant} a ${d.val.act})${marca}`;
+            return `${nombre} (${d.val.ant}→${d.val.act}) ${pct}${marca}`;
         }
 
         // M3: formato en unidades, no en porcentaje.
@@ -1522,7 +1531,7 @@
             const dif = d.val.act - d.val.ant;
             const clase = dif > 0 ? 'an-up' : 'an-down';
             const signo = dif > 0 ? '+' : '';
-            return `${nombre} (<span class="${clase}">${signo}${dif}</span> casos, de ${d.val.ant} a ${d.val.act})`;
+            return `${nombre} (${d.val.ant}→${d.val.act}) <span class="${clase}">${signo}${dif}</span> casos`;
         }
 
         function renderAnalisisSemanal() {
@@ -1632,49 +1641,69 @@
                 </div>
             `;
 
-            // M4: botón para copiar el resumen en texto plano
+            // B: dos destinos con formato distinto.
             const acciones = `
                 <div class="an-acciones">
-                    <button class="btn btn-primary" id="copiarAnalisisBtn">📋 Copiar resumen</button>
+                    <button class="btn btn-primary" id="copiarWhatsappBtn">📱 Copiar para WhatsApp</button>
+                    <button class="btn btn-secondary" id="copiarPlanoBtn">📋 Copiar texto plano</button>
                     <span id="copiarAnalisisStatus" class="an-copiado"></span>
                 </div>
             `;
 
             cont.innerHTML = bloques + comparativo + acciones + pie;
 
-            const btn = document.getElementById('copiarAnalisisBtn');
-            if (btn) btn.addEventListener('click', copiarAnalisisSemanal);
+            const btnWa = document.getElementById('copiarWhatsappBtn');
+            if (btnWa) btnWa.addEventListener('click', () => copiarAnalisisSemanal('whatsapp'));
+
+            const btnPl = document.getElementById('copiarPlanoBtn');
+            if (btnPl) btnPl.addEventListener('click', () => copiarAnalisisSemanal('plano'));
         }
 
-        // M4: genera el resumen en texto plano, con el mismo formato del reporte a dirección.
-        function construirTextoAnalisis() {
+        // M4 + A + B: genera el resumen en texto.
+        // modo 'whatsapp' → sintaxis *negrita* de un asterisco, SIN la marca de base baja.
+        // modo 'plano'    → texto limpio, CONSERVA la marca [base baja].
+        function construirTextoAnalisis(modo) {
+            const wa = (modo === 'whatsapp');
+            const neg = (t) => wa ? ('*' + t + '*') : t;
             const lineas = [];
 
             ['jalisco', 'amg'].forEach((k, idx) => {
                 const a = calcularAnalisisRegion(k);
                 if (!a) return;
-                if (idx > 0) lineas.push('---');
+                if (idx > 0) lineas.push(wa ? '➖➖➖➖➖➖➖➖' : '---');
 
                 const etiqueta = (k === 'jalisco') ? 'Jalisco' : 'AMG';
                 const s = a.variacion >= 0 ? '+' : '';
+                const flecha = a.variacion >= 0 ? '▲' : '▼';
 
+                // A: cifras absolutas (anterior → actual) en todos los casos.
+                // B: la marca de base baja solo se omite en el modo WhatsApp.
                 const plano = (d) => {
                     const nombre = d.label.replace(/\n/g, ' ');
                     const pct = (d.val.pct >= 0 ? '+' : '') + d.val.pct.toFixed(1) + '%';
-                    const marca = esBaseBaja(d.val) ? ' [base baja]' : '';
-                    return `${nombre} (${pct}, de ${d.val.ant} a ${d.val.act})${marca}`;
+                    const marca = (!wa && esBaseBaja(d.val)) ? ' [base baja]' : '';
+                    return `${nombre} (${d.val.ant}→${d.val.act}) ${pct}${marca}`;
                 };
 
-                lineas.push(`${etiqueta}.`);
-                lineas.push(`${a.total.toLocaleString('es-MX')} delitos totales (${s}${a.variacion.toFixed(1)}% vs la semana anterior).`);
-                lineas.push('Aumentos:  ' + (a.aumentos.length ? a.aumentos.map(plano).join('; ') : 'sin incrementos registrados') + '.');
-                lineas.push('Disminuciones:  ' + (a.disminuciones.length ? a.disminuciones.map(plano).join('; ') : 'sin disminuciones registradas') + '.');
+                lineas.push(neg(etiqueta + '.'));
+                lineas.push(`${neg(a.total.toLocaleString('es-MX') + ' delitos totales')} (${flecha} ${s}${a.variacion.toFixed(1)}% vs la semana anterior).`);
+                lineas.push(neg('Aumentos:') + ' ' + (a.aumentos.length ? a.aumentos.map(plano).join('; ') : 'sin incrementos registrados') + '.');
+                lineas.push(neg('Disminuciones:') + ' ' + (a.disminuciones.length ? a.disminuciones.map(plano).join('; ') : 'sin disminuciones registradas') + '.');
 
                 if (a.porVolumen.length) {
-                    lineas.push('Por volumen:  ' + a.porVolumen.map(d => {
+                    lineas.push(neg('Por volumen:') + ' ' + a.porVolumen.map(d => {
                         const nombre = d.label.replace(/\n/g, ' ');
                         const dif = d.val.act - d.val.ant;
-                        return `${nombre} (${dif > 0 ? '+' : ''}${dif} casos, de ${d.val.ant} a ${d.val.act})`;
+                        return `${nombre} (${d.val.ant}→${d.val.act}) ${dif > 0 ? '+' : ''}${dif} casos`;
+                    }).join('; ') + '.');
+                }
+
+                if (a.altoImpacto && a.altoImpacto.length) {
+                    lineas.push(neg('Alto impacto:') + ' ' + a.altoImpacto.map(d => {
+                        const nombre = d.label.replace(/\n/g, ' ');
+                        const dif = d.val.act - d.val.ant;
+                        const f = dif > 0 ? '▲' : (dif < 0 ? '▼' : '=');
+                        return `${nombre} ${d.val.ant}→${d.val.act} ${f}`;
                     }).join('; ') + '.');
                 }
 
@@ -1682,27 +1711,29 @@
                 if (a.prom4) ctx.push(`${a.prom4.pct >= 0 ? '+' : ''}${a.prom4.pct.toFixed(1)}% vs promedio de ${a.prom4.semanas} semanas`);
                 if (a.prom52) ctx.push(`${a.prom52.pct >= 0 ? '+' : ''}${a.prom52.pct.toFixed(1)}% vs promedio de ${a.prom52.semanas} semanas`);
                 if (a.racha) ctx.push(`${a.racha.semanas}ª semana consecutiva ${a.racha.direccion > 0 ? 'al alza' : 'a la baja'}`);
-                if (ctx.length) lineas.push('Contexto:  ' + ctx.join('; ') + '.');
+                if (ctx.length) lineas.push(neg('Contexto:') + ' ' + ctx.join('; ') + '.');
             });
 
             const jal = calcularAnalisisRegion('jalisco');
             const amg = calcularAnalisisRegion('amg');
             if (jal && amg && jal.total > 0) {
-                lineas.push('---');
-                lineas.push(`El AMG concentra el ${((amg.total / jal.total) * 100).toFixed(1)}% de los delitos del estado.`);
+                lineas.push(wa ? '➖➖➖➖➖➖➖➖' : '---');
+                lineas.push(`El AMG concentra el ${neg(((amg.total / jal.total) * 100).toFixed(1) + '%')} de los delitos del estado.`);
             }
 
             lineas.push('');
-            lineas.push('Fuente: Fiscalía del Estado de Jalisco. Elaborado por: CGES/DGAPP/AA.');
+            const corte = jal && jal.semanaActual ? ` Corte: ${jal.semanaActual}.` : '';
+            lineas.push(`Fuente: Fiscalía del Estado de Jalisco.${corte} Elaborado por: CGES/DGAPP/AA.`);
 
             return lineas.join('\n');
         }
 
-        function copiarAnalisisSemanal() {
-            const texto = construirTextoAnalisis();
+        function copiarAnalisisSemanal(modo) {
+            const texto = construirTextoAnalisis(modo);
             const status = document.getElementById('copiarAnalisisStatus');
+            const etiqueta = (modo === 'whatsapp') ? 'Copiado para WhatsApp' : 'Copiado en texto plano';
 
-            const exito = () => { if (status) { status.textContent = '✅ Copiado'; setTimeout(() => status.textContent = '', 2500); } };
+            const exito = () => { if (status) { status.textContent = '✅ ' + etiqueta; setTimeout(() => status.textContent = '', 2500); } };
             const fallo = () => { if (status) { status.textContent = '❌ No se pudo copiar'; setTimeout(() => status.textContent = '', 2500); } };
 
             if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -1720,6 +1751,9 @@
             }
         }
 
+        // Formato activo de la infografía: '9:16' (por defecto) o '16:9' (proyección).
+        let formatoInfografia = '9:16';
+
         function generarInfografia() {
             const regionKey = currentRegion;
             const region = parsedData[regionKey];
@@ -1731,34 +1765,56 @@
             document.getElementById('infografiaStatus').textContent = '⏳ Generando...';
             document.getElementById('generarInfografiaBtn').disabled = true;
 
-            setTimeout(() => {
-                try {
-                    dibujarInfografia(regionKey, region);
-                    document.getElementById('infografiaContainer').style.display = 'none';
-                    document.getElementById('infografiaPreview').style.display = 'block';
-                    document.getElementById('descargarInfografiaBtn').style.display = 'flex';
-                    document.getElementById('infografiaStatus').textContent = '✅ Infografía generada';
-                } catch(e) {
-                    document.getElementById('infografiaStatus').textContent = '❌ Error: ' + e.message;
-                    console.error(e);
-                }
-                document.getElementById('generarInfografiaBtn').disabled = false;
-            }, 50);
+            // I11: esperar a que Poppins esté disponible antes de dibujar. Sin esto, Canvas
+            // sustituye por Arial en silencio y la infografía sale distinta según la conexión.
+            const fuentesListas = (document.fonts && document.fonts.ready)
+                ? document.fonts.ready
+                : Promise.resolve();
+
+            fuentesListas.catch(() => {}).then(() => {
+                setTimeout(() => {
+                    try {
+                        dibujarInfografia(regionKey, region);
+                        document.getElementById('infografiaContainer').style.display = 'none';
+                        document.getElementById('infografiaPreview').style.display = 'block';
+                        document.getElementById('descargarInfografiaBtn').style.display = 'flex';
+                        document.getElementById('infografiaStatus').textContent = '✅ Infografía generada (' + formatoInfografia + ')';
+                    } catch(e) {
+                        document.getElementById('infografiaStatus').textContent = '❌ Error: ' + e.message;
+                        console.error(e);
+                    }
+                    document.getElementById('generarInfografiaBtn').disabled = false;
+                }, 50);
+            });
         }
+
+        // Tipografías de la infografía (I11).
+        // Poppins se carga desde Google Fonts; si no llega, Canvas usa Arial sin romper nada.
+        const FUENTE_TIT = '"Poppins", Arial, sans-serif';
+        const FUENTE_NUM = '"Poppins", Arial, sans-serif';
+        const FUENTE_TXT = 'Arial, sans-serif';
 
         function dibujarInfografia(regionKey, region) {
             const cfg = INFOGRAFIA_CONFIG[regionKey];
             const canvas = document.getElementById('infografiaCanvas');
 
-            // Dimensiones (proporción 9:16 a alta resolución)
-            const W = 900, H = 1900;
+            // Dimensiones (proporción 9:16 a alta resolución).
+            // H es solo un techo de trabajo: al final el lienzo se recorta a la altura real.
+            // Se amplió de 1900 a 2600 porque los bloques nuevos (alto impacto, cifras
+            // absolutas y nota metodológica) rebasan el alto anterior.
+            const W = 900, H = 2600;
             canvas.width = W;
             canvas.height = H;
             const ctx = canvas.getContext('2d');
 
-            // Colores
-            const AZUL_OSC = '#1B2A4A';
-            const AZUL_HDR = '#2C3E6B';
+            // Fronteras naturales entre bloques, para poder partir la imagen en columnas
+            // sin cortar una sección por la mitad (usado por la versión 16:9).
+            const fronteras = [];
+
+            // Colores — paleta institucional de Jefatura de Gabinete (I4)
+            const AZUL_OSC = '#18345D';   // Azul institucional
+            const AZUL_HDR = '#24487A';   // Variante para encabezados de sección
+            const NARANJA  = '#F08013';   // Acento institucional, uso puntual
             const AZUL_CLR = '#D6E8F7';
             const ROJO_BG  = '#FADBD8';
             const VERDE_BG = '#D5F4E6';
@@ -1956,6 +2012,7 @@
                 });
 
                 y += gridH;
+                fronteras.push(y);
             }
 
             dibujarSeccion('ROBOS', ROBOS_KEYS, 4);
@@ -1990,22 +2047,68 @@
             textCenter('TOP 3 AUMENTOS ▲', W / 4, y + 18, 'bold 13px Arial', ROJO);
             textCenter('TOP 3 DISMINUCIONES ▼', W * 3 / 4, y + 18, 'bold 13px Arial', VERDE);
 
-            // Nombres cortos
-            const nombreCorto = (label) => label.replace('\\n', ' ');
+            // Nombres cortos.
+            // Nota: aquí había replace('\\n', ' '), que buscaba una barra invertida literal
+            // y por tanto nunca sustituía el salto de línea real de las etiquetas.
+            const nombreCorto = (label) => label.replace(/\n/g, ' ');
+
+            // I1: el porcentaje solo se interpreta junto a las cifras que lo producen.
+            // I2: asterisco cuando el denominador es menor a UMBRAL_BASE_BAJA (llamada al pie).
+            let hayBaseBaja = false;
+            const etiquetaTop = (d) => {
+                let marca = '';
+                if (esBaseBaja(d.val)) { marca = ' *'; hayBaseBaja = true; }
+                return nombreCorto(d.label) + ' (' + d.val.ant + '\u2192' + d.val.act + ')' + marca;
+            };
 
             aumentos.forEach((d, i) => {
                 const ly = y + 38 + i * 26;
-                textLeft((i + 1) + '. ' + nombreCorto(d.label), 20, ly, '13px Arial', NEGRO);
-                textRight((d.val.pct >= 0 ? '+' : '') + d.val.pct.toFixed(1) + '%', W / 2 - 15, ly, 'bold 13px Arial', ROJO);
+                textLeft((i + 1) + '. ' + etiquetaTop(d), 20, ly, '12px ' + FUENTE_TXT, NEGRO);
+                textRight((d.val.pct >= 0 ? '+' : '') + d.val.pct.toFixed(1) + '%', W / 2 - 15, ly, 'bold 13px ' + FUENTE_NUM, ROJO);
             });
 
             disminuciones.forEach((d, i) => {
                 const ly = y + 38 + i * 26;
-                textLeft((i + 1) + '. ' + nombreCorto(d.label), W / 2 + 15, ly, '13px Arial', NEGRO);
-                textRight(d.val.pct.toFixed(1) + '%', W - 20, ly, 'bold 13px Arial', VERDE);
+                textLeft((i + 1) + '. ' + etiquetaTop(d), W / 2 + 15, ly, '12px ' + FUENTE_TXT, NEGRO);
+                textRight(d.val.pct.toFixed(1) + '%', W - 20, ly, 'bold 13px ' + FUENTE_NUM, VERDE);
             });
 
             y += TOP_H;
+            fronteras.push(y);
+
+            // ========== DELITOS DE ALTO IMPACTO (I7) ==========
+            // Se reportan siempre, entren o no al TOP 3: en una semana tranquila podrían
+            // quedar invisibles pese a ser los de mayor relevancia para la toma de decisiones.
+            const AI_HDR = 40;
+            ctx.fillStyle = AZUL_HDR;
+            ctx.fillRect(0, y, W, AI_HDR);
+            textCenter('DELITOS DE ALTO IMPACTO', W / 2, y + AI_HDR / 2, 'bold 15px ' + FUENTE_TIT, BLANCO);
+            y += AI_HDR;
+
+            const altoImpacto = conValores.filter(d => DELITOS_ALTO_IMPACTO.includes(d.key));
+            const AI_FILAS = Math.max(Math.ceil(altoImpacto.length / 2), 1);
+            const AI_H = AI_FILAS * 26 + 18;
+            ctx.fillStyle = BLANCO;
+            ctx.fillRect(0, y, W, AI_H);
+            ctx.strokeStyle = '#CCCCCC';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(W / 2, y + 8); ctx.lineTo(W / 2, y + AI_H - 8); ctx.stroke();
+
+            altoImpacto.forEach((d, i) => {
+                const col = i % 2;
+                const fila = Math.floor(i / 2);
+                const lx = col === 0 ? 20 : W / 2 + 15;
+                const rx = col === 0 ? W / 2 - 15 : W - 20;
+                const ly = y + 18 + fila * 26;
+                const dif = d.val.act - d.val.ant;
+                const color = dif > 0 ? ROJO : (dif < 0 ? VERDE : GRIS_TX);
+                const flecha = dif > 0 ? '\u25B2' : (dif < 0 ? '\u25BC' : '=');
+                textLeft(nombreCorto(d.label), lx, ly, '12px ' + FUENTE_TXT, NEGRO);
+                textRight(d.val.ant + '\u2192' + d.val.act + '  ' + flecha, rx, ly, 'bold 12px ' + FUENTE_NUM, color);
+            });
+
+            y += AI_H;
+            fronteras.push(y);
 
             // ========== RESTO DE LOS DELITOS ==========
             const RESTO_H = 44;
@@ -2019,6 +2122,7 @@
             const restoPctStr = (restoPct >= 0 ? '+' : '') + restoPct.toFixed(1) + '%';
             textCenter('RESTO DE LOS DELITOS:  ' + restoAct.toLocaleString('es-MX') + ' casos  (' + restoPctStr + ')', W / 2, y + RESTO_H / 2, 'bold 15px Arial', ROJO);
             y += RESTO_H;
+            fronteras.push(y);
 
             // ========== GRÁFICA DE TENDENCIA ==========
             const CHART_HDR = 40;
@@ -2064,6 +2168,28 @@
                 ctx.lineWidth = 2.5;
                 ctx.stroke();
 
+                // I6: promedio de las últimas 52 semanas como referencia visual.
+                // Convierte la serie en interpretable de un vistazo: sin esta línea no se
+                // distingue una semana normal de una atípica.
+                const refPeriodo = Math.min(52, chartVals.length);
+                const refPromedio = chartVals.slice(-refPeriodo).reduce((a, v) => a + v, 0) / refPeriodo;
+                if (refPromedio > minV && refPromedio < maxV) {
+                    const refY = toY(refPromedio);
+                    ctx.save();
+                    ctx.setLineDash([6, 5]);
+                    ctx.strokeStyle = NARANJA;
+                    ctx.lineWidth = 1.8;
+                    ctx.beginPath();
+                    ctx.moveTo(PAD_L, refY);
+                    ctx.lineTo(W - PAD_R, refY);
+                    ctx.stroke();
+                    ctx.restore();
+                    textRight(
+                        'Prom. ' + refPeriodo + ' sem: ' + Math.round(refPromedio).toLocaleString('es-MX'),
+                        W - PAD_R, refY - 9, 'bold 10px ' + FUENTE_NUM, NARANJA
+                    );
+                }
+
                 // Puntos y etiquetas
                 chartVals.forEach((v, i) => {
                     const px = toX(i), py = toY(v);
@@ -2085,23 +2211,52 @@
             }
 
             y += CHART_H;
+            fronteras.push(y);
+
+            // ========== NOTA METODOLÓGICA (I8) ==========
+            // El material puede llegar al Gobernador sin capa intermedia de revisión:
+            // la fuente, el carácter de la cifra y las salvedades van en el propio soporte.
+            const NOTA_H = hayBaseBaja ? 52 : 38;
+            ctx.fillStyle = '#F7F9FC';
+            ctx.fillRect(0, y, W, NOTA_H);
+            ctx.strokeStyle = '#DDE3EA';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+
+            textLeft(
+                'Fuente: Fiscalía del Estado de Jalisco. Cifras preliminares, sujetas a actualización.',
+                20, y + 15, '10.5px ' + FUENTE_TXT, GRIS_TX
+            );
+            if (hayBaseBaja) {
+                textLeft(
+                    '* Base baja: menos de ' + UMBRAL_BASE_BAJA + ' casos en la semana anterior. Al ser un denominador mínimo, ' +
+                    'la variación porcentual no es estadísticamente interpretable y debe leerse junto con la cifra absoluta.',
+                    20, y + 33, '10.5px ' + FUENTE_TXT, GRIS_TX
+                );
+            }
+
+            y += NOTA_H;
 
             // ========== FOOTER ==========
             const FOOT_H = 44;
             ctx.fillStyle = AZUL_OSC;
             ctx.fillRect(0, y, W, FOOT_H);
 
+            // I3: la fecha de CORTE (semana de los datos) no es la fecha de GENERACIÓN.
+            // Si se regenera la infografía un mes después, el pie debe seguir diciendo a qué
+            // semana corresponden las cifras, no el día en que se apretó el botón.
             const today = new Date();
             const fechaHoy = today.toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+            const corte = region.lastWeek ? ('Corte: ' + region.lastWeek) : 'Corte: n/d';
             textCenter(
-                'Fiscalía del ' + cfg.nombreFooter + '  |  ' + fechaHoy + '  |  Elaborado por: CGES/DGAPP/AA',
-                W / 2, y + FOOT_H / 2, '12px Arial', '#AABBCC'
+                'Fiscalía del ' + cfg.nombreFooter + '  |  ' + corte + '  |  Generada: ' + fechaHoy + '  |  Elaborado por: CGES/DGAPP/AA',
+                W / 2, y + FOOT_H / 2, '11.5px ' + FUENTE_TXT, '#E8EEF5'
             );
             
             y += FOOT_H;
 
             // ---- Recorte del lienzo a la altura real del contenido ----
-            // El lienzo se dimensiona a H=1900 fijo, pero el contenido termina antes:
+            // El lienzo se dimensiona a H fijo, pero el contenido termina antes:
             // esa diferencia era la franja blanca al pie de la infografía.
             // Es dinámico: aplica a JALISCO y AMG, y sigue funcionando si cambian los bloques.
             // También afecta al JPG descargado, que queda sin espacio sobrante.
@@ -2111,20 +2266,85 @@
                 canvas.height = alturaReal;
                 ctx.putImageData(contenido, 0, 0);
             }
+
+            // ---- Versión 16:9 para proyección (I9) ----
+            // No se duplica el motor de dibujo: se reutiliza la imagen vertical ya generada
+            // y se parte en dos columnas, cortando siempre en una frontera de bloque para
+            // no seccionar una sección por la mitad.
+            if (formatoInfografia === '16:9') {
+                componerFormato169(canvas, fronteras);
+            }
+        }
+
+        // Reorganiza la infografía vertical en dos columnas con proporción 16:9.
+        function componerFormato169(canvas, fronteras) {
+            const W = canvas.width;
+            const Htot = canvas.height;
+            const objetivo = Htot / 2;
+
+            // Frontera de bloque más cercana a la mitad
+            const validas = fronteras.filter(f => f > Htot * 0.25 && f < Htot * 0.75);
+            const corte = validas.length
+                ? validas.reduce((mejor, f) => Math.abs(f - objetivo) < Math.abs(mejor - objetivo) ? f : mejor, validas[0])
+                : Math.round(objetivo);
+
+            const altoCol1 = corte;
+            const altoCol2 = Htot - corte;
+            const altoCol = Math.max(altoCol1, altoCol2);
+            const SEP = 24;
+
+            // Lienzo intermedio con las dos columnas lado a lado
+            const tmp = document.createElement('canvas');
+            tmp.width = W * 2 + SEP;
+            tmp.height = altoCol;
+            const tctx = tmp.getContext('2d');
+            tctx.fillStyle = '#FFFFFF';
+            tctx.fillRect(0, 0, tmp.width, tmp.height);
+            tctx.drawImage(canvas, 0, 0, W, altoCol1, 0, 0, W, altoCol1);
+            tctx.drawImage(canvas, 0, corte, W, altoCol2, W + SEP, 0, W, altoCol2);
+
+            // Escalado a 16:9 conservando proporción, centrado sobre fondo blanco
+            const OUT_W = 1920, OUT_H = 1080;
+            canvas.width = OUT_W;
+            canvas.height = OUT_H;
+            const octx = canvas.getContext('2d');
+            octx.fillStyle = '#FFFFFF';
+            octx.fillRect(0, 0, OUT_W, OUT_H);
+
+            const escala = Math.min(OUT_W / tmp.width, OUT_H / tmp.height);
+            const dw = tmp.width * escala;
+            const dh = tmp.height * escala;
+            octx.imageSmoothingQuality = 'high';
+            octx.drawImage(tmp, (OUT_W - dw) / 2, (OUT_H - dh) / 2, dw, dh);
         }
 
         // ===== EVENT LISTENERS =====
         // Botón Generar Infografía
         document.getElementById('generarInfografiaBtn').addEventListener('click', generarInfografia);
 
+        // Selector de formato de la infografía (I9)
+        const selFormato = document.getElementById('formatoInfografiaSelect');
+        if (selFormato) {
+            selFormato.addEventListener('change', (e) => {
+                formatoInfografia = e.target.value;
+                generarInfografia();
+            });
+        }
+
         // Botón Descargar Infografía
         document.getElementById('descargarInfografiaBtn').addEventListener('click', () => {
             const canvas = document.getElementById('infografiaCanvas');
             const regionKey = currentRegion;
             const region = parsedData[regionKey];
-            const semana = region ? region.lastWeek.replace(/\s+/g, '_').replace(/\//g, '-') : 'semana';
+
+            // I10: el nombre debe identificar región, fecha de CORTE y formato, no solo la semana.
+            const corte = region && region.lastWeek
+                ? region.lastWeek.replace(/\s+/g, '_').replace(/\//g, '-')
+                : 'sin-corte';
+            const formato = formatoInfografia.replace(':', 'x');
+
             const link = document.createElement('a');
-            link.download = 'Infografia_' + regionKey.toUpperCase() + '_' + semana + '.jpg';
+            link.download = 'Infografia_' + regionKey.toUpperCase() + '_corte_' + corte + '_' + formato + '.jpg';
             link.href = canvas.toDataURL('image/jpeg', 0.95);
             link.click();
         });
