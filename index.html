@@ -693,17 +693,27 @@
         .ds-delta { display: inline-block; font-size: 12px; font-weight: 600; margin-bottom: 10px; }
         .ds-card-d { border-top: 1px solid var(--color-border); padding-top: 9px; }
         .ds-li {
-            display: flex; justify-content: space-between; gap: 10px;
+            display: grid;
+            grid-template-columns: 1fr 62px 42px;
+            align-items: center;
+            gap: 8px;
             font-size: 12.5px; padding: 3px 0; line-height: 1.5;
         }
         .ds-li span { color: var(--color-dark); }
-        .ds-li b { font-weight: 700; white-space: nowrap; }
-        .ds-li i { font-style: normal; font-weight: 600; min-width: 30px; text-align: right; font-size: 11.5px; }
+        .ds-li b { font-weight: 700; white-space: nowrap; text-align: center; }
+        .ds-li i { font-style: normal; font-weight: 600; text-align: right; font-size: 11.5px; }
         .ds-chart {
             background: #fff; border: 1px solid var(--color-border); border-radius: 10px;
             padding: 14px 16px 10px; margin-bottom: 18px;
         }
         .ds-chart-t { font-size: 14.5px; font-weight: 700; color: var(--color-primary); margin-bottom: 3px; }
+        .ds-chart-f {
+            display: inline-block;
+            font-size: 10.5px; font-weight: 600; letter-spacing: .3px;
+            color: var(--color-primary); background: var(--color-light);
+            border: 1px solid var(--color-border); border-radius: 4px;
+            padding: 2px 8px; margin-bottom: 8px;
+        }
         .ds-chart-n { font-size: 11.5px; color: #7f8c8d; margin-bottom: 8px; line-height: 1.5; }
         .ds-chart-box { position: relative; height: 300px; }
         .ds-chips { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 16px; }
@@ -2830,17 +2840,111 @@
         const DS_AZUL = '#18345D', DS_NAR = '#F08013', DS_AZUL_C = '#5B8DC8',
               DS_GRIS = '#6B7785', DS_ROJO = '#C0392B', DS_VERDE = '#1E8449';
 
-        function dsLienzo(id, titulo, nota) {
+        // Etiqueta de fuente bajo el título de cada gráfica (cambio 2).
+        function dsLienzo(id, titulo, fuente, nota) {
             return `<div class="ds-chart">
                         <div class="ds-chart-t">${titulo}</div>
+                        <div class="ds-chart-f">Fuente: ${fuente}</div>
                         ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
                         <div class="ds-chart-box"><canvas id="${id}"></canvas></div>
                     </div>`;
         }
 
+        /* Plugin de etiquetas de datos, escrito a mano sobre la API de Chart.js.
+           No se usa chartjs-plugin-datalabels para no añadir una dependencia de CDN:
+           si la red bloqueara ese recurso, las gráficas quedarían sin etiquetas.
+           IMPORTANTE: se pasa por gráfica (plugins: [...]), NO se registra en
+           Chart.register, para no afectar a las gráficas del Reporte Semanal. */
+        const dsEtiquetasPlugin = {
+            id: 'dsEtiquetas',
+            afterDatasetsDraw(chart) {
+                const cfg = (chart.options.plugins && chart.options.plugins.dsEtiquetas) || {};
+                if (cfg.enabled === false) return;
+
+                const ctx = chart.ctx;
+                const horizontal = chart.options.indexAxis === 'y';
+
+                chart.data.datasets.forEach((ds, di) => {
+                    const meta = chart.getDatasetMeta(di);
+                    if (meta.hidden) return;
+                    const tipo = meta.type || chart.config.type;
+                    if (tipo === 'doughnut' || tipo === 'pie') return;
+
+                    const validos = ds.data.filter(v => v !== null && v !== undefined).length;
+                    // Densidad: 36 semanas → 1 de cada 3; series medias → 1 de cada 2; cortas → todas.
+                    const paso = (tipo === 'bar' && horizontal) ? 1
+                               : (validos > 20 ? 3 : (validos > 11 ? 2 : 1));
+                    const ultimoIdx = ds.data.reduce((acc, v, i) => (v !== null && v !== undefined) ? i : acc, -1);
+
+                    ctx.save();
+                    ctx.font = 'bold 9.5px Arial, sans-serif';
+                    ctx.textAlign = horizontal ? 'left' : 'center';
+                    ctx.textBaseline = horizontal ? 'middle' : 'bottom';
+
+                    meta.data.forEach((pt, i) => {
+                        const v = ds.data[i];
+                        if (v === null || v === undefined) return;
+                        if (i !== ultimoIdx && i % paso !== 0) return;
+
+                        const txt = Number(v).toLocaleString('es-MX');
+                        const color = (i === ultimoIdx) ? '#C0392B'
+                                    : (ds.borderColor && typeof ds.borderColor === 'string' ? ds.borderColor : '#18345D');
+
+                        let px = pt.x, py = pt.y;
+                        if (horizontal) { px = pt.x + 6; }
+                        else { py = pt.y - 6; }
+
+                        // Fondo tenue para que la etiqueta se lea sobre la línea y el área
+                        const w = ctx.measureText(txt).width;
+                        ctx.fillStyle = 'rgba(255,255,255,0.82)';
+                        if (horizontal) ctx.fillRect(px - 2, py - 7, w + 4, 14);
+                        else ctx.fillRect(px - w / 2 - 2, py - 11, w + 4, 13);
+
+                        ctx.fillStyle = color;
+                        ctx.fillText(txt, px, py);
+                    });
+                    ctx.restore();
+                });
+            }
+        };
+
+        /* Etiquetas de donas: valor absoluto y porcentaje dentro del segmento (cambio 4). */
+        const dsDonaPlugin = {
+            id: 'dsDona',
+            afterDatasetsDraw(chart) {
+                const ctx = chart.ctx;
+                chart.data.datasets.forEach((ds, di) => {
+                    const meta = chart.getDatasetMeta(di);
+                    const total = ds.data.reduce((a, b) => a + (Number(b) || 0), 0);
+                    if (!total) return;
+
+                    meta.data.forEach((arco, i) => {
+                        const v = Number(ds.data[i]) || 0;
+                        const p = v / total * 100;
+                        if (p < 4) return;  // segmentos mínimos: se omiten para no encimarse
+
+                        const pos = arco.tooltipPosition();
+                        ctx.save();
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.font = 'bold 13px Arial, sans-serif';
+                        ctx.fillText(v.toLocaleString('es-MX'), pos.x, pos.y - 7);
+                        ctx.font = 'bold 11px Arial, sans-serif';
+                        ctx.fillText(p.toFixed(1) + '%', pos.x, pos.y + 8);
+                        ctx.restore();
+                    });
+                });
+            }
+        };
+
         function dsCrear(id, cfg) {
             const el = document.getElementById(id);
             if (!el) return;
+            const tipo = cfg.type;
+            cfg.plugins = (tipo === 'doughnut' || tipo === 'pie')
+                ? [dsDonaPlugin]
+                : [dsEtiquetasPlugin];
             dsCharts.push(new Chart(el, cfg));
         }
 
@@ -2874,23 +2978,23 @@
             const totalUlt = dsUlt(d.total) || 0;
 
             cont.innerHTML =
-                dsLienzo('dsG1', '1 · Acumulado total RNPDNO por semana') +
-                dsLienzo('dsG2', '2 · Desaparecidas vs. localizadas (acumulado)') +
-                dsLienzo('dsG3', '3 · Altas nuevas por semana', 'Diferencia entre cortes consecutivos: mide el ritmo, no el acumulado.') +
-                dsLienzo('dsG4', '4 · Altas nuevas y media móvil de 4 semanas') +
-                dsLienzo('dsG5', '5 · Tasa de localización (%)', 'Personas localizadas sobre el total registrado.') +
-                dsLienzo('dsG6', '6 · Localizadas con vida vs. sin vida') +
-                dsLienzo('dsG7', '7 · Estado de localización (última semana)') +
-                dsLienzo('dsG8', '8 · Distribución por género') +
-                dsLienzo('dsG9', '9 · Evolución del género (acumulado)') +
-                dsLienzo('dsG10', '10 · Composición semanal (100%)') +
-                dsLienzo('dsG11', '11 · Comparativo entre las tres fuentes', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
-                dsLienzo('dsG12', '12 · Brecha entre RNPDNO y Registro Estatal') +
-                dsLienzo('dsG13', '13 · Top 10 municipios (acumulado)') +
-                dsLienzo('dsG14', '14 · Concentración metropolitana') +
-                dsLienzo('dsG15', '15 · Evolución del top 5 de municipios') +
-                dsLienzo('dsG16', '16 · Fiscalía: desaparición por particulares') +
-                dsLienzo('dsG17', '17 · Registro Estatal: cédulas y resultados');
+                dsLienzo('dsG1', '1 · Acumulado total RNPDNO por semana', 'RNPDNO') +
+                dsLienzo('dsG2', '2 · Desaparecidas vs. localizadas (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG3', '3 · Altas nuevas por semana', 'RNPDNO', 'Diferencia entre cortes consecutivos: mide el ritmo, no el acumulado.') +
+                dsLienzo('dsG4', '4 · Altas nuevas y media móvil de 4 semanas', 'RNPDNO') +
+                dsLienzo('dsG5', '5 · Tasa de localización (%)', 'RNPDNO', 'Personas localizadas sobre el total registrado.') +
+                dsLienzo('dsG6', '6 · Localizadas con vida vs. sin vida', 'RNPDNO') +
+                dsLienzo('dsG7', '7 · Estado de localización (última semana)', 'RNPDNO') +
+                dsLienzo('dsG8', '8 · Distribución por género', 'RNPDNO') +
+                dsLienzo('dsG9', '9 · Evolución del género (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG10', '10 · Composición semanal (100%)', 'RNPDNO') +
+                dsLienzo('dsG11', '11 · Comparativo entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
+                dsLienzo('dsG12', '12 · Brecha entre RNPDNO y Registro Estatal', 'RNPDNO · Fiscalía del Estado · REPD') +
+                dsLienzo('dsG13', '13 · Top 10 municipios (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG14', '14 · Concentración metropolitana', 'RNPDNO') +
+                dsLienzo('dsG15', '15 · Evolución del top 5 de municipios', 'RNPDNO', 'Cinco series simultáneas: se omiten las etiquetas de datos para conservar la legibilidad.') +
+                dsLienzo('dsG16', '16 · Fiscalía: desaparición por particulares', 'Fiscalía del Estado') +
+                dsLienzo('dsG17', '17 · Registro Estatal: cédulas y resultados', 'Registro Estatal (REPD)');
 
             const linea = (lbl, data, color, fill) => ({
                 label: lbl, data, borderColor: color,
@@ -2982,7 +3086,12 @@
                 datasets: top5.map((nm, i) => {
                     const m = d.municipios.find(x => x.nombre === nm);
                     return linea(nm, m ? m.valores : [], paleta[i % paleta.length]);
-                }) }, options: DS_OPC });
+                }) },
+                // Cinco series x 36 puntos = 180 etiquetas: se desactivan a propósito.
+                options: dsOpc({ plugins: {
+                    legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+                    dsEtiquetas: { enabled: false }
+                } }) });
 
             dsCrear('dsG16', { type: 'line', data: { labels: L, datasets: [
                 linea('Desaparición cometida por particulares', d.fisParticulares, DS_NAR, 'rgba(240,128,19,0.12)')] },
@@ -3136,28 +3245,51 @@
             };
             let y = 0;
 
-            // Cabecera
-            c.fillStyle = AZUL; c.fillRect(0, 0, W, 150);
-            tr('Corte al ' + a.corte, W - 26, 26, FT(15), BLANCO);
-            tc('REPORTE SEMANAL DE PERSONAS DESAPARECIDAS', W / 2, 78, FT(28), BLANCO);
-            tc('ESTADO DE JALISCO', W / 2, 116, FT(22), BLANCO);
-            y = 150;
+            // Cabecera con los logos institucionales (los mismos del encabezado de la página).
+            // Se leen del DOM: ya están cargados como base64, así que no hace falta esperar.
+            const HDR_H = 168;
+            c.fillStyle = AZUL; c.fillRect(0, 0, W, HDR_H);
+
+            const logoCges = document.querySelector('.header-logo-cges');
+            const logoFisc = document.querySelector('.header-logo-fiscalia');
+            const CAJA_X = 20, CAJA_Y = 16, CAJA_W = 320, CAJA_H = 62;
+            rc(CAJA_X, CAJA_Y, CAJA_W, CAJA_H, 6, BLANCO, null);
+
+            // Ajuste proporcional de cada logo dentro de su mitad de la caja
+            const ponerLogo = (img, zx, zw) => {
+                if (!img || !img.complete || !img.naturalWidth) return false;
+                const maxH = CAJA_H - 16, maxW = zw - 16;
+                const esc = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+                const dw = img.naturalWidth * esc, dh = img.naturalHeight * esc;
+                c.drawImage(img, zx + (zw - dw) / 2, CAJA_Y + (CAJA_H - dh) / 2, dw, dh);
+                return true;
+            };
+            const okC = ponerLogo(logoCges, CAJA_X, CAJA_W / 2);
+            const okF = ponerLogo(logoFisc, CAJA_X + CAJA_W / 2, CAJA_W / 2);
+            // Respaldo: si algún logo no estuviera disponible, la infografía se genera igual.
+            if (!okC && !okF) tc('CGES · FISCALÍA', CAJA_X + CAJA_W / 2, CAJA_Y + CAJA_H / 2, FT(13), '#9AA8BC');
+
+            tr('Corte al ' + a.corte, W - 26, 34, FT(15), BLANCO);
+            tc('REPORTE SEMANAL DE PERSONAS DESAPARECIDAS', W / 2, 110, FT(27), BLANCO);
+            tc('ESTADO DE JALISCO', W / 2, 143, FT(21), BLANCO);
+            y = HDR_H;
 
             c.fillStyle = '#F4F6F8'; c.fillRect(0, y, W, 40);
             tc('FUENTES OFICIALES DE INFORMACIÓN', W / 2, y + 22, FT(18), TXT);
             y += 46;
 
-            // Tres tarjetas de fuentes
-            const cw = (W - 4 * 18) / 3, chh = 300;
+            // Tres tarjetas de fuentes.
+            // Alto 300 → 340: con 5 renglones, el quinto caía en y+301 y se salía del borde.
+            const cw = (W - 4 * 18) / 3, chh = 340;
             const tarjeta = (i, tit, sub, val, lbl, items) => {
                 const cx = 18 + i * (cw + 18);
                 rc(cx, y, cw, chh, 10, BLANCO, AZUL);
                 tc(tit, cx + cw / 2, y + 32, FT(17), TXT);
                 sub.split('\n').forEach((s, k) => tc(s, cx + cw / 2, y + 56 + k * 17, FA(12), GRIS));
-                tc(dsFmt(val), cx + cw / 2, y + 120, FT(52), NAR);
-                lbl.split('\n').forEach((s, k) => tc(s, cx + cw / 2, y + 158 + k * 18, FA(13), TXT));
+                tc(dsFmt(val), cx + cw / 2, y + 122, FT(52), NAR);
+                lbl.split('\n').forEach((s, k) => tc(s, cx + cw / 2, y + 160 + k * 18, FA(13), TXT));
                 items.forEach((it, k) => {
-                    const iy = y + 205 + k * 24;
+                    const iy = y + 212 + k * 25;
                     c.fillStyle = it[2] ? TXT : GRIS;
                     c.beginPath(); c.arc(cx + 20, iy, 2.5, 0, Math.PI * 2); c.fill();
                     tl(it[0], cx + 32, iy, it[2] ? FT(13) : FA(13), it[2] ? TXT : '#444');
@@ -3193,16 +3325,29 @@
 
             const maxV = Math.max(...a.top.map(m => m.valor), 1);
             tl('TOP 6 MUNICIPIOS CON MAYOR INCIDENCIA', 22, y + 12, FT(14), TXT);
+            // El ancho de barra tenía un mínimo fijo de 130 px, pero
+            // "San Pedro Tlaquepaque: 41 casos (8.6%)" mide ~245 px: el texto se cortaba.
+            // Ahora se mide con measureText y la barra nunca es más corta que su etiqueta.
+            const BAR_X = 48, BAR_MAX = 422;   // termina en 470: deja libre la zona de la dona
             a.top.forEach((m, i) => {
                 const by = y + 38 + i * 42;
                 tl((i + 1) + '.', 22, by + 14, FT(14), TXT);
-                const bw = Math.max((m.valor / maxV) * 520, 130);
-                rc(48, by, bw, 28, 4, AZUL, null);
-                tl(`${m.nombre}: ${m.valor} casos (${a.total ? (m.valor / a.total * 100).toFixed(1) : '0'}%)`,
-                   58, by + 14, FT(13), BLANCO);
+
+                const etq = `${m.nombre}: ${m.valor} casos (${a.total ? (m.valor / a.total * 100).toFixed(1) : '0'}%)`;
+                let fs = 13;
+                c.font = FT(fs);
+                while (fs > 9 && c.measureText(etq).width + 20 > BAR_MAX) { fs -= 0.5; c.font = FT(fs); }
+                const anchoTexto = c.measureText(etq).width;
+
+                const proporcional = (m.valor / maxV) * BAR_MAX;
+                const bw = Math.min(Math.max(proporcional, anchoTexto + 20), BAR_MAX);
+                rc(BAR_X, by, bw, 28, 4, AZUL, null);
+                tl(etq, BAR_X + 10, by + 14, FT(fs), BLANCO);
             });
 
-            const px = 640, py = y + 60, pr = 92;
+            // Dona movida de 640/92 a 700/84: antes ocupaba de 548 a 732 px mientras las
+            // barras llegaban a 568, con 20 px de solape.
+            const px = 700, py = y + 74, pr = 84;
             const partes = [[a.desapNoLoc || 0, NAR], [a.conVida || 0, AZUL_C], [a.sinVida || 0, GRIS]];
             const sum = partes.reduce((s, p) => s + p[0], 0) || 1;
             let ang = -Math.PI / 2;
@@ -3212,7 +3357,10 @@
                 c.fillStyle = p[1]; c.fill();
                 if (p[0] / sum > 0.04) {
                     const mid = ang + sw / 2;
-                    tc((p[0] / sum * 100).toFixed(1) + '%', px + Math.cos(mid) * pr * 0.72, py + Math.sin(mid) * pr * 0.72, FT(13), BLANCO);
+                    const lx = px + Math.cos(mid) * pr * 0.75;
+                    const ly2 = py + Math.sin(mid) * pr * 0.75;
+                    tc(dsFmt(p[0]), lx, ly2 - 7, FT(13), BLANCO);
+                    tc((p[0] / sum * 100).toFixed(1) + '%', lx, ly2 + 8, FT(11), BLANCO);
                 }
                 ang += sw;
             });
@@ -3220,9 +3368,9 @@
             tc(dsFmt(a.total), px, py, FT(30), TXT);
             [['Desaparecidas / no localizadas', a.desapNoLoc, NAR], ['Localizadas con vida', a.conVida, AZUL_C],
              ['Localizadas sin vida', a.sinVida, GRIS]].forEach((l, i) => {
-                const ly = py + pr + 34 + i * 24;
-                c.fillStyle = l[2]; c.fillRect(px - 120, ly - 7, 14, 14);
-                tl(l[0] + ': ' + dsFmt(l[1]), px - 100, ly, FA(12.5), TXT);
+                const ly = py + pr + 30 + i * 23;
+                c.fillStyle = l[2]; c.fillRect(px - 128, ly - 7, 14, 14);
+                tl(l[0] + ': ' + dsFmt(l[1]), px - 108, ly, FA(12), TXT);
             });
             y += 38 + a.top.length * 42 + 40;
 
