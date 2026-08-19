@@ -669,6 +669,59 @@
             padding-top: 10px;
             border-top: 1px solid var(--color-border);
         }
+
+        /* ===== Navegación entre vistas ===== */
+        .btn-nav { background: #F08013; color: #fff; border: none; }
+        .btn-nav:hover { filter: brightness(1.08); }
+        .btn-nav-off { background: transparent; border: 1.5px solid rgba(255,255,255,0.55); color: #fff; }
+
+        /* ===== Vista Desaparecidos ===== */
+        .ds-corte {
+            font-size: 13px; color: var(--color-dark); margin-bottom: 14px;
+            padding-bottom: 9px; border-bottom: 1px solid var(--color-border);
+        }
+        .ds-grid3 {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;
+        }
+        .ds-card {
+            border: 2px solid var(--color-primary); border-radius: 10px;
+            padding: 16px 18px; background: #fff;
+        }
+        .ds-card-t { font-size: 16px; font-weight: 700; color: var(--color-primary); }
+        .ds-card-s { font-size: 11.5px; color: #7f8c8d; margin-bottom: 10px; line-height: 1.45; }
+        .ds-card-v { font-size: 42px; font-weight: 800; color: var(--color-secondary); line-height: 1.1; }
+        .ds-delta { display: inline-block; font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+        .ds-card-d { border-top: 1px solid var(--color-border); padding-top: 9px; }
+        .ds-li {
+            display: flex; justify-content: space-between; gap: 10px;
+            font-size: 12.5px; padding: 3px 0; line-height: 1.5;
+        }
+        .ds-li span { color: var(--color-dark); }
+        .ds-li b { font-weight: 700; white-space: nowrap; }
+        .ds-li i { font-style: normal; font-weight: 600; min-width: 30px; text-align: right; font-size: 11.5px; }
+        .ds-chart {
+            background: #fff; border: 1px solid var(--color-border); border-radius: 10px;
+            padding: 14px 16px 10px; margin-bottom: 18px;
+        }
+        .ds-chart-t { font-size: 14.5px; font-weight: 700; color: var(--color-primary); margin-bottom: 3px; }
+        .ds-chart-n { font-size: 11.5px; color: #7f8c8d; margin-bottom: 8px; line-height: 1.5; }
+        .ds-chart-box { position: relative; height: 300px; }
+        .ds-chips { display: flex; flex-wrap: wrap; gap: 9px; margin-bottom: 16px; }
+        .ds-chip {
+            font-size: 12.5px; padding: 6px 13px; border-radius: 20px;
+            background: var(--color-light); border: 1px solid var(--color-border); color: var(--color-dark);
+        }
+        .ds-chip b { color: var(--color-primary); }
+        .ds-texto {
+            font-size: 14px; line-height: 1.85; background: #f8fafc;
+            border-left: 5px solid var(--color-primary); border-radius: 6px;
+            padding: 16px 18px; margin-bottom: 16px;
+        }
+        .ds-alerta {
+            font-size: 13px; line-height: 1.6; background: #FFF3CD;
+            border: 1px solid #FFE08A; color: #8a6d00;
+            border-radius: 6px; padding: 11px 14px; margin-bottom: 14px;
+        }
     </style>
 </head>
 <body>
@@ -691,12 +744,15 @@
                     </select>
                 </div>
                 <button class="btn btn-primary" id="updateBtn">🔄 Actualizar Datos</button>
+                <button class="btn btn-nav" id="navSemanalBtn">📊 Reporte Semanal</button>
+                <button class="btn btn-nav btn-nav-off" id="navDesapBtn">🔎 Desaparecidos</button>
             </div>
         </div>
     </header>
 
     <!-- ===== CONTENIDO PRINCIPAL ===== -->
     <main>
+      <div id="vistaSemanal">
         <!-- SECCIÓN 1: RESUMEN DE LA SEMANA -->
         <section id="summarySection">
             <h2>📊 Resumen de la Semana Actual</h2>
@@ -792,6 +848,45 @@
 
         <!-- SECCIONES FUTURAS: Gráficas Interactivas, ENSU e Archivo Histórico -->
         <!-- Estas secciones se implementarán en fases futuras del proyecto -->
+      </div><!-- /vistaSemanal -->
+
+      <!-- ===================== VISTA: DESAPARECIDOS ===================== -->
+      <div id="vistaDesaparecidos" style="display:none;">
+
+        <section id="dsResumen">
+            <h2>🔎 Personas Desaparecidas — Resumen Acumulado</h2>
+            <div id="dsResumenContent">
+                <div class="loading"><div class="spinner"></div><p>Cargando datos...</p></div>
+            </div>
+        </section>
+
+        <section id="dsGraficas">
+            <h2>📊 Gráficas</h2>
+            <div id="dsGraficasContent">
+                <p class="an-empty">Presiona "Actualizar Datos" para generar las gráficas.</p>
+            </div>
+        </section>
+
+        <section id="dsInfografia">
+            <h2>🖼️ Generar Infografía</h2>
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+                <button class="btn btn-primary" id="dsGenerarBtn">🖼️ Generar Infografía</button>
+                <button class="btn btn-secondary" id="dsDescargarBtn" style="display:none;">⬇️ Descargar JPG</button>
+                <span id="dsInfoStatus" style="font-size:13px; color:#7f8c8d;"></span>
+            </div>
+            <div id="dsPreview" style="display:none; text-align:center; overflow:auto;">
+                <canvas id="dsCanvas" style="max-width:100%; height:auto; border:1px solid #ddd; border-radius:6px;"></canvas>
+            </div>
+        </section>
+
+        <section id="dsAnalisis">
+            <h2>📝 Análisis</h2>
+            <div id="dsAnalisisContent">
+                <div class="loading"><div class="spinner"></div><p>Cargando análisis...</p></div>
+            </div>
+        </section>
+
+      </div><!-- /vistaDesaparecidos -->
     </main>
 
     <!-- ===== FOOTER ===== -->
@@ -809,13 +904,15 @@
         // Google consume el gid, NO el nombre: renombrar una pestaña no cambia su gid.
         // El nombre se declara aquí para trazabilidad y para las secciones futuras.
         const SHEETS = {
-            SEMANAL: { nombre: 'SEMANAL', gid: '0' }        // Reporte Semanal de Incidencia Delictiva
+            SEMANAL: { nombre: 'SEMANAL', gid: '0' },                     // Reporte Semanal de Incidencia Delictiva
+            DESAPARECIDOS: { nombre: 'DESAPARECIDOS', gid: '1865808402' } // Reporte Semanal de Personas Desaparecidas
             // ENSU: { nombre: 'ENSU',    gid: 'PENDIENTE' } // Pendiente: solicitar gid al implementar la sección ENSU
         };
 
         const HOJA_ACTIVA = SHEETS.SEMANAL;
         const SHEET_GID = HOJA_ACTIVA.gid;
         const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+        const CSV_URL_DESAP = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.DESAPARECIDOS.gid}`;
 
         console.log(`🔗 Hoja "${HOJA_ACTIVA.nombre}" (gid ${SHEET_GID}) — URL CSV:`, CSV_URL);
 
@@ -2535,6 +2632,690 @@
         } else {
             init();
         }
+
+        /* ==================================================================
+           ============  MÓDULO: PERSONAS DESAPARECIDAS  ====================
+           Aislado del Reporte Semanal: prefijo ds*, sin tocar sus funciones,
+           variables ni listeners. Lee la pestaña DESAPARECIDOS por su gid.
+           ================================================================== */
+
+        let dsData = null;
+        let dsCharts = [];
+
+        // Etiquetas exactas de la columna B en la hoja DESAPARECIDOS.
+        const DS_FILAS = {
+            total:        'Total de personas desaparecidas, no localizadas y localizadas',
+            desapNoLoc:   'Personas desaparecidas y no localizadas',
+            desaparecidas:'Personas desaparecidas',
+            noLocalizadas:'Personas no localizadas',
+            localizadas:  'Personas localizadas',
+            conVida:      'Personas localizadas con vida',
+            sinVida:      'Personas localizadas sin vida',
+            hombre:       'Hombre',
+            mujer:        'Mujer',
+            indeterminado:'Indeterminado',
+            fisParticulares:'Desaparición cometida por particulares',
+            fisPrivacion: 'Privación ilegal de la libertad y de otros derechos',
+            repdCedulas:  'Cantidad de Cédulas de desaparición* (acumulado)',
+            repdLocalizados:'Localizados (acumulado)',
+            repdConVida:  'Localizados con vida (acumulado)',
+            repdSinVida:  'Localizados Sin Vida (acumulado)',
+            repdDesap:    'Desaparecido (acumulado)'
+        };
+
+        // Municipios del Área Metropolitana de Guadalajara, para el cálculo de concentración.
+        const DS_AMG = ['Zapopan','Guadalajara','Tlajomulco de Zúñiga','San Pedro Tlaquepaque',
+                        'Tonalá','El Salto','Ixtlahuacán de los Membrillos','Juanacatlán','Zapotlanejo'];
+
+        const dsNorm = t => (t || '').toString().trim().toUpperCase()
+                              .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const dsNum = t => {
+            const v = parseInt((t || '').toString().replace(/[,\s]/g, ''), 10);
+            return isNaN(v) ? null : v;
+        };
+
+        // ===== DESCARGA Y PARSEO =====
+        async function dsFetch() {
+            const r = await fetch(CSV_URL_DESAP);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return await r.text();
+        }
+
+        function dsParse(csvText) {
+            const filas = parseCSV(csvText);
+
+            // Localiza una fila por su etiqueta en la columna B (índice 1)
+            const buscar = (etiqueta) => {
+                const objetivo = dsNorm(etiqueta);
+                for (const f of filas) {
+                    if (f.length > 1 && dsNorm(f[1]) === objetivo) return f;
+                }
+                return null;
+            };
+
+            // La fila de fechas define cuántas columnas son válidas.
+            const filaFechas = buscar('JALISCO / Acumulado a la fecha de corte');
+            if (!filaFechas) throw new Error('No se encontró la fila de fechas en la pestaña DESAPARECIDOS.');
+            const fechas = filaFechas.slice(2).map(c => (c || '').trim()).filter(c => c !== '');
+            const nSem = fechas.length;
+            if (nSem === 0) throw new Error('La pestaña DESAPARECIDOS no contiene fechas de corte.');
+
+            // Serie alineada a las fechas. Las celdas vacías quedan como null y no se grafican.
+            const serie = (etiqueta) => {
+                const f = buscar(etiqueta);
+                if (!f) return null;
+                const vals = f.slice(2).map(dsNum);
+                return vals.slice(0, nSem);
+            };
+
+            const datos = {};
+            Object.keys(DS_FILAS).forEach(k => { datos[k] = serie(DS_FILAS[k]); });
+
+            // Municipios: entre el encabezado 'Municipios' y el bloque de la Fiscalía.
+            const municipios = [];
+            let dentro = false;
+            for (const f of filas) {
+                const et = (f.length > 1 ? f[1] : '').trim();
+                const etN = dsNorm(et);
+                if (etN === 'MUNICIPIOS') { dentro = true; continue; }
+                if (!dentro) continue;
+                if (etN === 'FISCALIA DEL ESTADO' || etN === 'GENERO') break;
+                if (!et || et.startsWith('http') || et.startsWith('*')) continue;
+                const vals = f.slice(2).map(dsNum).slice(0, nSem);
+                if (vals.some(v => v !== null)) municipios.push({ nombre: et, valores: vals });
+            }
+
+            return { fechas, nSem, ...datos, municipios };
+        }
+
+        // Último valor no nulo de una serie
+        const dsUlt = s => {
+            if (!s) return null;
+            for (let i = s.length - 1; i >= 0; i--) if (s[i] !== null) return s[i];
+            return null;
+        };
+        // Penúltimo valor no nulo (para la variación semanal)
+        const dsPen = s => {
+            if (!s) return null;
+            let visto = false;
+            for (let i = s.length - 1; i >= 0; i--) {
+                if (s[i] === null) continue;
+                if (visto) return s[i];
+                visto = true;
+            }
+            return null;
+        };
+        const dsDelta = s => {
+            const a = dsPen(s), b = dsUlt(s);
+            return (a === null || b === null) ? null : b - a;
+        };
+        const dsFmt = v => v === null || v === undefined ? 'n/d' : v.toLocaleString('es-MX');
+        const dsSigno = d => d === null ? '' : (d > 0 ? '+' + d : '' + d);
+
+        // Altas nuevas por semana a partir de una serie acumulada
+        function dsIncrementos(s) {
+            if (!s) return [];
+            const out = [];
+            let previo = null;
+            for (let i = 0; i < s.length; i++) {
+                if (s[i] === null) { out.push(null); continue; }
+                out.push(previo === null ? null : s[i] - previo);
+                previo = s[i];
+            }
+            return out;
+        }
+
+        function dsMediaMovil(s, k) {
+            return s.map((v, i) => {
+                if (i < k - 1) return null;
+                const w = s.slice(i - k + 1, i + 1).filter(x => x !== null);
+                return w.length ? Math.round(w.reduce((a, b) => a + b, 0) / w.length) : null;
+            });
+        }
+
+        function dsTopMunicipios(d, k) {
+            return d.municipios
+                .map(m => ({ nombre: m.nombre, valor: dsUlt(m.valores) || 0 }))
+                .sort((a, b) => b.valor - a.valor)
+                .slice(0, k);
+        }
+
+        // ===== TARJETAS DE RESUMEN =====
+        function dsRenderResumen() {
+            const cont = document.getElementById('dsResumenContent');
+            if (!cont || !dsData) return;
+            const d = dsData;
+
+            const tarjeta = (titulo, sub, valor, delta, detalle) => {
+                const dd = delta === null ? '' :
+                    `<span class="ds-delta ${delta > 0 ? 'an-up' : (delta < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(delta)} vs. semana anterior</span>`;
+                return `<div class="ds-card">
+                    <div class="ds-card-t">${titulo}</div>
+                    <div class="ds-card-s">${sub}</div>
+                    <div class="ds-card-v">${dsFmt(valor)}</div>
+                    ${dd}
+                    <div class="ds-card-d">${detalle}</div>
+                </div>`;
+            };
+
+            const li = (t, s) => `<div class="ds-li"><span>${t}</span><b>${dsFmt(dsUlt(s))}</b>
+                <i class="${(dsDelta(s) || 0) > 0 ? 'an-up' : ((dsDelta(s) || 0) < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(dsDelta(s))}</i></div>`;
+
+            cont.innerHTML = `
+                <div class="ds-corte">Corte al <b>${d.fechas[d.nSem - 1]}</b> · ${d.nSem} semanas registradas</div>
+                <div class="ds-grid3">
+                    ${tarjeta('RNPDNO', 'Registro Nacional de Personas Desaparecidas y No Localizadas',
+                        dsUlt(d.total), dsDelta(d.total),
+                        li('Desaparecidas y no localizadas', d.desapNoLoc) +
+                        li('Personas desaparecidas', d.desaparecidas) +
+                        li('Personas no localizadas', d.noLocalizadas) +
+                        li('Personas localizadas', d.localizadas) +
+                        li('Localizadas con vida', d.conVida) +
+                        li('Localizadas sin vida', d.sinVida))}
+                    ${tarjeta('FISCALÍA DEL ESTADO', 'Fiscalía del Estado de Jalisco',
+                        dsUlt(d.fisPrivacion), dsDelta(d.fisPrivacion),
+                        '<div class="ds-li"><span>Privación ilegal de la libertad y de otros derechos</span><b></b><i></i></div>' +
+                        li('Desaparición cometida por particulares', d.fisParticulares))}
+                    ${tarjeta('REGISTRO ESTATAL', 'Registro Estatal de Personas Desaparecidas',
+                        dsUlt(d.repdCedulas), dsDelta(d.repdCedulas),
+                        li('Cédulas publicadas (acumulado)', d.repdCedulas) +
+                        li('Localizados', d.repdLocalizados) +
+                        li('Localizados con vida', d.repdConVida) +
+                        li('Localizados sin vida', d.repdSinVida) +
+                        li('Con estatus de desaparecido', d.repdDesap))}
+                </div>`;
+        }
+
+        // ===== GRÁFICAS =====
+        const DS_AZUL = '#18345D', DS_NAR = '#F08013', DS_AZUL_C = '#5B8DC8',
+              DS_GRIS = '#6B7785', DS_ROJO = '#C0392B', DS_VERDE = '#1E8449';
+
+        function dsLienzo(id, titulo, nota) {
+            return `<div class="ds-chart">
+                        <div class="ds-chart-t">${titulo}</div>
+                        ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
+                        <div class="ds-chart-box"><canvas id="${id}"></canvas></div>
+                    </div>`;
+        }
+
+        function dsCrear(id, cfg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            dsCharts.push(new Chart(el, cfg));
+        }
+
+        const DS_OPC = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: { y: { beginAtZero: false, ticks: { font: { size: 10 } } },
+                      x: { ticks: { font: { size: 9 }, maxRotation: 60, autoSkip: true, maxTicksLimit: 14 } } }
+        };
+        const dsOpc = extra => JSON.parse(JSON.stringify(DS_OPC)) && Object.assign({}, DS_OPC, extra || {});
+
+        function dsRenderGraficas() {
+            const cont = document.getElementById('dsGraficasContent');
+            if (!cont || !dsData) return;
+            const d = dsData, L = d.fechas;
+
+            dsCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
+            dsCharts = [];
+
+            const nuevas = dsIncrementos(d.total);
+            const nuevasDesap = dsIncrementos(d.desapNoLoc);
+            const tasaLoc = d.total.map((t, i) =>
+                (t && d.localizadas && d.localizadas[i] !== null && t > 0)
+                    ? +(d.localizadas[i] / t * 100).toFixed(1) : null);
+            const top = dsTopMunicipios(d, 10);
+            const amgTot = d.municipios.filter(m => DS_AMG.includes(m.nombre))
+                                       .reduce((a, m) => a + (dsUlt(m.valores) || 0), 0);
+            const listados = d.municipios.reduce((a, m) => a + (dsUlt(m.valores) || 0), 0);
+            const totalUlt = dsUlt(d.total) || 0;
+
+            cont.innerHTML =
+                dsLienzo('dsG1', '1 · Acumulado total RNPDNO por semana') +
+                dsLienzo('dsG2', '2 · Desaparecidas vs. localizadas (acumulado)') +
+                dsLienzo('dsG3', '3 · Altas nuevas por semana', 'Diferencia entre cortes consecutivos: mide el ritmo, no el acumulado.') +
+                dsLienzo('dsG4', '4 · Altas nuevas y media móvil de 4 semanas') +
+                dsLienzo('dsG5', '5 · Tasa de localización (%)', 'Personas localizadas sobre el total registrado.') +
+                dsLienzo('dsG6', '6 · Localizadas con vida vs. sin vida') +
+                dsLienzo('dsG7', '7 · Estado de localización (última semana)') +
+                dsLienzo('dsG8', '8 · Distribución por género') +
+                dsLienzo('dsG9', '9 · Evolución del género (acumulado)') +
+                dsLienzo('dsG10', '10 · Composición semanal (100%)') +
+                dsLienzo('dsG11', '11 · Comparativo entre las tres fuentes', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
+                dsLienzo('dsG12', '12 · Brecha entre RNPDNO y Registro Estatal') +
+                dsLienzo('dsG13', '13 · Top 10 municipios (acumulado)') +
+                dsLienzo('dsG14', '14 · Concentración metropolitana') +
+                dsLienzo('dsG15', '15 · Evolución del top 5 de municipios') +
+                dsLienzo('dsG16', '16 · Fiscalía: desaparición por particulares') +
+                dsLienzo('dsG17', '17 · Registro Estatal: cédulas y resultados');
+
+            const linea = (lbl, data, color, fill) => ({
+                label: lbl, data, borderColor: color,
+                backgroundColor: fill || color, borderWidth: 2,
+                pointRadius: 2, tension: 0.25, fill: !!fill, spanGaps: true
+            });
+
+            dsCrear('dsG1', { type: 'line', data: { labels: L, datasets: [
+                linea('Total acumulado', d.total, DS_AZUL, 'rgba(24,52,93,0.15)')] }, options: DS_OPC });
+
+            dsCrear('dsG2', { type: 'line', data: { labels: L, datasets: [
+                linea('Desaparecidas y no localizadas', d.desapNoLoc, DS_NAR),
+                linea('Localizadas', d.localizadas, DS_AZUL_C)] }, options: DS_OPC });
+
+            dsCrear('dsG3', { type: 'bar', data: { labels: L, datasets: [
+                { label: 'Altas nuevas (total)', data: nuevas, backgroundColor: DS_AZUL },
+                { label: 'Altas de desaparecidas', data: nuevasDesap, backgroundColor: DS_NAR }] },
+                options: dsOpc({ scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } },
+                                           x: { ticks: { font: { size: 9 }, maxTicksLimit: 14 } } } }) });
+
+            dsCrear('dsG4', { type: 'bar', data: { labels: L, datasets: [
+                { label: 'Altas nuevas', data: nuevas, backgroundColor: 'rgba(24,52,93,0.35)' },
+                { type: 'line', label: 'Media móvil 4 sem', data: dsMediaMovil(nuevas, 4),
+                  borderColor: DS_NAR, borderWidth: 2.5, pointRadius: 0, tension: 0.3, spanGaps: true }] },
+                options: dsOpc({ scales: { y: { beginAtZero: true }, x: { ticks: { maxTicksLimit: 14 } } } }) });
+
+            dsCrear('dsG5', { type: 'line', data: { labels: L, datasets: [
+                linea('Tasa de localización (%)', tasaLoc, DS_VERDE, 'rgba(30,132,73,0.12)')] },
+                options: dsOpc({ scales: { y: { beginAtZero: true, max: 100 }, x: { ticks: { maxTicksLimit: 14 } } } }) });
+
+            dsCrear('dsG6', { type: 'line', data: { labels: L, datasets: [
+                linea('Con vida', d.conVida, DS_AZUL_C),
+                linea('Sin vida', d.sinVida, DS_GRIS)] }, options: DS_OPC });
+
+            dsCrear('dsG7', { type: 'doughnut', data: {
+                labels: ['Desaparecidas y no localizadas', 'Localizadas con vida', 'Localizadas sin vida'],
+                datasets: [{ data: [dsUlt(d.desapNoLoc), dsUlt(d.conVida), dsUlt(d.sinVida)],
+                             backgroundColor: [DS_NAR, DS_AZUL_C, DS_GRIS] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+
+            dsCrear('dsG8', { type: 'doughnut', data: {
+                labels: ['Hombres', 'Mujeres', 'Indeterminado'],
+                datasets: [{ data: [dsUlt(d.hombre), dsUlt(d.mujer), dsUlt(d.indeterminado)],
+                             backgroundColor: [DS_AZUL, DS_NAR, DS_GRIS] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+
+            dsCrear('dsG9', { type: 'line', data: { labels: L, datasets: [
+                linea('Hombres', d.hombre, DS_AZUL),
+                linea('Mujeres', d.mujer, DS_NAR),
+                linea('Indeterminado', d.indeterminado, DS_GRIS)] }, options: DS_OPC });
+
+            dsCrear('dsG10', { type: 'bar', data: { labels: L, datasets: [
+                { label: 'Desaparecidas y no localizadas', data: d.desapNoLoc, backgroundColor: DS_NAR },
+                { label: 'Localizadas con vida', data: d.conVida, backgroundColor: DS_AZUL_C },
+                { label: 'Localizadas sin vida', data: d.sinVida, backgroundColor: DS_GRIS }] },
+                options: dsOpc({ scales: { x: { stacked: true, ticks: { maxTicksLimit: 14 } },
+                                           y: { stacked: true, beginAtZero: true } } }) });
+
+            dsCrear('dsG11', { type: 'bar', data: {
+                labels: ['RNPDNO (total)', 'Registro Estatal (cédulas)', 'Fiscalía (privación ilegal)', 'Fiscalía (por particulares)'],
+                datasets: [{ label: 'Acumulado a la fecha de corte',
+                    data: [dsUlt(d.total), dsUlt(d.repdCedulas), dsUlt(d.fisPrivacion), dsUlt(d.fisParticulares)],
+                    backgroundColor: [DS_AZUL, DS_AZUL_C, DS_NAR, '#E8A055'] }] },
+                options: dsOpc({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }) });
+
+            dsCrear('dsG12', { type: 'line', data: { labels: L, datasets: [
+                linea('RNPDNO total', d.total, DS_AZUL),
+                linea('Registro Estatal (cédulas)', d.repdCedulas, DS_AZUL_C),
+                linea('Fiscalía (por particulares)', d.fisParticulares, DS_NAR)] }, options: DS_OPC });
+
+            dsCrear('dsG13', { type: 'bar', data: {
+                labels: top.map(m => m.nombre),
+                datasets: [{ label: 'Casos acumulados', data: top.map(m => m.valor), backgroundColor: DS_AZUL }] },
+                options: dsOpc({ indexAxis: 'y', plugins: { legend: { display: false } },
+                                 scales: { x: { beginAtZero: true }, y: { ticks: { font: { size: 10 } } } } }) });
+
+            dsCrear('dsG14', { type: 'doughnut', data: {
+                labels: ['AMG', 'Resto de municipios listados', 'No desglosado'],
+                datasets: [{ data: [amgTot, Math.max(listados - amgTot, 0), Math.max(totalUlt - listados, 0)],
+                             backgroundColor: [DS_AZUL, DS_AZUL_C, '#D8DEE6'] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+
+            const top5 = dsTopMunicipios(d, 5).map(m => m.nombre);
+            const paleta = [DS_AZUL, DS_NAR, DS_AZUL_C, DS_VERDE, DS_GRIS];
+            dsCrear('dsG15', { type: 'line', data: { labels: L,
+                datasets: top5.map((nm, i) => {
+                    const m = d.municipios.find(x => x.nombre === nm);
+                    return linea(nm, m ? m.valores : [], paleta[i % paleta.length]);
+                }) }, options: DS_OPC });
+
+            dsCrear('dsG16', { type: 'line', data: { labels: L, datasets: [
+                linea('Desaparición cometida por particulares', d.fisParticulares, DS_NAR, 'rgba(240,128,19,0.12)')] },
+                options: DS_OPC });
+
+            dsCrear('dsG17', { type: 'line', data: { labels: L, datasets: [
+                linea('Cédulas publicadas', d.repdCedulas, DS_AZUL),
+                linea('Localizados con vida', d.repdConVida, DS_AZUL_C),
+                linea('Localizados sin vida', d.repdSinVida, DS_GRIS),
+                linea('Con estatus de desaparecido', d.repdDesap, DS_NAR)] }, options: DS_OPC });
+        }
+
+        // ===== ANÁLISIS =====
+        function dsCalcAnalisis() {
+            if (!dsData) return null;
+            const d = dsData;
+            const top = dsTopMunicipios(d, 6);
+            const amgTot = d.municipios.filter(m => DS_AMG.includes(m.nombre))
+                                       .reduce((a, m) => a + (dsUlt(m.valores) || 0), 0);
+            const listados = d.municipios.reduce((a, m) => a + (dsUlt(m.valores) || 0), 0);
+            const total = dsUlt(d.total) || 0;
+            const loc = dsUlt(d.localizadas) || 0;
+            const nuevas = dsIncrementos(d.total).filter(v => v !== null);
+            const prom4 = nuevas.length >= 4
+                ? Math.round(nuevas.slice(-4).reduce((a, b) => a + b, 0) / 4) : null;
+
+            return {
+                corte: d.fechas[d.nSem - 1],
+                total, dTotal: dsDelta(d.total),
+                desapNoLoc: dsUlt(d.desapNoLoc), dDesapNoLoc: dsDelta(d.desapNoLoc),
+                desaparecidas: dsUlt(d.desaparecidas),
+                noLoc: dsUlt(d.noLocalizadas),
+                localizadas: loc, dLocalizadas: dsDelta(d.localizadas),
+                conVida: dsUlt(d.conVida), sinVida: dsUlt(d.sinVida),
+                tasaLoc: total > 0 ? (loc / total * 100) : 0,
+                fisPart: dsUlt(d.fisParticulares), dFisPart: dsDelta(d.fisParticulares),
+                fisPriv: dsUlt(d.fisPrivacion), dFisPriv: dsDelta(d.fisPrivacion),
+                repdCed: dsUlt(d.repdCedulas), dRepdCed: dsDelta(d.repdCedulas),
+                repdConVida: dsUlt(d.repdConVida), repdSinVida: dsUlt(d.repdSinVida),
+                repdDesap: dsUlt(d.repdDesap),
+                hombre: dsUlt(d.hombre), mujer: dsUlt(d.mujer), indet: dsUlt(d.indeterminado),
+                top, amgTot, listados, prom4, ultimaAlta: nuevas[nuevas.length - 1]
+            };
+        }
+
+        function dsTexto(modo) {
+            const a = dsCalcAnalisis();
+            if (!a) return '';
+            const wa = (modo === 'whatsapp');
+            const n = t => wa ? ('*' + t + '*') : t;
+            const mas = d => d === null ? '' : (d >= 0 ? `(${d} más que la semana anterior)` : `(${Math.abs(d)} menos que la semana anterior)`);
+            const L = [];
+
+            L.push(`Comparto el reporte acumulado de Personas Desaparecidas con corte al ${n(a.corte)}.`);
+            L.push('');
+            L.push(n('RNPDNO') + ` reporta un total de ${n(dsFmt(a.total) + ' personas')} ${mas(a.dTotal)}, de las cuales:`);
+            L.push(`   ${dsFmt(a.desapNoLoc)} ${mas(a.dDesapNoLoc)} permanecen con estatus de desaparecidas o no localizadas (${dsFmt(a.desaparecidas)} desaparecidas y ${dsFmt(a.noLoc)} no localizadas).`);
+            L.push(`   ${dsFmt(a.localizadas)} han sido localizadas ${mas(a.dLocalizadas)}: ${dsFmt(a.conVida)} con vida y ${dsFmt(a.sinVida)} sin vida.`);
+            L.push(`   Tasa de localización: ${n(a.tasaLoc.toFixed(1) + '%')} del total registrado.`);
+            L.push('');
+            L.push(n('Fiscalía del Estado') + ` reporta ${dsFmt(a.fisPart)} desapariciones cometidas por particulares ${mas(a.dFisPart)}, y un acumulado de ${dsFmt(a.fisPriv)} privaciones ilegales de la libertad y de otros derechos ${mas(a.dFisPriv)}.`);
+            L.push('');
+            L.push(n('Registro Estatal') + ` reporta ${dsFmt(a.repdCed)} cédulas de desaparición publicadas ${mas(a.dRepdCed)}, de las cuales ${dsFmt(a.repdConVida)} personas fueron localizadas con vida y ${dsFmt(a.repdSinVida)} sin vida; ${dsFmt(a.repdDesap)} mantienen estatus de desaparecidas.`);
+            L.push('');
+            L.push(n('Perfil y territorio.') + ` ${dsFmt(a.hombre)} hombres y ${dsFmt(a.mujer)} mujeres` + (a.indet ? `, ${dsFmt(a.indet)} sin determinar` : '') + `. Los municipios con mayor incidencia son ${a.top.slice(0, 3).map(m => `${m.nombre} (${m.valor})`).join(', ')}.`);
+            if (a.total > 0) {
+                L.push(`El Área Metropolitana de Guadalajara concentra ${n(dsFmt(a.amgTot) + ' casos')} (${(a.amgTot / a.total * 100).toFixed(1)}% del estado).`);
+            }
+            if (a.prom4 !== null) {
+                L.push('');
+                L.push(n('Ritmo.') + ` En el último corte se sumaron ${dsFmt(a.ultimaAlta)} personas; el promedio de las últimas 4 semanas es de ${dsFmt(a.prom4)} por semana.`);
+            }
+            L.push('');
+            L.push('Nota: las tres fuentes miden universos distintos y no son cifras equivalentes ni sumables entre sí.');
+            L.push('');
+            L.push('Fuentes: RNPDNO | Fiscalía del Estado de Jalisco | Registro Estatal de Personas Desaparecidas. Elaborado por: CGES/DGAPP/AA.');
+            return L.join('\n');
+        }
+
+        function dsRenderAnalisis() {
+            const cont = document.getElementById('dsAnalisisContent');
+            if (!cont || !dsData) return;
+            const a = dsCalcAnalisis();
+            if (!a) return;
+
+            const chip = (t, v, cls) => `<span class="ds-chip ${cls || ''}">${t}: <b>${v}</b></span>`;
+            const alerta = (a.desaparecidas !== null && a.noLoc !== null &&
+                            a.desaparecidas + a.noLoc !== a.desapNoLoc)
+                ? `<div class="ds-alerta">⚠️ Descuadre en el corte: "desaparecidas" (${dsFmt(a.desaparecidas)}) + "no localizadas" (${dsFmt(a.noLoc)}) = ${dsFmt(a.desaparecidas + a.noLoc)}, pero la fila agregada indica ${dsFmt(a.desapNoLoc)}. Conviene revisar la captura en la hoja.</div>`
+                : '';
+
+            cont.innerHTML = `
+                ${alerta}
+                <div class="ds-chips">
+                    ${chip('Tasa de localización', a.tasaLoc.toFixed(1) + '%')}
+                    ${chip('Concentración AMG', a.total ? (a.amgTot / a.total * 100).toFixed(1) + '%' : 'n/d')}
+                    ${chip('Altas en el último corte', dsFmt(a.ultimaAlta))}
+                    ${chip('Promedio 4 semanas', dsFmt(a.prom4))}
+                    ${chip('Cobertura municipal', a.total ? (a.listados / a.total * 100).toFixed(1) + '%' : 'n/d')}
+                </div>
+                <div class="ds-texto">${dsTexto('plano').replace(/\n/g, '<br>')}</div>
+                <div class="an-acciones">
+                    <button class="btn btn-primary" id="dsCopiarWa">📱 Copiar para WhatsApp</button>
+                    <button class="btn btn-secondary" id="dsCopiarPlano">📋 Copiar texto plano</button>
+                    <span id="dsCopiarStatus" class="an-copiado"></span>
+                </div>`;
+
+            const cp = (modo) => {
+                const txt = dsTexto(modo);
+                const st = document.getElementById('dsCopiarStatus');
+                const ok = () => { if (st) { st.textContent = '✅ Copiado'; setTimeout(() => st.textContent = '', 2500); } };
+                const err = () => { if (st) { st.textContent = '❌ No se pudo copiar'; setTimeout(() => st.textContent = '', 2500); } };
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(txt).then(ok).catch(err);
+                } else {
+                    const ta = document.createElement('textarea');
+                    ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.select();
+                    try { document.execCommand('copy'); ok(); } catch (e) { err(); }
+                    document.body.removeChild(ta);
+                }
+            };
+            const b1 = document.getElementById('dsCopiarWa');
+            if (b1) b1.addEventListener('click', () => cp('whatsapp'));
+            const b2 = document.getElementById('dsCopiarPlano');
+            if (b2) b2.addEventListener('click', () => cp('plano'));
+        }
+
+        // ===== INFOGRAFÍA =====
+        function dsDibujarInfografia() {
+            const a = dsCalcAnalisis();
+            if (!a) throw new Error('Sin datos.');
+            const canvas = document.getElementById('dsCanvas');
+            const W = 900, H = 2200;
+            canvas.width = W; canvas.height = H;
+            const c = canvas.getContext('2d');
+            c.fillStyle = '#FFFFFF'; c.fillRect(0, 0, W, H);
+
+            const AZUL = '#18345D', NAR = '#F08013', AZUL_C = '#5B8DC8',
+                  GRIS = '#6B7785', TXT = '#2C3E50', BLANCO = '#FFFFFF';
+            const FT = s => 'bold ' + s + 'px "Poppins", Arial, sans-serif';
+            const FA = s => s + 'px Arial, sans-serif';
+            const tc = (t, xx, yy, f, col) => { c.font = f; c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, xx, yy); };
+            const tl = (t, xx, yy, f, col) => { c.font = f; c.fillStyle = col; c.textAlign = 'left'; c.textBaseline = 'middle'; c.fillText(t, xx, yy); };
+            const tr = (t, xx, yy, f, col) => { c.font = f; c.fillStyle = col; c.textAlign = 'right'; c.textBaseline = 'middle'; c.fillText(t, xx, yy); };
+            const rc = (px, py, w, h, r, fill, st) => {
+                c.beginPath(); c.moveTo(px + r, py); c.lineTo(px + w - r, py); c.quadraticCurveTo(px + w, py, px + w, py + r);
+                c.lineTo(px + w, py + h - r); c.quadraticCurveTo(px + w, py + h, px + w - r, py + h); c.lineTo(px + r, py + h);
+                c.quadraticCurveTo(px, py + h, px, py + h - r); c.lineTo(px, py + r); c.quadraticCurveTo(px, py, px + r, py);
+                c.closePath(); if (fill) { c.fillStyle = fill; c.fill(); } if (st) { c.strokeStyle = st; c.lineWidth = 2; c.stroke(); }
+            };
+            let y = 0;
+
+            // Cabecera
+            c.fillStyle = AZUL; c.fillRect(0, 0, W, 150);
+            tr('Corte al ' + a.corte, W - 26, 26, FT(15), BLANCO);
+            tc('REPORTE SEMANAL DE PERSONAS DESAPARECIDAS', W / 2, 78, FT(28), BLANCO);
+            tc('ESTADO DE JALISCO', W / 2, 116, FT(22), BLANCO);
+            y = 150;
+
+            c.fillStyle = '#F4F6F8'; c.fillRect(0, y, W, 40);
+            tc('FUENTES OFICIALES DE INFORMACIÓN', W / 2, y + 22, FT(18), TXT);
+            y += 46;
+
+            // Tres tarjetas de fuentes
+            const cw = (W - 4 * 18) / 3, chh = 300;
+            const tarjeta = (i, tit, sub, val, lbl, items) => {
+                const cx = 18 + i * (cw + 18);
+                rc(cx, y, cw, chh, 10, BLANCO, AZUL);
+                tc(tit, cx + cw / 2, y + 32, FT(17), TXT);
+                sub.split('\n').forEach((s, k) => tc(s, cx + cw / 2, y + 56 + k * 17, FA(12), GRIS));
+                tc(dsFmt(val), cx + cw / 2, y + 120, FT(52), NAR);
+                lbl.split('\n').forEach((s, k) => tc(s, cx + cw / 2, y + 158 + k * 18, FA(13), TXT));
+                items.forEach((it, k) => {
+                    const iy = y + 205 + k * 24;
+                    c.fillStyle = it[2] ? TXT : GRIS;
+                    c.beginPath(); c.arc(cx + 20, iy, 2.5, 0, Math.PI * 2); c.fill();
+                    tl(it[0], cx + 32, iy, it[2] ? FT(13) : FA(13), it[2] ? TXT : '#444');
+                    tr(dsFmt(it[1]), cx + cw - 18, iy, it[2] ? FT(13) : FA(13), it[2] ? TXT : '#444');
+                });
+            };
+            tarjeta(0, 'RNPDNO', 'Registro Nacional de Personas\nDesaparecidas y No Localizadas', a.total, 'Total acumulado',
+                [['Desaparecidas', a.desaparecidas, true], ['No localizadas', a.noLoc, false],
+                 ['Localizadas', a.localizadas, false], ['Con vida', a.conVida, false], ['Sin vida', a.sinVida, false]]);
+            tarjeta(1, 'FISCALÍA DEL ESTADO', 'Fiscalía del Estado de Jalisco', a.fisPriv, 'Privación ilegal de la libertad\ny de otros derechos',
+                [['Desaparición por particulares', a.fisPart, true]]);
+            tarjeta(2, 'REGISTRO ESTATAL', 'Registro Estatal de Personas\nDesaparecidas', a.repdCed, 'Cédulas de desaparición\n(acumulado)',
+                [['Localizados con vida', a.repdConVida, false], ['Localizados sin vida', a.repdSinVida, false],
+                 ['Desaparecidos', a.repdDesap, true]]);
+            y += chh + 22;
+
+            // Género
+            rc(18, y, W - 36, 132, 10, BLANCO, AZUL);
+            tc('DISTRIBUCIÓN POR GÉNERO (RNPDNO)', W / 2, y + 28, FT(17), TXT);
+            const gs = [['Hombres', a.hombre, AZUL], ['Mujeres', a.mujer, NAR], ['Indeterminado', a.indet, GRIS]];
+            gs.forEach((g, i) => {
+                const gx = 18 + (W - 36) / 3 * i + (W - 36) / 6;
+                if (i > 0) { c.strokeStyle = '#DDD'; c.lineWidth = 1; c.beginPath(); c.moveTo(18 + (W - 36) / 3 * i, y + 52); c.lineTo(18 + (W - 36) / 3 * i, y + 118); c.stroke(); }
+                tc(dsFmt(g[1]), gx, y + 82, FT(40), g[2]);
+                tc(g[0], gx, y + 112, FA(14), TXT);
+            });
+            y += 148;
+
+            // Municipios + tasa
+            c.fillStyle = '#F4F6F8'; c.fillRect(0, y, W, 40);
+            tc('DISTRIBUCIÓN GEOGRÁFICA', W / 2, y + 22, FT(18), TXT);
+            y += 46;
+
+            const maxV = Math.max(...a.top.map(m => m.valor), 1);
+            tl('TOP 6 MUNICIPIOS CON MAYOR INCIDENCIA', 22, y + 12, FT(14), TXT);
+            a.top.forEach((m, i) => {
+                const by = y + 38 + i * 42;
+                tl((i + 1) + '.', 22, by + 14, FT(14), TXT);
+                const bw = Math.max((m.valor / maxV) * 520, 130);
+                rc(48, by, bw, 28, 4, AZUL, null);
+                tl(`${m.nombre}: ${m.valor} casos (${a.total ? (m.valor / a.total * 100).toFixed(1) : '0'}%)`,
+                   58, by + 14, FT(13), BLANCO);
+            });
+
+            const px = 640, py = y + 60, pr = 92;
+            const partes = [[a.desapNoLoc || 0, NAR], [a.conVida || 0, AZUL_C], [a.sinVida || 0, GRIS]];
+            const sum = partes.reduce((s, p) => s + p[0], 0) || 1;
+            let ang = -Math.PI / 2;
+            partes.forEach(p => {
+                const sw = (p[0] / sum) * Math.PI * 2;
+                c.beginPath(); c.moveTo(px, py); c.arc(px, py, pr, ang, ang + sw); c.closePath();
+                c.fillStyle = p[1]; c.fill();
+                if (p[0] / sum > 0.04) {
+                    const mid = ang + sw / 2;
+                    tc((p[0] / sum * 100).toFixed(1) + '%', px + Math.cos(mid) * pr * 0.72, py + Math.sin(mid) * pr * 0.72, FT(13), BLANCO);
+                }
+                ang += sw;
+            });
+            c.beginPath(); c.arc(px, py, pr * 0.55, 0, Math.PI * 2); c.fillStyle = '#F4F6F8'; c.fill();
+            tc(dsFmt(a.total), px, py, FT(30), TXT);
+            [['Desaparecidas / no localizadas', a.desapNoLoc, NAR], ['Localizadas con vida', a.conVida, AZUL_C],
+             ['Localizadas sin vida', a.sinVida, GRIS]].forEach((l, i) => {
+                const ly = py + pr + 34 + i * 24;
+                c.fillStyle = l[2]; c.fillRect(px - 120, ly - 7, 14, 14);
+                tl(l[0] + ': ' + dsFmt(l[1]), px - 100, ly, FA(12.5), TXT);
+            });
+            y += 38 + a.top.length * 42 + 40;
+
+            // Indicadores
+            rc(18, y, W - 36, 74, 10, '#EAF1F9', '#C8D6E6');
+            const kpis = [['TASA DE LOCALIZACIÓN', a.tasaLoc.toFixed(1) + '%'],
+                          ['CONCENTRACIÓN AMG', a.total ? (a.amgTot / a.total * 100).toFixed(1) + '%' : 'n/d'],
+                          ['ALTAS EN EL CORTE', dsFmt(a.ultimaAlta)],
+                          ['PROMEDIO 4 SEMANAS', dsFmt(a.prom4)]];
+            kpis.forEach((k, i) => {
+                const kx = 18 + (W - 36) / 4 * i + (W - 36) / 8;
+                if (i > 0) { c.strokeStyle = '#C8D6E6'; c.beginPath(); c.moveTo(18 + (W - 36) / 4 * i, y + 14); c.lineTo(18 + (W - 36) / 4 * i, y + 60); c.stroke(); }
+                tc(k[0], kx, y + 24, FT(10), '#7A8794');
+                tc(k[1], kx, y + 50, FT(22), AZUL);
+            });
+            y += 88;
+
+            // Nota y pie
+            c.fillStyle = '#F7F9FC'; c.fillRect(0, y, W, 34);
+            tl('Las tres fuentes miden universos distintos: sus cifras no son equivalentes ni sumables entre sí.', 20, y + 17, FA(11), GRIS);
+            y += 34;
+
+            c.fillStyle = AZUL; c.fillRect(0, y, W, 44);
+            tl('RNPDNO | Fiscalía del Estado de Jalisco | Registro Estatal de Personas Desaparecidas', 20, y + 22, FA(11.5), '#E8EEF5');
+            tr(a.corte + ' | Elaborado por: CGES/DGAPP/AA', W - 20, y + 22, FA(11.5), '#E8EEF5');
+            y += 44;
+
+            const alt = Math.ceil(y);
+            const img = c.getImageData(0, 0, W, alt);
+            canvas.height = alt;
+            canvas.getContext('2d').putImageData(img, 0, 0);
+        }
+
+        // ===== ORQUESTACIÓN =====
+        async function dsCargar() {
+            const cont = document.getElementById('dsResumenContent');
+            try {
+                if (cont) cont.innerHTML = '<div class="loading"><div class="spinner"></div><p>Descargando datos...</p></div>';
+                const csv = await dsFetch();
+                dsData = dsParse(csv);
+                dsRenderResumen();
+                dsRenderGraficas();
+                dsRenderAnalisis();
+            } catch (e) {
+                console.error('❌ Desaparecidos:', e);
+                if (cont) cont.innerHTML = '<p class="error-message">No se pudieron cargar los datos de Desaparecidos: ' + e.message + '</p>';
+            }
+        }
+
+        function dsMostrarVista(cual) {
+            const vs = document.getElementById('vistaSemanal');
+            const vd = document.getElementById('vistaDesaparecidos');
+            const bs = document.getElementById('navSemanalBtn');
+            const bd = document.getElementById('navDesapBtn');
+            const esDesap = (cual === 'desaparecidos');
+            if (vs) vs.style.display = esDesap ? 'none' : '';
+            if (vd) vd.style.display = esDesap ? '' : 'none';
+            if (bs) bs.classList.toggle('btn-nav-off', esDesap);
+            if (bd) bd.classList.toggle('btn-nav-off', !esDesap);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (esDesap && !dsData) dsCargar();
+        }
+
+        document.getElementById('navSemanalBtn').addEventListener('click', () => dsMostrarVista('semanal'));
+        document.getElementById('navDesapBtn').addEventListener('click', () => dsMostrarVista('desaparecidos'));
+
+        document.getElementById('dsGenerarBtn').addEventListener('click', () => {
+            const st = document.getElementById('dsInfoStatus');
+            if (!dsData) { if (st) st.textContent = '⚠️ Primero actualiza los datos.'; return; }
+            if (st) st.textContent = '⏳ Generando...';
+            const listas = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+            listas.catch(() => {}).then(() => setTimeout(() => {
+                try {
+                    dsDibujarInfografia();
+                    document.getElementById('dsPreview').style.display = 'block';
+                    document.getElementById('dsDescargarBtn').style.display = 'inline-flex';
+                    if (st) st.textContent = '✅ Infografía generada';
+                } catch (e) {
+                    if (st) st.textContent = '❌ Error: ' + e.message;
+                    console.error(e);
+                }
+            }, 50));
+        });
+
+        document.getElementById('dsDescargarBtn').addEventListener('click', () => {
+            const a = dsCalcAnalisis();
+            const corte = a && a.corte ? a.corte.replace(/\//g, '-') : 'sin-corte';
+            const link = document.createElement('a');
+            link.download = 'Infografia_DESAPARECIDOS_JALISCO_corte_' + corte + '.jpg';
+            link.href = document.getElementById('dsCanvas').toDataURL('image/jpeg', 0.95);
+            link.click();
+        });
+
     </script>
 </body>
 </html>
