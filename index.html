@@ -702,6 +702,16 @@
         .ds-li span { color: var(--color-dark); }
         .ds-li b { font-weight: 700; white-space: nowrap; text-align: center; }
         .ds-li i { font-style: normal; font-weight: 600; text-align: right; font-size: 11.5px; }
+        .ds-card-l {
+            display: inline-block; font-size: 11px; font-weight: 600;
+            color: var(--color-secondary); text-decoration: none;
+            margin-bottom: 8px; border-bottom: 1px dotted var(--color-secondary);
+        }
+        .ds-card-l:hover { filter: brightness(1.15); }
+        .ds-chart-row {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px;
+        }
+        .ds-chart-row .ds-chart { margin-bottom: 18px; }
         .ds-chart {
             background: #fff; border: 1px solid var(--color-border); border-radius: 10px;
             padding: 14px 16px 10px; margin-bottom: 18px;
@@ -2796,12 +2806,16 @@
             if (!cont || !dsData) return;
             const d = dsData;
 
-            const tarjeta = (titulo, sub, valor, delta, detalle) => {
+            const tarjeta = (titulo, sub, enlace, valor, delta, detalle) => {
                 const dd = delta === null ? '' :
                     `<span class="ds-delta ${delta > 0 ? 'an-up' : (delta < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(delta)} vs. semana anterior</span>`;
+                const lk = enlace
+                    ? `<a class="ds-card-l" href="${enlace}" target="_blank" rel="noopener noreferrer">🔗 Consultar fuente oficial</a>`
+                    : '';
                 return `<div class="ds-card">
                     <div class="ds-card-t">${titulo}</div>
                     <div class="ds-card-s">${sub}</div>
+                    ${lk}
                     <div class="ds-card-v">${dsFmt(valor)}</div>
                     ${dd}
                     <div class="ds-card-d">${detalle}</div>
@@ -2815,6 +2829,7 @@
                 <div class="ds-corte">Corte al <b>${d.fechas[d.nSem - 1]}</b> · ${d.nSem} semanas registradas</div>
                 <div class="ds-grid3">
                     ${tarjeta('RNPDNO', 'Registro Nacional de Personas Desaparecidas y No Localizadas',
+                        'https://versionpublicarnpdno.segob.gob.mx/Dashboard/ContextoGeneral',
                         dsUlt(d.total), dsDelta(d.total),
                         li('Desaparecidas y no localizadas', d.desapNoLoc) +
                         li('Personas desaparecidas', d.desaparecidas) +
@@ -2823,10 +2838,12 @@
                         li('Localizadas con vida', d.conVida) +
                         li('Localizadas sin vida', d.sinVida))}
                     ${tarjeta('FISCALÍA DEL ESTADO', 'Fiscalía del Estado de Jalisco',
+                        null,
                         dsUlt(d.fisPrivacion), dsDelta(d.fisPrivacion),
                         '<div class="ds-li"><span>Privación ilegal de la libertad y de otros derechos</span><b></b><i></i></div>' +
                         li('Desaparición cometida por particulares', d.fisParticulares))}
                     ${tarjeta('REGISTRO ESTATAL', 'Registro Estatal de Personas Desaparecidas',
+                        'https://version-publica-repd.jalisco.gob.mx/estadisticas',
                         dsUlt(d.repdCedulas), dsDelta(d.repdCedulas),
                         li('Cédulas publicadas (acumulado)', d.repdCedulas) +
                         li('Localizados', d.repdLocalizados) +
@@ -2938,13 +2955,62 @@
             }
         };
 
+        /* Total sobre cada columna apilada (cambio 8). El apilado muestra los componentes,
+           pero el total de la semana no se dibujaba en ninguna parte. */
+        const dsTotalApiladoPlugin = {
+            id: 'dsTotalApilado',
+            afterDatasetsDraw(chart) {
+                const cfg = (chart.options.plugins && chart.options.plugins.dsTotalApilado) || {};
+                if (!cfg.enabled) return;
+
+                const ctx = chart.ctx;
+                const nPuntos = chart.data.labels.length;
+                const paso = nPuntos > 20 ? 3 : (nPuntos > 11 ? 2 : 1);
+                const ultimo = nPuntos - 1;
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+
+                for (let i = 0; i < nPuntos; i++) {
+                    if (i !== ultimo && i % paso !== 0) continue;
+
+                    let total = 0, cima = Infinity;
+                    chart.data.datasets.forEach((ds, di) => {
+                        const meta = chart.getDatasetMeta(di);
+                        if (meta.hidden) return;
+                        const v = Number(ds.data[i]);
+                        if (!isNaN(v)) total += v;
+                        const el = meta.data[i];
+                        if (el && el.y < cima) cima = el.y;
+                    });
+                    if (!total || cima === Infinity) continue;
+
+                    const txt = total.toLocaleString('es-MX');
+                    const esUltimo = (i === ultimo);
+                    ctx.font = 'bold ' + (esUltimo ? 12 : 10) + 'px Arial, sans-serif';
+                    const w = ctx.measureText(txt).width;
+                    const el0 = chart.getDatasetMeta(0).data[i];
+                    const px = el0 ? el0.x : 0;
+
+                    ctx.fillStyle = esUltimo ? 'rgba(192,57,43,0.10)' : 'rgba(255,255,255,0.85)';
+                    ctx.fillRect(px - w / 2 - 3, cima - 17, w + 6, 15);
+                    ctx.fillStyle = esUltimo ? '#C0392B' : '#18345D';
+                    ctx.fillText(txt, px, cima - 4);
+                }
+                ctx.restore();
+            }
+        };
+
         function dsCrear(id, cfg) {
             const el = document.getElementById(id);
             if (!el) return;
             const tipo = cfg.type;
-            cfg.plugins = (tipo === 'doughnut' || tipo === 'pie')
-                ? [dsDonaPlugin]
-                : [dsEtiquetasPlugin];
+            if (tipo === 'doughnut' || tipo === 'pie') {
+                cfg.plugins = [dsDonaPlugin];
+            } else {
+                cfg.plugins = [dsEtiquetasPlugin, dsTotalApiladoPlugin];
+            }
             dsCharts.push(new Chart(el, cfg));
         }
 
@@ -2978,23 +3044,23 @@
             const totalUlt = dsUlt(d.total) || 0;
 
             cont.innerHTML =
-                dsLienzo('dsG1', '1 · Acumulado total RNPDNO por semana', 'RNPDNO') +
-                dsLienzo('dsG2', '2 · Desaparecidas vs. localizadas (acumulado)', 'RNPDNO') +
-                dsLienzo('dsG3', '3 · Altas nuevas por semana', 'RNPDNO', 'Diferencia entre cortes consecutivos: mide el ritmo, no el acumulado.') +
-                dsLienzo('dsG4', '4 · Altas nuevas y media móvil de 4 semanas', 'RNPDNO') +
-                dsLienzo('dsG5', '5 · Tasa de localización (%)', 'RNPDNO', 'Personas localizadas sobre el total registrado.') +
-                dsLienzo('dsG6', '6 · Localizadas con vida vs. sin vida', 'RNPDNO') +
-                dsLienzo('dsG7', '7 · Estado de localización (última semana)', 'RNPDNO') +
-                dsLienzo('dsG8', '8 · Distribución por género', 'RNPDNO') +
-                dsLienzo('dsG9', '9 · Evolución del género (acumulado)', 'RNPDNO') +
-                dsLienzo('dsG10', '10 · Composición semanal (100%)', 'RNPDNO') +
-                dsLienzo('dsG11', '11 · Comparativo entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
-                dsLienzo('dsG12', '12 · Brecha entre RNPDNO y Registro Estatal', 'RNPDNO · Fiscalía del Estado · REPD') +
-                dsLienzo('dsG13', '13 · Top 10 municipios (acumulado)', 'RNPDNO') +
-                dsLienzo('dsG14', '14 · Concentración metropolitana', 'RNPDNO') +
-                dsLienzo('dsG15', '15 · Evolución del top 5 de municipios', 'RNPDNO', 'Cinco series simultáneas: se omiten las etiquetas de datos para conservar la legibilidad.') +
-                dsLienzo('dsG16', '16 · Fiscalía: desaparición por particulares', 'Fiscalía del Estado') +
-                dsLienzo('dsG17', '17 · Registro Estatal: cédulas y resultados', 'Registro Estatal (REPD)');
+                dsLienzo('dsG1', '1 · Evolución acumulada RNPDNO', 'RNPDNO', 'Total, personas pendientes de localizar y localizadas (con vida y sin vida), en una sola vista.') +
+                dsLienzo('dsG2', '2 · Altas nuevas por semana (composición)', 'RNPDNO', 'Cada barra desglosa de qué se compusieron las altas de esa semana.') +
+                dsLienzo('dsG3', '3 · Ritmo semanal de nuevos registros', 'RNPDNO', 'Responde a qué ritmo crece el fenómeno, no cuántos hay acumulados. La media móvil suaviza el vaivén semanal.') +
+                dsLienzo('dsG4', '4 · Tasa de localización (%)', 'RNPDNO', 'Personas localizadas sobre el total registrado, con recta de tendencia y promedio del periodo.') +
+                '<div class="ds-chart-row">' +
+                dsLienzo('dsG5', '5 · Estado de localización', 'RNPDNO') +
+                dsLienzo('dsG6', '6 · Distribución por género', 'RNPDNO') +
+                '</div>' +
+                dsLienzo('dsG7', '7 · Evolución del género (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG8', '8 · Composición semanal', 'RNPDNO', 'La cifra sobre cada columna es el total acumulado de esa semana.') +
+                dsLienzo('dsG9', '9 · Comparativo entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
+                dsLienzo('dsG10', '10 · Brecha entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD') +
+                dsLienzo('dsG11', '11 · Top 10 municipios (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG12', '12 · Concentración metropolitana', 'RNPDNO') +
+                dsLienzo('dsG13', '13 · Evolución del top 5 de municipios', 'RNPDNO', 'Cinco series simultáneas: se omiten las etiquetas de datos para conservar la legibilidad.') +
+                dsLienzo('dsG14', '14 · Fiscalía: desaparición por particulares', 'Fiscalía del Estado') +
+                dsLienzo('dsG15', '15 · Registro Estatal: cédulas y resultados', 'Registro Estatal (REPD)');
 
             const linea = (lbl, data, color, fill) => ({
                 label: lbl, data, borderColor: color,
@@ -3002,102 +3068,145 @@
                 pointRadius: 2, tension: 0.25, fill: !!fill, spanGaps: true
             });
 
+            // 1 · Evolución acumulada: fusiona lo que antes eran tres gráficas separadas
+            // (total, desaparecidas vs. localizadas, y con vida vs. sin vida).
             dsCrear('dsG1', { type: 'line', data: { labels: L, datasets: [
-                linea('Total acumulado', d.total, DS_AZUL, 'rgba(24,52,93,0.15)')] }, options: DS_OPC });
-
-            dsCrear('dsG2', { type: 'line', data: { labels: L, datasets: [
+                linea('Total registrado', d.total, DS_AZUL),
                 linea('Desaparecidas y no localizadas', d.desapNoLoc, DS_NAR),
-                linea('Localizadas', d.localizadas, DS_AZUL_C)] }, options: DS_OPC });
+                linea('Localizadas', d.localizadas, DS_AZUL_C),
+                linea('Localizadas con vida', d.conVida, DS_VERDE),
+                linea('Localizadas sin vida', d.sinVida, DS_GRIS)] }, options: DS_OPC });
 
+            // 2 · Altas nuevas desglosadas. El segmento gris aparece solo si la suma de los
+            // componentes no alcanza el total: no se fuerza el cuadre ni se oculta la diferencia.
+            const incDesap = dsIncrementos(d.desaparecidas);
+            const incNoLoc = dsIncrementos(d.noLocalizadas);
+            const incLoc   = dsIncrementos(d.localizadas);
+            const sinDesglosar = nuevas.map((t, i) => {
+                if (t === null) return null;
+                const suma = (incDesap[i] || 0) + (incNoLoc[i] || 0) + (incLoc[i] || 0);
+                return t - suma;
+            });
+            const hayResiduo = sinDesglosar.some(v => v !== null && v !== 0);
+
+            const dsBarras = [
+                { label: 'Desaparecidas', data: incDesap, backgroundColor: DS_NAR },
+                { label: 'No localizadas', data: incNoLoc, backgroundColor: '#E8A055' },
+                { label: 'Localizadas', data: incLoc, backgroundColor: DS_AZUL_C }
+            ];
+            if (hayResiduo) dsBarras.push({ label: 'Sin desglosar', data: sinDesglosar, backgroundColor: '#B9C2CC' });
+
+            dsCrear('dsG2', { type: 'bar', data: { labels: L, datasets: dsBarras },
+                options: dsOpc({
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+                               dsEtiquetas: { enabled: false } },
+                    scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxTicksLimit: 14 } },
+                              y: { stacked: true, beginAtZero: true } } }) });
+
+            // 3 · Ritmo semanal: barras del alta de cada semana + media móvil de 4 semanas.
             dsCrear('dsG3', { type: 'bar', data: { labels: L, datasets: [
-                { label: 'Altas nuevas (total)', data: nuevas, backgroundColor: DS_AZUL },
-                { label: 'Altas de desaparecidas', data: nuevasDesap, backgroundColor: DS_NAR }] },
-                options: dsOpc({ scales: { y: { beginAtZero: true, ticks: { font: { size: 10 } } },
-                                           x: { ticks: { font: { size: 9 }, maxTicksLimit: 14 } } } }) });
-
-            dsCrear('dsG4', { type: 'bar', data: { labels: L, datasets: [
-                { label: 'Altas nuevas', data: nuevas, backgroundColor: 'rgba(24,52,93,0.35)' },
-                { type: 'line', label: 'Media móvil 4 sem', data: dsMediaMovil(nuevas, 4),
+                { label: 'Altas de la semana', data: nuevas, backgroundColor: 'rgba(24,52,93,0.35)' },
+                { type: 'line', label: 'Media móvil 4 semanas', data: dsMediaMovil(nuevas, 4),
                   borderColor: DS_NAR, borderWidth: 2.5, pointRadius: 0, tension: 0.3, spanGaps: true }] },
                 options: dsOpc({ scales: { y: { beginAtZero: true }, x: { ticks: { maxTicksLimit: 14 } } } }) });
 
-            dsCrear('dsG5', { type: 'line', data: { labels: L, datasets: [
-                linea('Tasa de localización (%)', tasaLoc, DS_VERDE, 'rgba(30,132,73,0.12)')] },
+            // 4 · Tasa de localización, con recta de tendencia (mínimos cuadrados) y promedio.
+            const validos = tasaLoc.map((v, i) => [i, v]).filter(([, v]) => v !== null);
+            let tendencia = tasaLoc.map(() => null);
+            let promedioTasa = null;
+            if (validos.length > 1) {
+                const nV = validos.length;
+                const mediaX = validos.reduce((a, [x]) => a + x, 0) / nV;
+                const mediaY = validos.reduce((a, [, v]) => a + v, 0) / nV;
+                const den = validos.reduce((a, [x]) => a + Math.pow(x - mediaX, 2), 0);
+                const pend = den ? validos.reduce((a, [x, v]) => a + (x - mediaX) * (v - mediaY), 0) / den : 0;
+                const ord = mediaY - pend * mediaX;
+                tendencia = tasaLoc.map((v, i) => v === null ? null : +(ord + pend * i).toFixed(2));
+                promedioTasa = mediaY;
+            }
+            const dsTasa = [linea('Tasa de localización (%)', tasaLoc, DS_VERDE, 'rgba(30,132,73,0.12)')];
+            if (promedioTasa !== null) {
+                dsTasa.push({ label: 'Tendencia', data: tendencia, borderColor: DS_NAR,
+                    borderWidth: 2, borderDash: [7, 4], pointRadius: 0, fill: false, spanGaps: true });
+                dsTasa.push({ label: 'Promedio del periodo (' + promedioTasa.toFixed(1) + '%)',
+                    data: tasaLoc.map(v => v === null ? null : +promedioTasa.toFixed(2)),
+                    borderColor: DS_GRIS, borderWidth: 1.6, borderDash: [3, 3], pointRadius: 0, fill: false, spanGaps: true });
+            }
+            dsCrear('dsG4', { type: 'line', data: { labels: L, datasets: dsTasa },
                 options: dsOpc({ scales: { y: { beginAtZero: true, max: 100 }, x: { ticks: { maxTicksLimit: 14 } } } }) });
 
-            dsCrear('dsG6', { type: 'line', data: { labels: L, datasets: [
-                linea('Con vida', d.conVida, DS_AZUL_C),
-                linea('Sin vida', d.sinVida, DS_GRIS)] }, options: DS_OPC });
+            const opcDona = { responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } };
 
-            dsCrear('dsG7', { type: 'doughnut', data: {
+            dsCrear('dsG5', { type: 'doughnut', data: {
                 labels: ['Desaparecidas y no localizadas', 'Localizadas con vida', 'Localizadas sin vida'],
                 datasets: [{ data: [dsUlt(d.desapNoLoc), dsUlt(d.conVida), dsUlt(d.sinVida)],
-                             backgroundColor: [DS_NAR, DS_AZUL_C, DS_GRIS] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+                             backgroundColor: [DS_NAR, DS_AZUL_C, DS_GRIS] }] }, options: opcDona });
 
-            dsCrear('dsG8', { type: 'doughnut', data: {
+            dsCrear('dsG6', { type: 'doughnut', data: {
                 labels: ['Hombres', 'Mujeres', 'Indeterminado'],
                 datasets: [{ data: [dsUlt(d.hombre), dsUlt(d.mujer), dsUlt(d.indeterminado)],
-                             backgroundColor: [DS_AZUL, DS_NAR, DS_GRIS] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+                             backgroundColor: [DS_AZUL, DS_NAR, DS_GRIS] }] }, options: opcDona });
 
-            dsCrear('dsG9', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG7', { type: 'line', data: { labels: L, datasets: [
                 linea('Hombres', d.hombre, DS_AZUL),
                 linea('Mujeres', d.mujer, DS_NAR),
                 linea('Indeterminado', d.indeterminado, DS_GRIS)] }, options: DS_OPC });
 
-            dsCrear('dsG10', { type: 'bar', data: { labels: L, datasets: [
+            // 8 · Composición semanal. El total del apilado no se dibujaba en ninguna parte:
+            // ahora va sobre cada columna, con la semana actual resaltada.
+            dsCrear('dsG8', { type: 'bar', data: { labels: L, datasets: [
                 { label: 'Desaparecidas y no localizadas', data: d.desapNoLoc, backgroundColor: DS_NAR },
                 { label: 'Localizadas con vida', data: d.conVida, backgroundColor: DS_AZUL_C },
                 { label: 'Localizadas sin vida', data: d.sinVida, backgroundColor: DS_GRIS }] },
-                options: dsOpc({ scales: { x: { stacked: true, ticks: { maxTicksLimit: 14 } },
-                                           y: { stacked: true, beginAtZero: true } } }) });
+                options: dsOpc({
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+                               dsEtiquetas: { enabled: false },
+                               dsTotalApilado: { enabled: true } },
+                    scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxTicksLimit: 14 } },
+                              y: { stacked: true, beginAtZero: true,
+                                   grace: '8%', ticks: { font: { size: 10 } } } } }) });
 
-            dsCrear('dsG11', { type: 'bar', data: {
+            dsCrear('dsG9', { type: 'bar', data: {
                 labels: ['RNPDNO (total)', 'Registro Estatal (cédulas)', 'Fiscalía (privación ilegal)', 'Fiscalía (por particulares)'],
                 datasets: [{ label: 'Acumulado a la fecha de corte',
                     data: [dsUlt(d.total), dsUlt(d.repdCedulas), dsUlt(d.fisPrivacion), dsUlt(d.fisParticulares)],
                     backgroundColor: [DS_AZUL, DS_AZUL_C, DS_NAR, '#E8A055'] }] },
                 options: dsOpc({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }) });
 
-            dsCrear('dsG12', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG10', { type: 'line', data: { labels: L, datasets: [
                 linea('RNPDNO total', d.total, DS_AZUL),
                 linea('Registro Estatal (cédulas)', d.repdCedulas, DS_AZUL_C),
                 linea('Fiscalía (por particulares)', d.fisParticulares, DS_NAR)] }, options: DS_OPC });
 
-            dsCrear('dsG13', { type: 'bar', data: {
+            dsCrear('dsG11', { type: 'bar', data: {
                 labels: top.map(m => m.nombre),
                 datasets: [{ label: 'Casos acumulados', data: top.map(m => m.valor), backgroundColor: DS_AZUL }] },
                 options: dsOpc({ indexAxis: 'y', plugins: { legend: { display: false } },
                                  scales: { x: { beginAtZero: true }, y: { ticks: { font: { size: 10 } } } } }) });
 
-            dsCrear('dsG14', { type: 'doughnut', data: {
+            dsCrear('dsG12', { type: 'doughnut', data: {
                 labels: ['AMG', 'Resto de municipios listados', 'No desglosado'],
                 datasets: [{ data: [amgTot, Math.max(listados - amgTot, 0), Math.max(totalUlt - listados, 0)],
-                             backgroundColor: [DS_AZUL, DS_AZUL_C, '#D8DEE6'] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } } });
+                             backgroundColor: [DS_AZUL, DS_AZUL_C, '#D8DEE6'] }] }, options: opcDona });
 
             const top5 = dsTopMunicipios(d, 5).map(m => m.nombre);
             const paleta = [DS_AZUL, DS_NAR, DS_AZUL_C, DS_VERDE, DS_GRIS];
-            dsCrear('dsG15', { type: 'line', data: { labels: L,
+            dsCrear('dsG13', { type: 'line', data: { labels: L,
                 datasets: top5.map((nm, i) => {
                     const m = d.municipios.find(x => x.nombre === nm);
                     return linea(nm, m ? m.valores : [], paleta[i % paleta.length]);
                 }) },
-                // Cinco series x 36 puntos = 180 etiquetas: se desactivan a propósito.
                 options: dsOpc({ plugins: {
                     legend: { labels: { boxWidth: 12, font: { size: 11 } } },
                     dsEtiquetas: { enabled: false }
                 } }) });
 
-            dsCrear('dsG16', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG14', { type: 'line', data: { labels: L, datasets: [
                 linea('Desaparición cometida por particulares', d.fisParticulares, DS_NAR, 'rgba(240,128,19,0.12)')] },
                 options: DS_OPC });
 
-            dsCrear('dsG17', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG15', { type: 'line', data: { labels: L, datasets: [
                 linea('Cédulas publicadas', d.repdCedulas, DS_AZUL),
                 linea('Localizados con vida', d.repdConVida, DS_AZUL_C),
                 linea('Localizados sin vida', d.repdSinVida, DS_GRIS),
@@ -3299,8 +3408,31 @@
             tarjeta(0, 'RNPDNO', 'Registro Nacional de Personas\nDesaparecidas y No Localizadas', a.total, 'Total acumulado',
                 [['Desaparecidas', a.desaparecidas, true], ['No localizadas', a.noLoc, false],
                  ['Localizadas', a.localizadas, false], ['Con vida', a.conVida, false], ['Sin vida', a.sinVida, false]]);
-            tarjeta(1, 'FISCALÍA DEL ESTADO', 'Fiscalía del Estado de Jalisco', a.fisPriv, 'Privación ilegal de la libertad\ny de otros derechos',
-                [['Desaparición por particulares', a.fisPart, true]]);
+
+            // Fiscalía: son DOS delitos distintos, no uno contenido en el otro.
+            // Por eso cada uno lleva su cifra en grande con su nombre debajo,
+            // separados por una línea divisoria.
+            (function tarjetaFiscalia() {
+                const cx = 18 + 1 * (cw + 18);
+                rc(cx, y, cw, chh, 10, BLANCO, AZUL);
+                tc('FISCALÍA DEL ESTADO', cx + cw / 2, y + 32, FT(17), TXT);
+                tc('Fiscalía del Estado de Jalisco', cx + cw / 2, y + 56, FA(12), GRIS);
+
+                // Delito 1
+                tc(dsFmt(a.fisPriv), cx + cw / 2, y + 108, FT(46), NAR);
+                'Privación ilegal de la libertad\ny de otros derechos'.split('\n')
+                    .forEach((t, k) => tc(t, cx + cw / 2, y + 143 + k * 17, FA(12.5), TXT));
+
+                // Separador entre los dos delitos
+                c.strokeStyle = '#C8D0DA'; c.lineWidth = 1;
+                c.beginPath(); c.moveTo(cx + 26, y + 186); c.lineTo(cx + cw - 26, y + 186); c.stroke();
+
+                // Delito 2
+                tc(dsFmt(a.fisPart), cx + cw / 2, y + 234, FT(46), NAR);
+                'Desaparición cometida\npor particulares'.split('\n')
+                    .forEach((t, k) => tc(t, cx + cw / 2, y + 269 + k * 17, FA(12.5), TXT));
+            })();
+
             tarjeta(2, 'REGISTRO ESTATAL', 'Registro Estatal de Personas\nDesaparecidas', a.repdCed, 'Cédulas de desaparición\n(acumulado)',
                 [['Localizados con vida', a.repdConVida, false], ['Localizados sin vida', a.repdSinVida, false],
                  ['Desaparecidos', a.repdDesap, true]]);
