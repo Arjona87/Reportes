@@ -1952,6 +1952,45 @@
             textCenter(totalSymbol + '  ' + totalPctStr + ' vs semana anterior', W / 2, y + 98, 'bold 20px Arial', totalColor);
             y += TOT_H;
 
+            // ========== CHIPS DE SUBTOTALES POR CATEGORÍA ==========
+            // El total general no dice qué categoría lo mueve. Estos subtotales dan la
+            // lectura por bloque antes de entrar al detalle celda por celda.
+            const CHIPS_H = 74;
+            ctx.fillStyle = '#EAF1F9';
+            ctx.fillRect(0, y, W, CHIPS_H);
+
+            const sumaGrupo = (keys) => keys.reduce((acc, d) => {
+                const v = getDelitoValue(region, d.key);
+                return { ant: acc.ant + v.ant, act: acc.act + v.act };
+            }, { ant: 0, act: 0 });
+
+            const gRobos = sumaGrupo(ROBOS_KEYS);
+            const gLib = sumaGrupo(LIBERTAD_KEYS);
+            const gGra = sumaGrupo(GRAVES_KEYS);
+            const chipRestoAct = Math.max(totalAct - (gRobos.act + gLib.act + gGra.act), 0);
+            const chipRestoAnt = Math.max(totalAnt - (gRobos.ant + gLib.ant + gGra.ant), 0);
+
+            const chips = [
+                { n: 'ROBOS', ant: gRobos.ant, act: gRobos.act },
+                { n: 'LIBERTAD', ant: gLib.ant, act: gLib.act },
+                { n: 'GRAVES', ant: gGra.ant, act: gGra.act },
+                { n: 'RESTO', ant: chipRestoAnt, act: chipRestoAct }
+            ];
+
+            const CHIP_W = 206, CHIP_GAP = 12;
+            let chipX = (W - (chips.length * CHIP_W + (chips.length - 1) * CHIP_GAP)) / 2;
+            chips.forEach(c => {
+                const p = c.ant > 0 ? ((c.act - c.ant) / c.ant * 100) : (c.act > 0 ? 100 : 0);
+                const col = p >= 0 ? ROJO : VERDE;
+                roundRect(chipX, y + 9, CHIP_W, CHIPS_H - 20, 6, BLANCO, '#C8D6E6');
+                textLeft(c.n, chipX + 14, y + 26, 'bold 11px ' + FUENTE_TIT, AZUL_HDR);
+                textLeft(c.act.toLocaleString('es-MX'), chipX + 14, y + 46, 'bold 22px ' + FUENTE_NUM, AZUL_OSC);
+                textRight((p >= 0 ? '+' : '') + p.toFixed(1) + '%', chipX + CHIP_W - 14, y + 46, 'bold 14px ' + FUENTE_NUM, col);
+                chipX += CHIP_W + CHIP_GAP;
+            });
+            y += CHIPS_H;
+            fronteras.push(y);
+
             // ========== Helper: dibujar sección de categoría ==========
             function dibujarSeccion(titulo, delitos, ncols) {
                 // Header de sección
@@ -1985,30 +2024,44 @@
                     // Celda
                     roundRect(cx, cy, cellW, cellH, 6, bg, '#CCCCCC');
 
-                    // Icono
-                    const iconX = cx + cellW / 2;
-                    ctx.font = '39px Arial';  // Aumentado 50% (26px * 1.5 = 39px)
+                    // ---- ZONA A: ícono a la izquierda, centrado en toda la altura ----
+                    const ICONO_W = 60;
+                    ctx.font = '42px Arial';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'middle';
-                    ctx.fillText(d.icon, iconX, cy + 28);
+                    ctx.fillText(d.icon, cx + ICONO_W / 2, cy + cellH / 2);
 
-                    // Nombre (puede tener \n)
-                    const labelLines = d.label.split('\\n');
-                    const labelY = cy + 52;
-                    ctx.font = 'bold 11px Arial';
-                    ctx.fillStyle = NEGRO;
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
+                    // ---- ZONA B: texto centrado en el espacio restante ----
+                    // Antes todo se centraba sobre el eje de la celda completa, dejando
+                    // ~50 px muertos a cada lado. Ahora el texto ocupa ese ancho.
+                    const zonaX = cx + ICONO_W;
+                    const zonaW = cellW - ICONO_W - 8;
+                    const medio = zonaX + zonaW / 2;
+
+                    // Nombre. El split usaba '\\n' (barra invertida literal), por lo que
+                    // NUNCA partía las etiquetas y todas se pintaban en una sola línea.
+                    const labelLines = d.label.split(/\n/);
+
+                    // Autoajuste: si una línea no cabe en la zona, baja el cuerpo hasta que quepa.
+                    // Sin esto, nombres como 'Desaparición por Particulares' se desbordarían a 18px.
+                    let fs = 18;
+                    while (fs > 11) {
+                        ctx.font = 'bold ' + fs + 'px ' + FUENTE_TIT;
+                        if (labelLines.every(l => ctx.measureText(l).width <= zonaW)) break;
+                        fs -= 0.5;
+                    }
+
+                    const dosLineas = labelLines.length > 1;
                     labelLines.forEach((line, i) => {
-                        ctx.fillText(line, iconX, labelY + i * 14);
+                        textCenter(line, medio, cy + (dosLineas ? 24 : 32) + i * (fs + 3),
+                                   'bold ' + fs + 'px ' + FUENTE_TIT, NEGRO);
                     });
 
-                    // Valores
-                    const valY = cy + 78 + (labelLines.length > 1 ? 6 : 0);
-                    textCenter(val.ant + ' → ' + val.act, iconX, valY, 'bold 14px Arial', NEGRO);
-
-                    // Porcentaje
-                    textCenter(pctStr, iconX, cy + cellH - 14, 'bold 12px Arial', pctColor);
+                    // Valores y porcentaje (tipografía +20% respecto a la versión anterior)
+                    textCenter(val.ant + ' → ' + val.act, medio, cy + (dosLineas ? 70 : 68),
+                               'bold 26px ' + FUENTE_NUM, AZUL_OSC);
+                    textCenter(pctStr, medio, cy + (dosLineas ? 95 : 93),
+                               'bold 20px ' + FUENTE_NUM, pctColor);
                 });
 
                 y += gridH;
@@ -2076,40 +2129,6 @@
             y += TOP_H;
             fronteras.push(y);
 
-            // ========== DELITOS DE ALTO IMPACTO (I7) ==========
-            // Se reportan siempre, entren o no al TOP 3: en una semana tranquila podrían
-            // quedar invisibles pese a ser los de mayor relevancia para la toma de decisiones.
-            const AI_HDR = 40;
-            ctx.fillStyle = AZUL_HDR;
-            ctx.fillRect(0, y, W, AI_HDR);
-            textCenter('DELITOS DE ALTO IMPACTO', W / 2, y + AI_HDR / 2, 'bold 15px ' + FUENTE_TIT, BLANCO);
-            y += AI_HDR;
-
-            const altoImpacto = conValores.filter(d => DELITOS_ALTO_IMPACTO.includes(d.key));
-            const AI_FILAS = Math.max(Math.ceil(altoImpacto.length / 2), 1);
-            const AI_H = AI_FILAS * 26 + 18;
-            ctx.fillStyle = BLANCO;
-            ctx.fillRect(0, y, W, AI_H);
-            ctx.strokeStyle = '#CCCCCC';
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(W / 2, y + 8); ctx.lineTo(W / 2, y + AI_H - 8); ctx.stroke();
-
-            altoImpacto.forEach((d, i) => {
-                const col = i % 2;
-                const fila = Math.floor(i / 2);
-                const lx = col === 0 ? 20 : W / 2 + 15;
-                const rx = col === 0 ? W / 2 - 15 : W - 20;
-                const ly = y + 18 + fila * 26;
-                const dif = d.val.act - d.val.ant;
-                const color = dif > 0 ? ROJO : (dif < 0 ? VERDE : GRIS_TX);
-                const flecha = dif > 0 ? '\u25B2' : (dif < 0 ? '\u25BC' : '=');
-                textLeft(nombreCorto(d.label), lx, ly, '12px ' + FUENTE_TXT, NEGRO);
-                textRight(d.val.ant + '\u2192' + d.val.act + '  ' + flecha, rx, ly, 'bold 12px ' + FUENTE_NUM, color);
-            });
-
-            y += AI_H;
-            fronteras.push(y);
-
             // ========== RESTO DE LOS DELITOS ==========
             const RESTO_H = 44;
             ctx.fillStyle = BEIGE;
@@ -2131,16 +2150,63 @@
             textCenter('TENDENCIA SEMANAL TOTAL', W / 2, y + CHART_HDR / 2, 'bold 15px Arial', BLANCO);
             y += CHART_HDR;
 
-            const CHART_H = 220;
-            ctx.fillStyle = '#D6E8F7';
-            ctx.fillRect(0, y, W, CHART_H);
-
             // Obtener datos de TOTAL DE DELITOS
             const totalRow = region.delitos['TOTAL DE DELITOS'];
             const chartVals = totalRow ? totalRow.values : [];
 
+            // ---- Panel de métricas de la serie ----
+            // Estos rótulos vivían flotando DENTRO del área de datos y se encimaban con
+            // las últimas semanas. Al sacarlos aquí, la gráfica queda limpia.
+            const MET_H = 52;
+            ctx.fillStyle = '#F7F9FC';
+            ctx.fillRect(0, y, W, MET_H);
+
             if (chartVals.length > 1) {
-                const PAD_L = 50, PAD_R = 30, PAD_T = 30, PAD_B = 40;
+                const nv = chartVals.length;
+                const ord = [...chartVals].sort((a, b) => a - b);
+                const media = chartVals.reduce((a, b) => a + b, 0) / nv;
+                const mediana = nv % 2 ? ord[(nv - 1) / 2] : (ord[nv / 2 - 1] + ord[nv / 2]) / 2;
+                const desv = Math.sqrt(chartVals.reduce((a, b) => a + Math.pow(b - media, 2), 0) / nv);
+
+                // Moda: en una serie de conteos semanales lo habitual es que no exista
+                // ningún valor repetido. Se declara 'n/a' en vez de inventar una.
+                const frec = {};
+                chartVals.forEach(v => frec[v] = (frec[v] || 0) + 1);
+                const maxFrec = Math.max(...Object.values(frec));
+                const moda = maxFrec === 1 ? null : Number(Object.keys(frec).find(k => frec[k] === maxFrec));
+
+                const kpis = [
+                    ['PROMEDIO', Math.round(media).toLocaleString('es-MX'), AZUL_OSC],
+                    ['MEDIANA', Math.round(mediana).toLocaleString('es-MX'), AZUL_OSC],
+                    ['MODA', moda !== null ? moda.toLocaleString('es-MX') : 'n/a', GRIS_TX],
+                    ['DESV. EST.', Math.round(desv).toLocaleString('es-MX'), AZUL_OSC],
+                    ['MÍNIMO', Math.min(...chartVals).toLocaleString('es-MX'), VERDE],
+                    ['MÁXIMO', Math.max(...chartVals).toLocaleString('es-MX'), ROJO],
+                    ['ACTUAL', chartVals[nv - 1].toLocaleString('es-MX'), AZUL_OSC]
+                ];
+                const kw = W / kpis.length;
+                kpis.forEach((k, i) => {
+                    const kx = i * kw + kw / 2;
+                    if (i > 0) {
+                        ctx.strokeStyle = '#DDE3EA'; ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(i * kw, y + 10); ctx.lineTo(i * kw, y + MET_H - 10); ctx.stroke();
+                    }
+                    textCenter(k[0], kx, y + 16, 'bold 9.5px ' + FUENTE_TIT, '#7A8794');
+                    textCenter(k[1], kx, y + 35, 'bold 17px ' + FUENTE_NUM, k[2]);
+                });
+                if (moda === null) {
+                    textCenter('Moda: no existe — las ' + nv + ' semanas registran valores distintos',
+                               W / 2, y + MET_H - 5, '8.5px ' + FUENTE_TXT, '#9AA4AF');
+                }
+            }
+            y += MET_H;
+
+            const CHART_H = 230;
+            ctx.fillStyle = '#D6E8F7';
+            ctx.fillRect(0, y, W, CHART_H);
+
+            if (chartVals.length > 1) {
+                const PAD_L = 50, PAD_R = 30, PAD_T = 20, PAD_B = 42;
                 const chartW = W - PAD_L - PAD_R;
                 const chartH2 = CHART_H - PAD_T - PAD_B;
                 const minV = Math.min(...chartVals) * 0.92;
@@ -2169,8 +2235,8 @@
                 ctx.stroke();
 
                 // I6: promedio de las últimas 52 semanas como referencia visual.
-                // Convierte la serie en interpretable de un vistazo: sin esta línea no se
-                // distingue una semana normal de una atípica.
+                // El rótulo se movió al panel de métricas: dentro del área de datos se
+                // encimaba con los puntos de las últimas semanas.
                 const refPeriodo = Math.min(52, chartVals.length);
                 const refPromedio = chartVals.slice(-refPeriodo).reduce((a, v) => a + v, 0) / refPeriodo;
                 if (refPromedio > minV && refPromedio < maxV) {
@@ -2184,10 +2250,37 @@
                     ctx.lineTo(W - PAD_R, refY);
                     ctx.stroke();
                     ctx.restore();
-                    textRight(
-                        'Prom. ' + refPeriodo + ' sem: ' + Math.round(refPromedio).toLocaleString('es-MX'),
-                        W - PAD_R, refY - 9, 'bold 10px ' + FUENTE_NUM, NARANJA
-                    );
+                }
+
+                // ---- Eje X etiquetado por mes ----
+                // Los meses se leen de las propias etiquetas de la hoja ('10 AL 16 AGO 2026'),
+                // no se calculan por aritmética de fechas: si cambia el formato, no se inventa nada.
+                const MESES_ABR = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+                const mesDe = (etiqueta) => {
+                    const t = (etiqueta || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    return MESES_ABR.find(m => t.includes(m)) || null;
+                };
+
+                const semanas = region.weeks || [];
+                const baseY = y + PAD_T + chartH2;
+                ctx.strokeStyle = '#8FA9C4'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(PAD_L, baseY); ctx.lineTo(W - PAD_R, baseY); ctx.stroke();
+
+                let mesPrevio = null;
+                let mesesPintados = 0;
+                chartVals.forEach((_, i) => {
+                    const m = mesDe(semanas[i]);
+                    if (!m || m === mesPrevio) return;
+                    mesPrevio = m;
+                    mesesPintados++;
+                    const mx = toX(i);
+                    ctx.strokeStyle = 'rgba(24,52,93,0.28)'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(mx, y + PAD_T); ctx.lineTo(mx, baseY + 5); ctx.stroke();
+                    textLeft(m, mx + 3, baseY + 16, 'bold 11px ' + FUENTE_TIT, '#1E3E68');
+                });
+
+                if (mesesPintados === 0) {
+                    textCenter(n + ' semanas', W / 2, baseY + 16, '10px ' + FUENTE_TXT, '#40546F');
                 }
 
                 // Puntos y etiquetas
