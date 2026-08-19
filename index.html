@@ -689,7 +689,7 @@
         }
         .ds-card-t { font-size: 16px; font-weight: 700; color: var(--color-primary); }
         .ds-card-s { font-size: 11.5px; color: #7f8c8d; margin-bottom: 10px; line-height: 1.45; }
-        .ds-card-v { font-size: 42px; font-weight: 800; color: var(--color-secondary); line-height: 1.1; }
+        .ds-card-v { font-size: 42px; font-weight: 800; color: #F08013; line-height: 1.1; }
         .ds-delta { display: inline-block; font-size: 12px; font-weight: 600; margin-bottom: 10px; }
         .ds-card-d { border-top: 1px solid var(--color-border); padding-top: 9px; }
         .ds-li {
@@ -712,6 +712,17 @@
             display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 18px;
         }
         .ds-chart-row .ds-chart { margin-bottom: 18px; }
+        .ds-card-lw { min-height: 22px; }
+        .ds-fis-b { text-align: center; }
+        .ds-fis-e {
+            font-size: 12.5px; line-height: 1.45; color: var(--color-dark);
+            margin-top: 2px; padding: 0 6px;
+        }
+        .ds-fis-sep {
+            border-top: 1px solid var(--color-border);
+            margin: 14px 12px;
+        }
+        .ds-chart-row-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
         .ds-chart {
             background: #fff; border: 1px solid var(--color-border); border-radius: 10px;
             padding: 14px 16px 10px; margin-bottom: 18px;
@@ -2762,7 +2773,45 @@
                 if (vals.some(v => v !== null)) municipios.push({ nombre: et, valores: vals });
             }
 
-            return { fechas, nSem, ...datos, municipios };
+            // Bloque mensual de altas por género.
+            // OJO: la etiqueta 'JALISCO / Acumulado a la fecha de corte' se repite 4 veces
+            // en la hoja. Las tres primeras encabezan series semanales; la del bloque
+            // mensual se distingue porque su primera celda es un nombre de mes, no una fecha.
+            const MESES_NOM = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                               'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+            let mensual = null;
+            for (let i = 0; i < filas.length; i++) {
+                const f = filas[i];
+                if (f.length < 3) continue;
+                if (dsNorm(f[1]) !== dsNorm('JALISCO / Acumulado a la fecha de corte')) continue;
+                const primera = dsNorm(f[2]);
+                if (!MESES_NOM.some(m => primera.startsWith(m))) continue;
+
+                const etiquetas = f.slice(2).map(c => (c || '').trim());
+                const leerFila = (lbl) => {
+                    for (let k = i + 1; k < Math.min(i + 6, filas.length); k++) {
+                        if (filas[k].length > 1 && dsNorm(filas[k][1]) === dsNorm(lbl)) {
+                            return filas[k].slice(2).map(dsNum);
+                        }
+                    }
+                    return null;
+                };
+                const H = leerFila('Hombres'), M = leerFila('Mujeres'), T = leerFila('Total');
+                if (!H || !M) break;
+
+                // Solo los meses que ya tienen captura
+                const idx = etiquetas.map((e, k) => ({ e, k }))
+                    .filter(o => o.e && (H[o.k] !== null || M[o.k] !== null));
+                mensual = {
+                    meses: idx.map(o => o.e),
+                    hombres: idx.map(o => H[o.k] || 0),
+                    mujeres: idx.map(o => M[o.k] || 0),
+                    total: idx.map(o => (T && T[o.k] !== null) ? T[o.k] : (H[o.k] || 0) + (M[o.k] || 0))
+                };
+                break;
+            }
+
+            return { fechas, nSem, ...datos, municipios, mensual };
         }
 
         // Último valor no nulo de una serie
@@ -2826,9 +2875,11 @@
             const tarjeta = (titulo, sub, enlace, valor, delta, detalle) => {
                 const dd = delta === null ? '' :
                     `<span class="ds-delta ${delta > 0 ? 'an-up' : (delta < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(delta)} vs. semana anterior</span>`;
+                // El slot del enlace se emite siempre, aunque esté vacío: si no, la tarjeta
+                // sin enlace (Fiscalía) subía su cifra y las tres quedaban desalineadas.
                 const lk = enlace
-                    ? `<a class="ds-card-l" href="${enlace}" target="_blank" rel="noopener noreferrer">🔗 Consultar fuente oficial</a>`
-                    : '';
+                    ? `<div class="ds-card-lw"><a class="ds-card-l" href="${enlace}" target="_blank" rel="noopener noreferrer">🔗 Consultar fuente oficial</a></div>`
+                    : `<div class="ds-card-lw"></div>`;
                 return `<div class="ds-card">
                     <div class="ds-card-t">${titulo}</div>
                     <div class="ds-card-s">${sub}</div>
@@ -2842,6 +2893,28 @@
             const li = (t, s) => `<div class="ds-li"><span>${t}</span><b>${dsFmt(dsUlt(s))}</b>
                 <i class="${(dsDelta(s) || 0) > 0 ? 'an-up' : ((dsDelta(s) || 0) < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(dsDelta(s))}</i></div>`;
 
+            // La Fiscalía reporta DOS delitos distintos, no uno contenido en el otro:
+            // cada uno lleva su cifra en grande con su nombre debajo, separados por una línea.
+            const tarjetaFiscalia = (dd) => {
+                const bloque = (valor, delta, etiqueta) => {
+                    const dl = delta === null ? '' :
+                        `<span class="ds-delta ${delta > 0 ? 'an-up' : (delta < 0 ? 'an-down' : 'an-neutro')}">${dsSigno(delta)} vs. semana anterior</span>`;
+                    return `<div class="ds-fis-b">
+                                <div class="ds-card-v">${dsFmt(valor)}</div>
+                                ${dl}
+                                <div class="ds-fis-e">${etiqueta}</div>
+                            </div>`;
+                };
+                return `<div class="ds-card">
+                    <div class="ds-card-t">FISCALÍA DEL ESTADO</div>
+                    <div class="ds-card-s">Fiscalía del Estado de Jalisco</div>
+                    <div class="ds-card-lw"></div>
+                    ${bloque(dsUlt(dd.fisPrivacion), dsDelta(dd.fisPrivacion), 'Privación ilegal de la libertad y de otros derechos')}
+                    <div class="ds-fis-sep"></div>
+                    ${bloque(dsUlt(dd.fisParticulares), dsDelta(dd.fisParticulares), 'Desaparición cometida por particulares')}
+                </div>`;
+            };
+
             cont.innerHTML = `
                 <div class="ds-corte">Corte al <b>${d.fechas[d.nSem - 1]}</b> · ${d.nSem} semanas registradas</div>
                 <div class="ds-grid3">
@@ -2854,11 +2927,7 @@
                         li('Personas localizadas', d.localizadas) +
                         li('Localizadas con vida', d.conVida) +
                         li('Localizadas sin vida', d.sinVida))}
-                    ${tarjeta('FISCALÍA DEL ESTADO', 'Fiscalía del Estado de Jalisco',
-                        null,
-                        dsUlt(d.fisPrivacion), dsDelta(d.fisPrivacion),
-                        '<div class="ds-li"><span>Privación ilegal de la libertad y de otros derechos</span><b></b><i></i></div>' +
-                        li('Desaparición cometida por particulares', d.fisParticulares))}
+                    ${tarjetaFiscalia(d)}
                     ${tarjeta('REGISTRO ESTATAL', 'Registro Estatal de Personas Desaparecidas',
                         'https://version-publica-repd.jalisco.gob.mx/estadisticas',
                         dsUlt(d.repdCedulas), dsDelta(d.repdCedulas),
@@ -3064,19 +3133,19 @@
 
             cont.innerHTML =
                 dsLienzo('dsG1', '1 · Evolución acumulada RNPDNO', 'RNPDNO', 'Total, personas pendientes de localizar y localizadas (con vida y sin vida), en una sola vista.') +
-                dsLienzo('dsG2', '2 · Altas nuevas por semana (composición)', 'RNPDNO', 'Cada barra desglosa de qué se compusieron las altas de esa semana.') +
+                (d.mensual ? dsLienzo('dsG2', '2 · Altas por mes y género', 'RNPDNO', 'Personas registradas cada mes del año en curso, desglosadas por género. La cifra sobre cada columna es el total del mes.') : '') +
                 dsLienzo('dsG3', '3 · Ritmo semanal de nuevos registros', 'RNPDNO', 'Responde a qué ritmo crece el fenómeno, no cuántos hay acumulados. La media móvil suaviza el vaivén semanal.') +
                 dsLienzo('dsG4', '4 · Tasa de localización (%)', 'RNPDNO', 'Personas localizadas sobre el total registrado, con recta de tendencia y promedio del periodo.') +
-                '<div class="ds-chart-row">' +
+                '<div class="ds-chart-row ds-chart-row-3">' +
                 dsLienzo('dsG5', '5 · Estado de localización', 'RNPDNO') +
                 dsLienzo('dsG6', '6 · Distribución por género', 'RNPDNO') +
+                dsLienzo('dsG7', '7 · Concentración metropolitana', 'RNPDNO') +
                 '</div>' +
-                dsLienzo('dsG7', '7 · Evolución del género (acumulado)', 'RNPDNO') +
-                dsLienzo('dsG8', '8 · Composición semanal', 'RNPDNO', 'La cifra sobre cada columna es el total acumulado de esa semana.') +
-                dsLienzo('dsG9', '9 · Comparativo entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
-                dsLienzo('dsG10', '10 · Brecha entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD') +
-                dsLienzo('dsG11', '11 · Top 10 municipios (acumulado)', 'RNPDNO') +
-                dsLienzo('dsG12', '12 · Concentración metropolitana', 'RNPDNO') +
+                dsLienzo('dsG8', '8 · Evolución del género (acumulado)', 'RNPDNO') +
+                dsLienzo('dsG9', '9 · Composición semanal', 'RNPDNO', 'La cifra sobre cada columna es el total acumulado de esa semana.') +
+                dsLienzo('dsG10', '10 · Comparativo entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD', 'Miden universos distintos: no son cifras equivalentes ni sumables.') +
+                dsLienzo('dsG11', '11 · Brecha entre las tres fuentes', 'RNPDNO · Fiscalía del Estado · REPD') +
+                dsLienzo('dsG12', '12 · Top 10 municipios (acumulado)', 'RNPDNO') +
                 dsLienzo('dsG13', '13 · Evolución del top 5 de municipios', 'RNPDNO', 'Cinco series simultáneas: se omiten las etiquetas de datos para conservar la legibilidad.') +
                 dsLienzo('dsG14', '14 · Fiscalía: desaparición por particulares', 'Fiscalía del Estado') +
                 dsLienzo('dsG15', '15 · Registro Estatal: cédulas y resultados', 'Registro Estatal (REPD)');
@@ -3096,31 +3165,19 @@
                 linea('Localizadas con vida', d.conVida, DS_VERDE),
                 linea('Localizadas sin vida', d.sinVida, DS_GRIS)] }, options: DS_OPC });
 
-            // 2 · Altas nuevas desglosadas. El segmento gris aparece solo si la suma de los
-            // componentes no alcanza el total: no se fuerza el cuadre ni se oculta la diferencia.
-            const incDesap = dsIncrementos(d.desaparecidas);
-            const incNoLoc = dsIncrementos(d.noLocalizadas);
-            const incLoc   = dsIncrementos(d.localizadas);
-            const sinDesglosar = nuevas.map((t, i) => {
-                if (t === null) return null;
-                const suma = (incDesap[i] || 0) + (incNoLoc[i] || 0) + (incLoc[i] || 0);
-                return t - suma;
-            });
-            const hayResiduo = sinDesglosar.some(v => v !== null && v !== 0);
-
-            const dsBarras = [
-                { label: 'Desaparecidas', data: incDesap, backgroundColor: DS_NAR },
-                { label: 'No localizadas', data: incNoLoc, backgroundColor: '#E8A055' },
-                { label: 'Localizadas', data: incLoc, backgroundColor: DS_AZUL_C }
-            ];
-            if (hayResiduo) dsBarras.push({ label: 'Sin desglosar', data: sinDesglosar, backgroundColor: '#B9C2CC' });
-
-            dsCrear('dsG2', { type: 'bar', data: { labels: L, datasets: dsBarras },
-                options: dsOpc({
-                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
-                               dsEtiquetas: { enabled: false } },
-                    scales: { x: { stacked: true, ticks: { font: { size: 9 }, maxTicksLimit: 14 } },
-                              y: { stacked: true, beginAtZero: true } } }) });
+            // 2 · Altas por mes y género (bloque mensual de la hoja).
+            // Si el bloque no existe o cambia de estructura, la gráfica simplemente
+            // no se dibuja: la vista no se rompe.
+            if (d.mensual) {
+                dsCrear('dsG2', { type: 'bar', data: { labels: d.mensual.meses, datasets: [
+                    { label: 'Hombres', data: d.mensual.hombres, backgroundColor: DS_AZUL },
+                    { label: 'Mujeres', data: d.mensual.mujeres, backgroundColor: DS_NAR }] },
+                    options: dsOpc({
+                        plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
+                                   dsTotalApilado: { enabled: true } },
+                        scales: { x: { stacked: true, ticks: { font: { size: 10 }, maxRotation: 0 } },
+                                  y: { stacked: true, beginAtZero: true, grace: '10%' } } }) });
+            }
 
             // 3 · Ritmo semanal: barras del alta de cada semana + media móvil de 4 semanas.
             dsCrear('dsG3', { type: 'bar', data: { labels: L, datasets: [
@@ -3167,14 +3224,14 @@
                 datasets: [{ data: [dsUlt(d.hombre), dsUlt(d.mujer), dsUlt(d.indeterminado)],
                              backgroundColor: [DS_AZUL, DS_NAR, DS_GRIS] }] }, options: opcDona });
 
-            dsCrear('dsG7', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG8', { type: 'line', data: { labels: L, datasets: [
                 linea('Hombres', d.hombre, DS_AZUL),
                 linea('Mujeres', d.mujer, DS_NAR),
                 linea('Indeterminado', d.indeterminado, DS_GRIS)] }, options: DS_OPC });
 
             // 8 · Composición semanal. El total del apilado no se dibujaba en ninguna parte:
             // ahora va sobre cada columna, con la semana actual resaltada.
-            dsCrear('dsG8', { type: 'bar', data: { labels: L, datasets: [
+            dsCrear('dsG9', { type: 'bar', data: { labels: L, datasets: [
                 { label: 'Desaparecidas y no localizadas', data: d.desapNoLoc, backgroundColor: DS_NAR },
                 { label: 'Localizadas con vida', data: d.conVida, backgroundColor: DS_AZUL_C },
                 { label: 'Localizadas sin vida', data: d.sinVida, backgroundColor: DS_GRIS }] },
@@ -3186,25 +3243,25 @@
                               y: { stacked: true, beginAtZero: true,
                                    grace: '8%', ticks: { font: { size: 10 } } } } }) });
 
-            dsCrear('dsG9', { type: 'bar', data: {
+            dsCrear('dsG10', { type: 'bar', data: {
                 labels: ['RNPDNO (total)', 'Registro Estatal (cédulas)', 'Fiscalía (privación ilegal)', 'Fiscalía (por particulares)'],
                 datasets: [{ label: 'Acumulado a la fecha de corte',
                     data: [dsUlt(d.total), dsUlt(d.repdCedulas), dsUlt(d.fisPrivacion), dsUlt(d.fisParticulares)],
                     backgroundColor: [DS_AZUL, DS_AZUL_C, DS_NAR, '#E8A055'] }] },
                 options: dsOpc({ plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }) });
 
-            dsCrear('dsG10', { type: 'line', data: { labels: L, datasets: [
+            dsCrear('dsG11', { type: 'line', data: { labels: L, datasets: [
                 linea('RNPDNO total', d.total, DS_AZUL),
                 linea('Registro Estatal (cédulas)', d.repdCedulas, DS_AZUL_C),
                 linea('Fiscalía (por particulares)', d.fisParticulares, DS_NAR)] }, options: DS_OPC });
 
-            dsCrear('dsG11', { type: 'bar', data: {
+            dsCrear('dsG12', { type: 'bar', data: {
                 labels: top.map(m => m.nombre),
                 datasets: [{ label: 'Casos acumulados', data: top.map(m => m.valor), backgroundColor: DS_AZUL }] },
                 options: dsOpc({ indexAxis: 'y', plugins: { legend: { display: false } },
                                  scales: { x: { beginAtZero: true }, y: { ticks: { font: { size: 10 } } } } }) });
 
-            dsCrear('dsG12', { type: 'doughnut', data: {
+            dsCrear('dsG7', { type: 'doughnut', data: {
                 labels: ['AMG', 'Resto de municipios listados', 'No desglosado'],
                 datasets: [{ data: [amgTot, Math.max(listados - amgTot, 0), Math.max(totalUlt - listados, 0)],
                              backgroundColor: [DS_AZUL, DS_AZUL_C, '#D8DEE6'] }] }, options: opcDona });
@@ -3582,7 +3639,7 @@
             }
         }
 
-        function dsMostrarVista(cual) {
+        function dsMostrarVista(cual, desdeHash) {
             const vs = document.getElementById('vistaSemanal');
             const vd = document.getElementById('vistaDesaparecidos');
             const bs = document.getElementById('navSemanalBtn');
@@ -3592,12 +3649,33 @@
             if (vd) vd.style.display = esDesap ? '' : 'none';
             if (bs) bs.classList.toggle('btn-nav-off', esDesap);
             if (bd) bd.classList.toggle('btn-nav-off', !esDesap);
+
+            // Ruta en la URL: permite marcadores, recarga y botón Atrás.
+            // Ej.: .../Semanal-Plus/#desaparecidos
+            const destino = '#' + (esDesap ? 'desaparecidos' : 'semanal');
+            if (!desdeHash && window.location.hash !== destino) {
+                history.pushState(null, '', destino);
+            }
+
             window.scrollTo({ top: 0, behavior: 'smooth' });
             if (esDesap && !dsData) dsCargar();
         }
 
+        // Vista según el hash de entrada; sin hash, se abre el Reporte Semanal.
+        function dsVistaDesdeHash() {
+            const h = (window.location.hash || '').toLowerCase().replace('#', '');
+            return (h === 'desaparecidos' || h === 'desaparecidas') ? 'desaparecidos' : 'semanal';
+        }
+
+        window.addEventListener('hashchange', () => dsMostrarVista(dsVistaDesdeHash(), true));
+
         document.getElementById('navSemanalBtn').addEventListener('click', () => dsMostrarVista('semanal'));
         document.getElementById('navDesapBtn').addEventListener('click', () => dsMostrarVista('desaparecidos'));
+
+        // Al cargar: si la URL trae #desaparecidos, se abre directamente esa vista.
+        if (dsVistaDesdeHash() === 'desaparecidos') {
+            dsMostrarVista('desaparecidos', true);
+        }
 
         document.getElementById('dsGenerarBtn').addEventListener('click', () => {
             const st = document.getElementById('dsInfoStatus');
