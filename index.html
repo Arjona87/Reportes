@@ -742,6 +742,18 @@
             border: 1px solid #FFE08A; color: #8a6d00;
             border-radius: 6px; padding: 11px 14px; margin-bottom: 14px;
         }
+
+        /* ===== Sistema PLUS: re-animación de elementos al entrar en pantalla ===== */
+        @keyframes cgesPulseIn {
+            0%   { opacity: .4; transform: translateY(10px); }
+            100% { opacity: 1;  transform: translateY(0); }
+        }
+        .cges-replay { animation: cgesPulseIn .55s ease; }
+
+        /* Respeta la preferencia de sistema de quien no tolera el movimiento. */
+        @media (prefers-reduced-motion: reduce) {
+            .cges-replay { animation: none !important; }
+        }
     </style>
 </head>
 <body>
@@ -1477,6 +1489,7 @@
                     }
                 }
             });
+            registrarGrafica(canvasEl.id, trendChart);   // sistema PLUS
         }
 
         // ===== GENERADOR DE INFOGRAFÍA CON CANVAS =====
@@ -2642,6 +2655,10 @@
                 // para que la sección ya no se quede en "Cargando infografía..." indefinidamente.
                 generarInfografia();
 
+                // Sistema PLUS: registrar las secciones del Reporte Semanal una vez
+                // que su contenido existe en el DOM.
+                plusObservarSemanal();
+
                 console.log('✅ Página inicializada correctamente');
             }
         }
@@ -3011,7 +3028,9 @@
             } else {
                 cfg.plugins = [dsEtiquetasPlugin, dsTotalApiladoPlugin];
             }
-            dsCharts.push(new Chart(el, cfg));
+            const chart = new Chart(el, cfg);
+            dsCharts.push(chart);
+            registrarGrafica(id, chart);   // sistema PLUS: re-animación al entrar en pantalla
         }
 
         const DS_OPC = {
@@ -3465,16 +3484,26 @@
                 const by = y + 38 + i * 42;
                 tl((i + 1) + '.', 22, by + 14, FT(14), TXT);
 
+                // La barra es ESTRICTAMENTE proporcional al valor.
+                // Antes se estiraba para cubrir su texto, y eso rompía la lectura:
+                // Tlaquepaque (41) se dibujaba más largo que Tlajomulco (54) solo
+                // porque su nombre es más largo. Una barra que representa el ancho
+                // del rótulo en vez de la magnitud es peor que un texto apretado.
+                const bw = (m.valor / maxV) * BAR_MAX;
+                rc(BAR_X, by, bw, 28, 4, AZUL, null);
+
                 const etq = `${m.nombre}: ${m.valor} casos (${a.total ? (m.valor / a.total * 100).toFixed(1) : '0'}%)`;
                 let fs = 13;
                 c.font = FT(fs);
-                while (fs > 9 && c.measureText(etq).width + 20 > BAR_MAX) { fs -= 0.5; c.font = FT(fs); }
-                const anchoTexto = c.measureText(etq).width;
+                while (fs > 10 && c.measureText(etq).width + 20 > bw) { fs -= 0.5; c.font = FT(fs); }
 
-                const proporcional = (m.valor / maxV) * BAR_MAX;
-                const bw = Math.min(Math.max(proporcional, anchoTexto + 20), BAR_MAX);
-                rc(BAR_X, by, bw, 28, 4, AZUL, null);
-                tl(etq, BAR_X + 10, by + 14, FT(fs), BLANCO);
+                // Si aun al mínimo no cabe dentro, el rótulo se dibuja FUERA de la barra,
+                // en texto oscuro. La barra nunca se deforma para acomodar el texto.
+                if (c.measureText(etq).width + 20 <= bw) {
+                    tl(etq, BAR_X + 10, by + 14, FT(fs), BLANCO);
+                } else {
+                    tl(etq, BAR_X + bw + 10, by + 14, FT(12), TXT);
+                }
             });
 
             // Dona movida de 640/92 a 700/84: antes ocupaba de 548 a 732 px mientras las
@@ -3546,6 +3575,7 @@
                 dsRenderResumen();
                 dsRenderGraficas();
                 dsRenderAnalisis();
+                plusObservarDesaparecidos();   // sistema PLUS
             } catch (e) {
                 console.error('❌ Desaparecidos:', e);
                 if (cont) cont.innerHTML = '<p class="error-message">No se pudieron cargar los datos de Desaparecidos: ' + e.message + '</p>';
@@ -3595,6 +3625,125 @@
             link.href = document.getElementById('dsCanvas').toDataURL('image/jpeg', 0.95);
             link.click();
         });
+
+
+        /* ==================================================================
+           ================  SISTEMA PLUS — ELEMENTOS "VIVOS"  ==============
+
+           Cada vez que un elemento entra en pantalla al hacer scroll (bajando
+           o subiendo) se re-anima desde cero. Sin esto, una gráfica solo anima
+           su entrada la primera vez y queda estática al volver a ella.
+
+           NOTA DE ADAPTACIÓN: el diseño original de referencia estaba escrito
+           sobre ECharts (inst.clear() + inst.setOption()). Este dashboard usa
+           Chart.js, así que la equivalencia es chart.reset() + chart.update(),
+           que reinicia el estado de animación y la vuelve a ejecutar sobre la
+           instancia viva. No se añade ninguna librería ni CDN.
+
+           El interruptor visible se omitió por decisión de diseño:
+           isPlusEnabled() devuelve true cuando el checkbox no existe.
+           ================================================================== */
+
+        const PLUS_COOLDOWN_MS = 1000;
+
+        function isPlusEnabled() {
+            const el = document.getElementById('toggle-plus');
+            return el ? el.checked : true;   // sin interruptor en la página: siempre activo
+        }
+
+        // ---------- Variante genérica: cualquier elemento del DOM ----------
+        const PLUS_REVEAL_LAST = new WeakMap();
+        let plusRevealObserver = null;
+
+        function ensureRevealObserver() {
+            if (plusRevealObserver) return plusRevealObserver;
+            plusRevealObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting || !isPlusEnabled()) return;
+                    const ahora = Date.now();
+                    const previo = PLUS_REVEAL_LAST.get(entry.target) || 0;
+                    if (ahora - previo < PLUS_COOLDOWN_MS) return;
+                    PLUS_REVEAL_LAST.set(entry.target, ahora);
+
+                    const el = entry.target;
+                    el.classList.remove('cges-replay');
+                    void el.offsetWidth;   // fuerza reflow: sin esto la MISMA animación no se re-dispara
+                    el.classList.add('cges-replay');
+                });
+            }, { threshold: 0.15 });
+            return plusRevealObserver;
+        }
+
+        function observeReveal(el) {
+            if (!el || el.dataset.plusObservado) return;
+            el.dataset.plusObservado = '1';
+            ensureRevealObserver().observe(el);
+        }
+
+        function observarTodos(selector, raiz) {
+            (raiz || document).querySelectorAll(selector).forEach(observeReveal);
+        }
+
+        // ---------- Variante de gráficas: Chart.js ----------
+        const PLUS_GRAFICAS = new Map();      // id del canvas -> instancia de Chart
+        const PLUS_GRAFICA_LAST = new Map();  // id del canvas -> timestamp del último replay
+        let plusChartObserver = null;
+
+        function ensurePlusChartObserver() {
+            if (plusChartObserver) return plusChartObserver;
+            plusChartObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (!entry.isIntersecting || !isPlusEnabled()) return;
+                    const id = entry.target.id;
+                    const chart = PLUS_GRAFICAS.get(id);
+                    if (!chart) return;
+
+                    const ahora = Date.now();
+                    const previo = PLUS_GRAFICA_LAST.get(id) || 0;
+                    if (ahora - previo < PLUS_COOLDOWN_MS) return;
+                    PLUS_GRAFICA_LAST.set(id, ahora);
+
+                    try {
+                        chart.reset();    // equivalente de inst.clear() en ECharts
+                        chart.update();   // re-ejecuta la animación de entrada
+                    } catch (e) {
+                        // Si la instancia fue destruida (p. ej. al recargar datos), se descarta.
+                        PLUS_GRAFICAS.delete(id);
+                    }
+                });
+            }, { threshold: 0.2 });
+            return plusChartObserver;
+        }
+
+        /* Sustituye a llamar new Chart(...) y olvidarse: registra la instancia
+           para que el observer pueda re-animarla. Si el canvas se reutiliza con
+           una gráfica nueva, la entrada del mapa se sobreescribe. */
+        function registrarGrafica(idCanvas, chart) {
+            if (!idCanvas || !chart) return chart;
+            PLUS_GRAFICAS.set(idCanvas, chart);
+            const el = document.getElementById(idCanvas);
+            if (el && !el.dataset.plusChartObservado) {
+                el.dataset.plusChartObservado = '1';
+                ensurePlusChartObserver().observe(el);
+            }
+            return chart;
+        }
+
+        // ---------- Registro de los elementos del Reporte Semanal ----------
+        function plusObservarSemanal() {
+            ['summarySection', 'tablesSection', 'trendSection', 'infografiaSection', 'analisisSection']
+                .forEach(id => observeReveal(document.getElementById(id)));
+        }
+
+        // ---------- Registro de los elementos de Desaparecidos ----------
+        function plusObservarDesaparecidos() {
+            // Las tarjetas y cada gráfica se animan por separado: animar el bloque
+            // completo de 15 gráficas resultaría brusco.
+            observarTodos('#dsResumenContent .ds-card');
+            observarTodos('#dsGraficasContent .ds-chart');
+            observeReveal(document.getElementById('dsInfografia'));
+            observeReveal(document.getElementById('dsAnalisis'));
+        }
 
     </script>
 </body>
