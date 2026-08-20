@@ -454,6 +454,41 @@
             margin-top: 10px;
         }
 
+
+        /* Filas por familia delictiva: cada una con su propia aguja y escala. */
+        .icrd-fila { position: relative; margin-bottom: 20px; }
+        .icrd-fila:last-child { margin-bottom: 4px; }
+        .icrd-fila-cab {
+            display: flex; align-items: baseline; gap: 10px;
+            flex-wrap: wrap; margin-bottom: 7px;
+        }
+        .icrd-fila-n {
+            flex: 1 1 auto;
+            font-size: 12.5px; font-weight: 700;
+            letter-spacing: .04em; text-transform: uppercase;
+            color: var(--ink);
+        }
+        .icrd-fila-v {
+            font-family: 'Poppins', sans-serif;
+            font-size: 22px; font-weight: 800;
+            font-variant-numeric: tabular-nums;
+            display: inline-flex; align-items: baseline; gap: 7px;
+        }
+        .icrd-fila-v em {
+            font-family: inherit; font-style: normal;
+            font-size: 10px; font-weight: 700;
+            letter-spacing: .07em; text-transform: uppercase;
+            opacity: .85;
+        }
+        .icrd-fila-d { font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .icrd-fila .icrd-aguja { top: 26px; }
+        .icrd-fila-pie { font-size: 10.5px; color: var(--muted); margin-top: 7px; }
+        .icrd-fila-sin { font-size: 11.5px; color: var(--muted); font-style: italic; }
+        .icrd-comp-i i {
+            display: block; font-style: normal;
+            font-size: 11px; font-weight: 700;
+            font-variant-numeric: tabular-nums; margin-top: 2px;
+        }
         .icrd-comp {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -1156,7 +1191,7 @@
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span>
                 <h2>Índice Compuesto de Riesgo Delictivo (ICRD)</h2>
-                <span class="panel-nota">Ponderación de alto impacto sobre patrimonial</span>
+                <span class="panel-nota">Índice global y tres familias delictivas independientes</span>
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
@@ -1820,17 +1855,47 @@
 
         const ICRD_MIN = 60, ICRD_MAX = 140;
 
+        /* Tres familias delictivas independientes.
+           Un índice único promedia familias que se mueven en direcciones opuestas y
+           amortigua la señal más grave: con los datos del corte 10-16 AGO 2026, el
+           global marcaba 111 (Elevado) mientras Alto Impacto estaba en 139.6, al borde
+           del umbral crítico, y Robos y Libertad por debajo de su promedio histórico.
+           La agrupación replica la que ya usa la hoja SEMANAL. */
+        const ICRD_CATEGORIAS = [
+            {
+                id: 'robos',
+                nombre: 'Robos',
+                claves: ['ROBO DE VEHÍCULOS PARTICULARES', 'ROBO DE MOTOCICLETA', 'ROBO A PERSONAS',
+                         'ROBO A NEGOCIO', 'ROBO A CASA HABITACIÓN', 'ROBO A CUENTAHABIENTES',
+                         'ROBO A VEHÍCULO DE CARGA PESADA', 'ROBO A BANCOS']
+            },
+            {
+                id: 'libertad',
+                nombre: 'Libertad e Integridad',
+                claves: ['VIOLENCIA FAMILIAR', 'LESIONES DOLOSAS', 'ABUSO SEXUAL INFANTIL', 'VIOLACIÓN']
+            },
+            {
+                id: 'alto',
+                nombre: 'Alto Impacto',
+                claves: ['HOMICIDIOS DOLOSOS (VÍCTIMAS)', 'FEMINICIDIO (VÍCTIMAS)', 'SECUESTRO (VÍCTIMAS)',
+                         'DESAPARICIÓN COMETIDA POR PARTICULARES', 'PRIVACIÓN ILEGAL DE LA LIBERTAD', 'EXTORSIÓN']
+            }
+        ];
+
         function nivelICRD(v) {
             return ICRD_NIVELES.find(n => v < n.hasta) || ICRD_NIVELES[ICRD_NIVELES.length - 1];
         }
 
-        // Devuelve el índice de una semana concreta (por omisión, la última).
-        function calcularICRD(regionKey, idx) {
+        /* Índice de un conjunto de delitos para una semana.
+           `minUsados` baja a 3 en las categorías: Alto Impacto solo aporta 4 delitos
+           válidos de 6 —feminicidio y secuestro promedian menos de 1 caso y quedan
+           fuera del filtro de base mínima—, así que con el umbral de 4 el índice
+           desaparecería en cuanto cayera uno más. */
+        function calcularIndice(regionKey, claves, idx, minUsados) {
             const region = parsedData[regionKey];
             if (!region || !region.delitos) return null;
 
-            const claves = Object.keys(ICRD_PESOS);
-            let num = 0, den = 0, numAlto = 0, denAlto = 0, numPat = 0, denPat = 0, usados = 0;
+            let num = 0, den = 0, usados = 0, sumaAct = 0, sumaAnt = 0;
 
             claves.forEach(k => {
                 const fila = region.delitos[k];
@@ -1840,30 +1905,53 @@
                 if (i < 1 || i >= fila.values.length) return;
 
                 const actual = fila.values[i];
+                const previo = fila.values[i - 1];
+                if (Number.isFinite(actual)) sumaAct += actual;
+                if (Number.isFinite(previo)) sumaAnt += previo;
+
                 const hist = fila.values.slice(0, i).filter(v => Number.isFinite(v));
                 if (hist.length < 4) return;
 
                 const m = hist.reduce((a, b) => a + b, 0) / hist.length;
-                // Base mínima: con promedios por debajo de 1 caso, el cociente se
-                // dispara y el índice deja de significar algo.
+                // Base mínima: con promedios por debajo de 1 caso el cociente se dispara.
                 if (m < 1) return;
 
-                const razon = Math.min(actual / m, 3);   // techo: un solo delito no puede secuestrar el índice
-                const w = ICRD_PESOS[k];
+                const razon = Math.min(actual / m, 3);   // techo: un delito no puede secuestrar el índice
+                const w = ICRD_PESOS[k] || 1;
                 num += razon * w; den += w; usados++;
-
-                if (w >= 6) { numAlto += razon * w; denAlto += w; }
-                else        { numPat  += razon * w; denPat  += w; }
             });
 
-            if (!den || usados < 4) return null;
+            if (!den || usados < (minUsados || 4)) return null;
 
+            const dif = sumaAct - sumaAnt;
             return {
                 valor: +(100 * num / den).toFixed(1),
-                altoImpacto: denAlto ? +(100 * numAlto / denAlto).toFixed(1) : null,
-                patrimonial: denPat ? +(100 * numPat / denPat).toFixed(1) : null,
-                delitos: usados
+                delitos: usados,
+                total: claves.length,
+                suma: sumaAct,
+                sumaPrevia: sumaAnt,
+                dif: dif,
+                pct: sumaAnt ? +(dif / sumaAnt * 100).toFixed(1) : null
             };
+        }
+
+        // Devuelve el índice de una semana concreta (por omisión, la última).
+        function calcularICRD(regionKey, idx) {
+            const global = calcularIndice(regionKey, Object.keys(ICRD_PESOS), idx, 4);
+            if (!global) return null;
+
+            const categorias = ICRD_CATEGORIAS.map(c => {
+                const r = calcularIndice(regionKey, c.claves, idx, 3);
+                return r ? Object.assign({ id: c.id, nombre: c.nombre }, r) : { id: c.id, nombre: c.nombre, valor: null };
+            });
+
+            const por = id => categorias.find(c => c.id === id);
+            return Object.assign({}, global, {
+                categorias,
+                // Se conservan por compatibilidad con la infografía y las tarjetas.
+                altoImpacto: por('alto') ? por('alto').valor : null,
+                patrimonial: por('robos') ? por('robos').valor : null
+            });
         }
 
         // Serie del ICRD semana a semana: alimenta el chispograma del termómetro.
@@ -2654,6 +2742,48 @@
             const serie = serieICRD(estado.region, 26);
             const nombreRegion = INFOGRAFIA_CONFIG[estado.region] ? INFOGRAFIA_CONFIG[estado.region].nombre : estado.region.toUpperCase();
 
+            // Índice de la semana previa por categoría, para la variación en puntos.
+            const idxPrevio = (parsedData[estado.region].weeks || []).length - 2;
+
+            const filasCat = r.categorias.map(c => {
+                if (c.valor === null) {
+                    return `<div class="icrd-fila">
+                                <div class="icrd-fila-cab"><span class="icrd-fila-n">${c.nombre}</span>
+                                <span class="icrd-fila-sin">Serie insuficiente</span></div>
+                            </div>`;
+                }
+                const niv = nivelICRD(c.valor);
+                const p = Math.max(0, Math.min(100, ((c.valor - ICRD_MIN) / (ICRD_MAX - ICRD_MIN)) * 100));
+                const prevCat = calcularIndice(estado.region, ICRD_CATEGORIAS.find(x => x.id === c.id).claves, idxPrevio, 3);
+                const dPts = prevCat ? c.valor - prevCat.valor : null;
+
+                return `<div class="icrd-fila">
+                    <div class="icrd-fila-cab">
+                        <span class="icrd-fila-n">${c.nombre}</span>
+                        <span class="icrd-fila-v" style="color:${niv.tono}">${c.valor.toFixed(0)}
+                            <em>${niv.etiqueta}</em></span>
+                        <span class="icrd-fila-d" style="color:${dPts === null ? 'var(--muted)' : (dPts > 0 ? 'var(--risk)' : (dPts < 0 ? 'var(--down)' : 'var(--muted)'))}">
+                            ${dPts === null ? '—' : `${dPts > 0 ? '▲' : (dPts < 0 ? '▼' : '=')} ${Math.abs(dPts).toFixed(1)} pts`}
+                        </span>
+                    </div>
+                    <div class="icrd-barra" style="background:${grad}"></div>
+                    <div class="icrd-aguja" style="left:calc(${p.toFixed(1)}% - 1.5px)"></div>
+                    <div class="icrd-fila-pie">${c.delitos} de ${c.total} delitos con serie suficiente</div>
+                </div>`;
+            }).join('');
+
+            // Suma de casos por categoría: cifra descriptiva, no el índice.
+            const tarjetasCat = r.categorias.map(c => {
+                if (c.valor === null) return `<div class="icrd-comp-i"><span>${c.nombre}</span><b>—</b></div>`;
+                const col = c.dif > 0 ? 'var(--risk)' : (c.dif < 0 ? 'var(--down)' : 'var(--muted)');
+                const fl = c.dif > 0 ? '▲' : (c.dif < 0 ? '▼' : '=');
+                return `<div class="icrd-comp-i">
+                    <span>${c.nombre} · casos</span>
+                    <b>${c.suma.toLocaleString('es-MX')}</b>
+                    <i style="color:${col}">${fl} ${c.dif >= 0 ? '+' : ''}${c.dif}${c.pct !== null ? ` · ${c.pct >= 0 ? '+' : ''}${c.pct.toFixed(1)}%` : ''}</i>
+                </div>`;
+            }).join('');
+
             cont.innerHTML = `
               <div class="icrd" style="--nivel-color:${nivel.tono}">
                 <div>
@@ -2665,21 +2795,14 @@
                         ${delta === null ? 'Sin semana previa comparable'
                             : `${delta > 0 ? '▲' : (delta < 0 ? '▼' : '=')} ${Math.abs(delta).toFixed(1)} puntos vs. la semana anterior`}
                     </div>
-                    <p class="icrd-desc">${nivel.texto} Base 100 = promedio histórico ponderado de ${nombreRegion.toLowerCase()}. Se calculó con ${r.delitos} delitos del catálogo.</p>
+                    <p class="icrd-desc"><b>Índice global.</b> ${nivel.texto} Base 100 = promedio histórico ponderado de ${nombreRegion.toLowerCase()}, con ${r.delitos} delitos del catálogo. A la derecha, las tres familias por separado: el promedio único puede amortiguar el movimiento de una de ellas.</p>
                     ${chispograma(serie, nivel.tono.startsWith('#') ? nivel.tono : tokens().accent)}
                 </div>
 
                 <div class="icrd-escala">
-                    <div class="icrd-barra" style="background:${grad}">
-                    </div>
-                    <div class="icrd-aguja" style="left:calc(${pos.toFixed(1)}% - 1.5px)"></div>
-                    <div class="icrd-marcas">
-                        <span>Bajo · ${ICRD_MIN}</span><span>90</span><span>105</span><span>120</span><span>Crítico · ${ICRD_MAX}+</span>
-                    </div>
+                    ${filasCat}
                     <div class="icrd-comp">
-                        <div class="icrd-comp-i"><span>Alto impacto</span><b>${r.altoImpacto !== null ? r.altoImpacto.toFixed(0) : '—'}</b></div>
-                        <div class="icrd-comp-i"><span>Patrimonial</span><b>${r.patrimonial !== null ? r.patrimonial.toFixed(0) : '—'}</b></div>
-                        <div class="icrd-comp-i"><span>Brecha</span><b>${(r.altoImpacto !== null && r.patrimonial !== null) ? (r.altoImpacto - r.patrimonial >= 0 ? '+' : '') + (r.altoImpacto - r.patrimonial).toFixed(0) : '—'}</b></div>
+                        ${tarjetasCat}
                     </div>
                 </div>
               </div>`;
@@ -3494,8 +3617,14 @@
                 if (typeof calcularICRD !== 'function') return;
                 const icrd = calcularICRD(regionKey);
                 if (!icrd) return;
-                const niv = nivelICRD(icrd.valor);
-                const txt = 'ICRD ' + icrd.valor.toFixed(0) + ' · ' + niv.etiqueta.toUpperCase();
+
+                // El chip muestra ALTO IMPACTO, no el global: es la familia relevante
+                // para decisión operativa, y el promedio único la amortigua.
+                const cAlto = (icrd.categorias || []).find(c => c.id === 'alto');
+                if (!cAlto || cAlto.valor === null) return;
+
+                const niv = nivelICRD(cAlto.valor);
+                const txt = 'ALTO IMPACTO ' + cAlto.valor.toFixed(0) + ' · ' + niv.etiqueta.toUpperCase();
                 ctx.font = 'bold 13px Arial';
                 const bw = Math.ceil(ctx.measureText(txt).width) + 26;
                 const bh = 28;
