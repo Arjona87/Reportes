@@ -382,6 +382,63 @@
         /* =====================================================================
            TERMÓMETRO ICRD — elemento distintivo del tablero
            ===================================================================== */
+
+        /* Top de delitos con incrementos: cinco mini-KPI en franja. */
+        .top-inc {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 10px;
+        }
+        .ti-c {
+            position: relative;
+            background: var(--surface-2);
+            border: 1px solid var(--line-soft);
+            border-left: 4px solid var(--ti-color, var(--muted));
+            border-radius: var(--r-sm);
+            padding: 11px 13px 12px;
+            cursor: pointer;
+            transition: box-shadow .18s ease, transform .18s ease;
+        }
+        .ti-c:hover, .ti-c:focus-visible { box-shadow: var(--shadow-lift); transform: translateY(-1px); }
+        .ti-pos {
+            position: absolute; top: 9px; right: 11px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 20px; font-weight: 800;
+            color: var(--line); line-height: 1;
+        }
+        .ti-cat {
+            display: block; font-size: 9.5px; font-weight: 700;
+            letter-spacing: .07em; text-transform: uppercase;
+            color: var(--ti-color, var(--muted)); margin-bottom: 3px;
+        }
+        .ti-n {
+            font-size: 12.5px; font-weight: 700; line-height: 1.25;
+            color: var(--ink); margin-bottom: 6px; padding-right: 22px;
+        }
+        .ti-v {
+            font-family: 'Poppins', sans-serif;
+            font-size: 15px; color: var(--muted);
+            font-variant-numeric: tabular-nums;
+        }
+        .ti-v b { font-size: 20px; font-weight: 800; color: var(--ink); }
+        .ti-d {
+            font-size: 11.5px; font-weight: 700; color: var(--risk);
+            margin-top: 4px; font-variant-numeric: tabular-nums;
+        }
+        .ti-d em {
+            font-style: normal; font-size: 9.5px; font-weight: 700;
+            color: #8a6d00; background: #FFF3CD; border: 1px solid #FFE08A;
+            border-radius: 4px; padding: 1px 5px; margin-left: 3px; cursor: help;
+        }
+
+        /* Controles de proyección dentro de la barra del histórico. */
+        .proy-ctrl { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .proy-ctrl.inactivo, .conmutador.inactivo {
+            opacity: .42;
+            pointer-events: none;
+            filter: grayscale(.6);
+        }
+        #proyeccionContent:not(:empty) { margin-bottom: 14px; }
         .icrd {
             display: grid;
             grid-template-columns: minmax(240px, 320px) 1fr;
@@ -1205,14 +1262,17 @@
         <section id="alertasSection">
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span>
-                <h2>Alertas de comportamiento atípico</h2>
-                <span class="panel-nota">Z-Score sobre la desviación histórica</span>
+                <h2>Top de delitos con incrementos</h2>
+                <span class="panel-nota">Incremento ponderado por gravedad · el alto impacto domina por mérito</span>
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
-                <div id="alertasContent" class="alertas">
-                    <div class="sk sk-linea"></div>
-                    <div class="sk sk-linea corta"></div>
+                <div id="topIncContent" class="top-inc">
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
                 </div>
             </div>
         </section>
@@ -1231,42 +1291,6 @@
                     <div class="sk sk-card"></div>
                     <div class="sk sk-card"></div>
                     <div class="sk sk-card"></div>
-                </div>
-            </div>
-        </section>
-
-        <!-- PROYECCIÓN -->
-        <section id="proyeccionSection">
-            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
-                <span class="h2-marca"></span>
-                <h2>Proyección de tendencia</h2>
-                <span class="panel-nota">Regresión, ajuste polinomial y suavizamiento exponencial</span>
-                <span class="panel-toggle">▾</span>
-            </div>
-            <div class="panel-cuerpo">
-                <div class="chart-barra">
-                    <label class="info-estado" for="horizonteSelect">Horizonte</label>
-                    <select id="horizonteSelect">
-                        <option value="2">2 semanas</option>
-                        <option value="3">3 semanas</option>
-                        <option value="4" selected>4 semanas</option>
-                    </select>
-                    <div class="conmutador" id="modeloBtns" role="group" aria-label="Modelo de proyección">
-                        <button data-modelo="lineal" class="on">Lineal</button>
-                        <button data-modelo="polinomial">Polinomial</button>
-                        <button data-modelo="holt">Holt</button>
-                    </div>
-                    <span id="proyFiltro"></span>
-                </div>
-                <div id="proyeccionContent">
-                    <div class="proy-grid">
-                        <div class="sk sk-card" style="height:88px"></div>
-                        <div class="sk sk-card" style="height:88px"></div>
-                        <div class="sk sk-card" style="height:88px"></div>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="proyeccionCanvas"></canvas>
                 </div>
             </div>
         </section>
@@ -1316,7 +1340,7 @@
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span>
                 <h2>Comportamiento histórico y bandas de control</h2>
-                <span class="panel-nota">Media ± 2σ sobre la serie observada</span>
+                <span class="panel-nota">Bandas ±2σ y proyección sobre la serie observada</span>
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
@@ -1329,8 +1353,26 @@
                         <button data-suave="0" class="on">Serie observada</button>
                         <button data-suave="1">Media móvil ponderada</button>
                     </div>
+                    <div class="conmutador" id="proyBtns" role="group" aria-label="Proyección">
+                        <button data-proy="1" class="on">Con proyección</button>
+                        <button data-proy="0">Sin proyección</button>
+                    </div>
+                    <div class="proy-ctrl" id="proyCtrl">
+                        <label class="info-estado" for="horizonteSelect">Horizonte</label>
+                        <select id="horizonteSelect">
+                            <option value="2">2 semanas</option>
+                            <option value="3">3 semanas</option>
+                            <option value="4" selected>4 semanas</option>
+                        </select>
+                        <div class="conmutador" id="modeloBtns" role="group" aria-label="Modelo de proyección">
+                            <button data-modelo="lineal" class="on">Lineal</button>
+                            <button data-modelo="polinomial">Polinomial</button>
+                            <button data-modelo="holt">Holt</button>
+                        </div>
+                    </div>
                     <span id="trendFiltro"></span>
                 </div>
+                <div id="proyeccionContent"></div>
                 <div class="chart-container">
                     <canvas id="trendChartCanvas"></canvas>
                 </div>
@@ -1540,6 +1582,7 @@
             horizonte: 4,
             bandas: true,
             suave: false,
+            proy: true,
             categoria: 'todos',
             delitos: ['TOTAL DE DELITOS'],
             foco: null,
@@ -2856,34 +2899,70 @@
             return lista;
         }
 
-        function renderAlertas() {
-            const cont = document.getElementById('alertasContent');
+        /* Top de delitos con incrementos.
+           El ranking pondera el incremento absoluto por el peso ICRD del delito:
+           un +2 en homicidios (peso 10) pesa más que un +15 en robo de motocicleta
+           (peso 1.5). Así el alto impacto encabeza por mérito y no por cuota fija,
+           que es lo que ocurriría si se le reservaran lugares de antemano. */
+        function topIncrementos(regionKey, cuantos) {
+            const region = parsedData[regionKey];
+            if (!region || !region.delitos) return [];
+
+            const catDe = k => {
+                if (ROBOS_KEYS.some(d => d.key === k)) return 'Robos';
+                if (LIBERTAD_KEYS.some(d => d.key === k)) return 'Libertad e Integridad';
+                if (GRAVES_KEYS.some(d => d.key === k)) return 'Alto impacto';
+                return '';
+            };
+
+            return Object.keys(ICRD_PESOS).map(k => {
+                const fila = region.delitos[k];
+                if (!fila || !Array.isArray(fila.values) || fila.values.length < 2) return null;
+
+                const n = fila.values.length;
+                const act = fila.values[n - 1], ant = fila.values[n - 2];
+                if (!Number.isFinite(act) || !Number.isFinite(ant)) return null;
+
+                const dif = act - ant;
+                if (dif <= 0) return null;   // solo incrementos
+
+                const peso = ICRD_PESOS[k] || 1;
+                return {
+                    clave: k,
+                    nombre: nombreCorto(k),
+                    categoria: catDe(k),
+                    ant, act, dif, peso,
+                    pct: ant > 0 ? (dif / ant * 100) : null,
+                    baseBaja: ant < 5,
+                    puntaje: dif * peso
+                };
+            }).filter(Boolean)
+              .sort((a, b) => b.puntaje - a.puntaje || b.dif - a.dif)
+              .slice(0, cuantos || 5);
+        }
+
+        function renderTopIncrementos() {
+            const cont = document.getElementById('topIncContent');
             if (!cont) return;
 
-            const lista = calcularAlertas(estado.region);
+            const lista = topIncrementos(estado.region, 5);
 
             if (!lista.length) {
-                cont.innerHTML = `<div class="alerta-vacia">Ninguna categoría rebasa las dos desviaciones estándar respecto de su propia historia.
-                    La semana se comporta dentro de su rango estadístico normal.</div>`;
+                cont.innerHTML = `<div class="alerta-vacia">Ningún delito del catálogo aumentó respecto de la semana anterior.</div>`;
                 return;
             }
 
-            cont.innerHTML = lista.map(a => {
-                const color = a.alza ? (a.critico ? 'var(--risk)' : 'var(--accent)') : 'var(--down)';
-                const ico = a.critico ? '⚑' : (a.alza ? '▲' : '▼');
-                const clase = a.critico ? (a.alza ? 'Pico crítico de incidencia' : 'Caída atípica')
-                                        : (a.alza ? 'Comportamiento atípico al alza' : 'Comportamiento atípico a la baja');
-                const inf = AN.inflexion(serieDe(estado.region, a.clave));
+            cont.innerHTML = lista.map((d, i) => {
+                const tono = d.categoria === 'Alto impacto' ? 'var(--risk)'
+                           : (d.categoria === 'Libertad e Integridad' ? 'var(--accent)' : 'var(--muted)');
                 return `
-                  <div class="alerta" style="--al-color:${color}" data-alerta="${esc(a.clave)}" role="button" tabindex="0"
+                  <div class="ti-c" style="--ti-color:${tono}" data-alerta="${esc(d.clave)}" role="button" tabindex="0"
                        title="Poner este delito en foco en todo el tablero">
-                    <span class="alerta-ico">${ico}</span>
-                    <div>
-                        <div class="alerta-t">${esc(a.nombre)} — ${clase}</div>
-                        <div class="alerta-d">Se registraron ${nf(a.actual)} casos frente a ${nf(Math.round(a.esperado))} esperados
-                            (σ ${a.sigma.toFixed(1)}, ${a.semanas} semanas de historia)${inf ? ` · punto de inflexión hace ${inf.semanasDesde} semana${inf.semanasDesde === 1 ? '' : 's'}` : ''}.</div>
-                    </div>
-                    <span class="alerta-z">Z ${a.z >= 0 ? '+' : ''}${a.z.toFixed(2)}</span>
+                    <span class="ti-pos">${i + 1}</span>
+                    <span class="ti-cat">${esc(d.categoria)}</span>
+                    <div class="ti-n">${esc(d.nombre)}</div>
+                    <div class="ti-v">${nf(d.ant)} → <b>${nf(d.act)}</b></div>
+                    <div class="ti-d">▲ +${nf(d.dif)}${d.pct !== null ? ` · +${d.pct.toFixed(1)}%` : ''}${d.baseBaja ? ' <em title="Menos de 5 casos en la semana anterior: la variación porcentual no es interpretable">base baja</em>' : ''}</div>
                   </div>`;
             }).join('');
         }
@@ -3013,98 +3092,6 @@
             };
         }
 
-        function renderProyeccion() {
-            const cont = document.getElementById('proyeccionContent');
-            const region = parsedData[estado.region];
-            if (!cont || !region || !region.delitos) return;
-
-            const clave = claveEnFoco();
-            const serie = serieDe(estado.region, clave);
-            const k = parseInt(estado.horizonte, 10) || 4;
-            const p = proyectar(serie, estado.modelo, k);
-            const t = tokens();
-
-            const chip = document.getElementById('proyFiltro');
-            if (chip) {
-                chip.innerHTML = estado.foco
-                    ? `<span class="filtro-activo">En foco: ${esc(nombreCorto(estado.foco))} <button type="button" id="limpiarFoco" aria-label="Quitar el foco">✕</button></span>`
-                    : `<span class="info-estado">Serie: total de delitos</span>`;
-            }
-
-            if (!p) {
-                cont.innerHTML = '<p class="an-empty">La serie de esta categoría es demasiado corta o irregular para proyectarla. Se requieren al menos cinco semanas con dato.</p>';
-                pintar('proyeccionCanvas', { type: 'line', data: { labels: [], datasets: [] } });
-                return;
-            }
-
-            const ultimo = p.ultimo;
-            const fin = p.valores[p.valores.length - 1];
-            const cambio = ultimo > 0 ? ((fin - ultimo) / ultimo) * 100 : 0;
-            const colorProy = cambio > 0 ? t.risk : (cambio < 0 ? t.down : t.muted);
-            const nombreModelo = { lineal: 'Regresión lineal', polinomial: 'Ajuste polinomial (grado 2)', holt: 'Suavizamiento exponencial de Holt' }[estado.modelo];
-
-            cont.innerHTML = `
-                <div class="proy-grid">
-                    <div class="proy-c">
-                        <span>Semana ${k} proyectada</span>
-                        <b>${nf(Math.round(fin))}</b>
-                        <i style="color:${colorProy}">${cambio >= 0 ? '▲' : '▼'} ${pf(cambio)} frente a la semana de corte</i>
-                    </div>
-                    <div class="proy-c">
-                        <span>Intervalo al 95 %</span>
-                        <b style="font-size:20px">${nf(Math.round(p.inf[k - 1]))} – ${nf(Math.round(p.sup[k - 1]))}</b>
-                        <i style="color:var(--muted)">Error típico ${p.se.toFixed(1)} casos</i>
-                    </div>
-                    <div class="proy-c">
-                        <span>Modelo</span>
-                        <b style="font-size:17px;line-height:1.3">${nombreModelo}</b>
-                        <i style="color:var(--muted)">${p.r2 !== null && p.r2 !== undefined ? 'Ajuste R² ' + p.r2.toFixed(3) : 'Ajuste evaluado por error residual'} · ventana de ${p.ventana} semanas</i>
-                    </div>
-                </div>`;
-
-            // --- Gráfica: observado + ajuste proyectado + banda de confianza ---
-            const historico = serie.slice(-p.ventana);
-            const etiquetas = (region.weeks || []).slice(-p.ventana).map(w => w || '—');
-            for (let i = 1; i <= k; i++) etiquetas.push('P+' + i);
-
-            const nulos = new Array(historico.length - 1).fill(null);
-            const obs = historico.concat(new Array(k).fill(null));
-            const proy = nulos.concat([historico[historico.length - 1]], p.valores);
-            const bSup = nulos.concat([historico[historico.length - 1]], p.sup);
-            const bInf = nulos.concat([historico[historico.length - 1]], p.inf);
-
-            pintar('proyeccionCanvas', {
-                type: 'line',
-                data: {
-                    labels: etiquetas,
-                    datasets: [
-                        { label: 'Intervalo 95 % (techo)', data: bSup, borderColor: 'transparent', backgroundColor: 'transparent', pointRadius: 0, fill: false, order: 3 },
-                        { label: 'Intervalo 95 %', data: bInf, borderColor: 'transparent',
-                          backgroundColor: (estado.modelo === 'holt' ? t.brand : t.accent) + '26',
-                          pointRadius: 0, fill: '-1', order: 3 },
-                        { label: 'Observado', data: obs, borderColor: t.brand, backgroundColor: t.brand + '18',
-                          borderWidth: 2.2, pointRadius: 0, tension: .3, fill: true, order: 1 },
-                        { label: 'Proyección', data: proy, borderColor: t.accent, borderWidth: 2.4,
-                          borderDash: [6, 4], pointRadius: 3, pointBackgroundColor: t.accent, tension: .25, fill: false, order: 0 }
-                    ]
-                },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { labels: { boxWidth: 12, filter: it => it.text !== 'Intervalo 95 % (techo)' } },
-                        tooltip: Object.assign({}, OPC_TOOLTIP, {
-                            callbacks: {
-                                label: c => c.parsed.y === null ? null : ` ${c.dataset.label}: ${nf(Math.round(c.parsed.y))}`,
-                                footer: it => it.some(i => i.dataset.label === 'Proyección') ? 'Valor estimado, no observado.' : ''
-                            }
-                        })
-                    },
-                    scales: ejes(t)
-                }
-            });
-        }
-
         /* =====================================================================
            TABLA
            ===================================================================== */
@@ -3212,11 +3199,25 @@
             const labels = (region.weeks || []).slice();
             const nombres = Array.from(selectedDelitosChart).filter(n => region.delitos && region.delitos[n]);
 
+            /* La proyección es una CAPA sobre la gráfica histórica, no una sección
+               aparte. Sigue la misma regla que las bandas ±2σ: solo se dibuja con una
+               serie en pantalla. Con varias, seis líneas de estimación más sus
+               intervalos de confianza harían la gráfica ilegible. */
+            const unaSerie = nombres.length === 1;
+            const proyActiva = estado.proy && unaSerie;
+
+            const ctrl = document.getElementById('proyCtrl');
+            const btnsProy = document.getElementById('proyBtns');
+            if (ctrl) ctrl.classList.toggle('inactivo', !proyActiva);
+            if (btnsProy) btnsProy.classList.toggle('inactivo', !unaSerie);
+
             const chip = document.getElementById('trendFiltro');
             if (chip) {
-                chip.innerHTML = nombres.length
-                    ? `<span class="info-estado">${nombres.length} serie${nombres.length === 1 ? '' : 's'} en pantalla</span>`
-                    : `<span class="info-estado">Marca un delito en la tabla para trazarlo</span>`;
+                chip.innerHTML = !nombres.length
+                    ? `<span class="info-estado">Marca un delito en la tabla para trazarlo</span>`
+                    : (unaSerie
+                        ? `<span class="info-estado">1 serie en pantalla</span>`
+                        : `<span class="info-estado">${nombres.length} series · la proyección y las bandas requieren una sola serie</span>`);
             }
 
             const datasets = [];
@@ -3255,9 +3256,71 @@
                 });
             });
 
+            // --- Capa de proyección --------------------------------------------
+            const contProy = document.getElementById('proyeccionContent');
+            let etiquetas = labels;
+
+            if (proyActiva) {
+                const k = parseInt(estado.horizonte, 10) || 4;
+                const p = proyectar(region.delitos[nombres[0]].values, estado.modelo, k);
+
+                if (p) {
+                    // El eje se extiende con etiquetas sintéticas P+1…P+k: a partir de
+                    // ahí lo dibujado es estimación, no observación.
+                    etiquetas = labels.concat(Array.from({ length: k }, (_, i) => 'P+' + (i + 1)));
+
+                    const nulos = new Array(labels.length - 1).fill(null);
+                    const ultimoObs = region.delitos[nombres[0]].values[labels.length - 1];
+                    const proy = nulos.concat([ultimoObs], p.valores);
+                    const bSup = nulos.concat([ultimoObs], p.sup);
+                    const bInf = nulos.concat([ultimoObs], p.inf);
+
+                    datasets.forEach(d => { if (Array.isArray(d.data)) d.data = d.data.concat(new Array(k).fill(null)); });
+
+                    datasets.push(
+                        { label: 'Intervalo 95 % (techo)', data: bSup, borderColor: 'transparent', backgroundColor: 'transparent', pointRadius: 0, fill: false, order: 6 },
+                        { label: 'Intervalo 95 %', data: bInf, borderColor: 'transparent',
+                          backgroundColor: (estado.modelo === 'holt' ? t.brand : t.accent) + '26',
+                          pointRadius: 0, fill: '-1', order: 6 },
+                        { label: 'Proyección', data: proy, borderColor: t.accent, borderWidth: 2.4,
+                          borderDash: [6, 4], pointRadius: 3, pointBackgroundColor: t.accent, tension: .25, fill: false, order: 0 }
+                    );
+
+                    const fin = p.valores[p.valores.length - 1];
+                    const cambio = p.ultimo > 0 ? ((fin - p.ultimo) / p.ultimo) * 100 : 0;
+                    const colorProy = cambio > 0 ? t.risk : (cambio < 0 ? t.down : t.muted);
+                    const nombreModelo = { lineal: 'Regresión lineal', polinomial: 'Ajuste polinomial (grado 2)', holt: 'Suavizamiento exponencial de Holt' }[estado.modelo];
+
+                    if (contProy) contProy.innerHTML = `
+                        <div class="proy-grid">
+                            <div class="proy-c">
+                                <span>Semana ${k} proyectada</span>
+                                <b>${nf(Math.round(fin))}</b>
+                                <i style="color:${colorProy}">${cambio >= 0 ? '▲' : '▼'} ${pf(cambio)} frente a la semana de corte</i>
+                            </div>
+                            <div class="proy-c">
+                                <span>Intervalo al 95 %</span>
+                                <b style="font-size:20px">${nf(Math.round(p.inf[k - 1]))} – ${nf(Math.round(p.sup[k - 1]))}</b>
+                                <i style="color:var(--muted)">Error típico ${p.se.toFixed(1)} casos</i>
+                            </div>
+                            <div class="proy-c">
+                                <span>Modelo</span>
+                                <b style="font-size:17px;line-height:1.3">${nombreModelo}</b>
+                                <i style="color:var(--muted)">${p.r2 !== null && p.r2 !== undefined ? 'Ajuste R² ' + p.r2.toFixed(3) : 'Ajuste evaluado por error residual'} · ventana de ${p.ventana} semanas</i>
+                            </div>
+                        </div>`;
+                } else if (contProy) {
+                    contProy.innerHTML = '<p class="an-empty">La serie de esta categoría es demasiado corta o irregular para proyectarla. Se requieren al menos cinco semanas con dato.</p>';
+                }
+            } else if (contProy) {
+                contProy.innerHTML = (estado.proy && nombres.length > 1)
+                    ? '<p class="an-empty">La proyección requiere una sola serie en pantalla. Desmarca delitos en la tabla para activarla.</p>'
+                    : '';
+            }
+
             pintar('trendChartCanvas', {
                 type: 'line',
-                data: { labels, datasets },
+                data: { labels: etiquetas, datasets },
                 options: {
                     responsive: true, maintainAspectRatio: false,
                     interaction: { mode: 'index', intersect: false },
@@ -3267,11 +3330,14 @@
                         if (ds && ds.claveReal) ponerFoco(ds.claveReal);
                     },
                     plugins: {
-                        legend: { display: datasets.length > 1, labels: { boxWidth: 12, filter: it => it.text !== 'Límite superior (media + 2σ)' } },
+                        legend: { display: datasets.length > 1, labels: { boxWidth: 12,
+                            filter: it => it.text !== 'Límite superior (media + 2σ)' && it.text !== 'Intervalo 95 % (techo)' } },
                         tooltip: Object.assign({}, OPC_TOOLTIP, {
                             callbacks: {
                                 label: c => c.parsed.y === null ? null : ` ${c.dataset.label}: ${nf(Math.round(c.parsed.y))}`,
-                                footer: () => estado.suave ? 'Media móvil ponderada de 4 semanas.' : ''
+                                footer: it => it.some(i => i.dataset.label === 'Proyección')
+                                    ? 'Valor estimado, no observado.'
+                                    : (estado.suave ? 'Media móvil ponderada de 4 semanas.' : '')
                             }
                         })
                     },
@@ -3427,7 +3493,6 @@
             }
             guardarEstado();
             updateSummaryCards(parsedData[estado.region]);
-            renderProyeccion();
             renderComparativas();
             updateTrendChart(parsedData[estado.region]);
             const sel = document.getElementById('weekSelect');
@@ -3445,8 +3510,7 @@
 
             updateSummaryCards(region);
             renderICRD();
-            renderAlertas();
-            renderProyeccion();
+            renderTopIncrementos();
             renderComparativas();
             updateTrendChart(region);
 
@@ -4258,19 +4322,24 @@
             if (tr) ponerFoco(tr.dataset.delito);
         });
 
-        // Las alertas también ponen el delito en foco.
-        document.getElementById('alertasContent').addEventListener('click', (e) => {
-            const a = e.target.closest('[data-alerta]');
-            if (a) ponerFoco(a.dataset.alerta);
-        });
-        document.getElementById('alertasContent').addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            const a = e.target.closest('[data-alerta]');
-            if (a) { e.preventDefault(); ponerFoco(a.dataset.alerta); }
-        });
+        // Los mini-KPI del Top de incrementos ponen el delito en foco.
+        const topInc = document.getElementById('topIncContent');
+        if (topInc) {
+            topInc.addEventListener('click', (e) => {
+                const a = e.target.closest('[data-alerta]');
+                if (a) ponerFoco(a.dataset.alerta);
+            });
+            topInc.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const a = e.target.closest('[data-alerta]');
+                if (a) { e.preventDefault(); ponerFoco(a.dataset.alerta); }
+            });
+        }
 
-        document.getElementById('proyFiltro').addEventListener('click', (e) => {
-            if (e.target.id === 'limpiarFoco') { estado.foco = null; guardarEstado(); ponerFoco(null); }
+        // El botón para quitar el foco vivía en la barra de la sección de Proyección,
+        // que ya no existe. Se delega en el documento para no depender de ese nodo.
+        document.addEventListener('click', (e) => {
+            if (e.target && e.target.id === 'limpiarFoco') { estado.foco = null; guardarEstado(); ponerFoco(null); }
         });
 
         /* =====================================================================
@@ -4289,14 +4358,15 @@
             });
         }
 
-        conmutar('modeloBtns', 'modelo', v => { estado.modelo = v; renderProyeccion(); });
+        conmutar('modeloBtns', 'modelo', v => { estado.modelo = v; updateTrendChart(parsedData[estado.region]); });
+        conmutar('proyBtns', 'proy', v => { estado.proy = (v === '1'); updateTrendChart(parsedData[estado.region]); });
         conmutar('bandasBtns', 'bandas', v => { estado.bandas = (v === '1'); updateTrendChart(parsedData[estado.region]); });
         conmutar('suavizadoBtns', 'suave', v => { estado.suave = (v === '1'); updateTrendChart(parsedData[estado.region]); });
 
         document.getElementById('horizonteSelect').addEventListener('change', (e) => {
             estado.horizonte = parseInt(e.target.value, 10) || 4;
             guardarEstado();
-            renderProyeccion();
+            updateTrendChart(parsedData[estado.region]);
         });
 
         /* =====================================================================
@@ -4337,6 +4407,7 @@
             marcar('modeloBtns', 'modelo', estado.modelo);
             marcar('bandasBtns', 'bandas', estado.bandas ? '1' : '0');
             marcar('suavizadoBtns', 'suave', estado.suave ? '1' : '0');
+            marcar('proyBtns', 'proy', estado.proy === false ? '0' : '1');
         }
 
         async function init() {
