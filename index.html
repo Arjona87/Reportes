@@ -1186,6 +1186,39 @@
             section.cerrado .panel-cuerpo { display: block !important; }
             .panel-toggle { display: none; }
         }
+
+        /* ===== Incidencia municipal ===== */
+        .mun-nota {
+            font-size: 11.5px; line-height: 1.6; color: var(--muted);
+            background: var(--surface-2); border-left: 3px solid var(--accent);
+            border-radius: var(--r-sm); padding: 9px 12px; margin-top: 10px;
+        }
+        .mun-nota-fuerte {
+            font-size: 13px; color: var(--ink);
+            background: #FFF7E8; border: 1px solid #F5D9A8; border-left: 4px solid var(--accent);
+            padding: 14px 16px; margin: 0;
+        }
+        .mun-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .mun-cero { color: var(--line); }
+        .mun-cuenta { font-size: 10.5px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+        .mun-exp {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 20px; height: 20px; margin-right: 8px;
+            border: 1px solid var(--line); border-radius: 4px;
+            background: var(--surface); color: var(--brand);
+            font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer;
+        }
+        .mun-exp:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+        .mun-exp-mas { width: auto; padding: 0 8px; }
+        .mun-fila-region > td { background: var(--surface-2); font-size: 13px; }
+        .mun-fila-muni > td { font-size: 12.5px; }
+        .mun-sangria { padding-left: 38px !important; }
+        .mun-fila-mas > td { font-size: 12px; color: var(--muted); padding-left: 38px !important; }
+        .mun-fila-total > td {
+            background: var(--brand); color: #fff; font-size: 13.5px;
+            border-top: 2px solid var(--brand);
+        }
+        .mun-fila-total .mun-cuenta, .mun-fila-total .mun-cero { color: rgba(255,255,255,.7); }
     </style>
 </head>
 <body>
@@ -1220,6 +1253,7 @@
         <nav class="tabs" aria-label="Vistas del tablero">
             <button class="btn-nav" id="navSemanalBtn">Incidencia delictiva</button>
             <button class="btn-nav btn-nav-off" id="navDesapBtn">Personas desaparecidas</button>
+            <button class="btn-nav btn-nav-off" id="navMunBtn">I.D. Municipal JAL</button>
         </nav>
     </header>
 
@@ -1507,6 +1541,93 @@
         </section>
 
       </div><!-- /vistaDesaparecidos -->
+
+      <!-- ===================== VISTA: INCIDENCIA MUNICIPAL ===================== -->
+      <div id="vistaMunicipal" style="display:none">
+
+        <div class="cinta" id="munCinta">
+            <span class="cinta-i"><b>Fuente:</b>
+                <a href="https://www.gob.mx/sesnsp/documentos/historico-de-incidencia-delictiva-del-fuero-comun?idiom=es"
+                   target="_blank" rel="noopener noreferrer">SESNSP</a> · Incidencia delictiva del fuero común</span>
+            <span class="cinta-i"><b>Corte:</b> <span id="munCorte">—</span></span>
+            <span class="cinta-i"><b>Municipios:</b> <span id="munNMuni">—</span></span>
+            <span class="cinta-i"><b>Total 2026:</b> <span id="munTotal">—</span></span>
+        </div>
+
+        <section id="munAviso">
+            <div class="mun-nota mun-nota-fuerte">
+                <b>Carpetas de investigación abiertas.</b> Las cifras del SESNSP contabilizan
+                <em>carpetas de investigación</em>, no víctimas. Una sola carpeta puede incluir a más de
+                una víctima, por lo que estos totales <b>no equivalen al número de personas afectadas</b>.
+                Esto es especialmente relevante en homicidio: por eso el tablero
+                <b>siempre separa homicidio doloso de homicidio culposo</b> y nunca los presenta sumados.
+            </div>
+        </section>
+
+        <section id="munKpis">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span>
+                <h2>Panorama municipal</h2>
+                <span class="panel-nota" id="munKpiNota">Acumulado del año en curso</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="summary-cards" id="munKpiCards">
+                    <div class="sk sk-card"></div><div class="sk sk-card"></div>
+                    <div class="sk sk-card"></div><div class="sk sk-card"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="munGraficas">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span>
+                <h2>Análisis municipal</h2>
+                <span class="panel-nota">Veinte lecturas del padrón municipal</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="chart-barra">
+                    <label class="info-estado" for="munDelitoSelect">Tipo de delito</label>
+                    <select id="munDelitoSelect"><option value="__TODOS__">Todos los delitos</option></select>
+                    <div class="conmutador" id="munMetricaBtns" role="group" aria-label="Métrica">
+                        <button data-metrica="abs" class="on">Carpetas</button>
+                        <button data-metrica="tasa">Tasa por 100 mil</button>
+                    </div>
+                    <span id="munFiltro"></span>
+                </div>
+                <div id="munGraficasContent"></div>
+            </div>
+        </section>
+
+        <section id="munTabla">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span>
+                <h2>Tabla dinámica — delito, municipio y mes</h2>
+                <span class="panel-nota">Despliega cada región para ver sus municipios</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="table-controls">
+                    <select id="munTablaDelito"><option value="__TODOS__">Todos los delitos</option></select>
+                    <input type="text" id="munTablaBuscar" placeholder="Buscar municipio…">
+                </div>
+                <div class="table-wrapper">
+                    <table class="data-table" id="munPivot">
+                        <thead id="munPivotHead"></thead>
+                        <tbody id="munPivotBody">
+                            <tr><td colspan="15" class="text-center">Cargando datos…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mun-nota">
+                    Carpetas de investigación abiertas, no víctimas. Los meses sin información aparecen vacíos.
+                </div>
+            </div>
+        </section>
+
+      </div><!-- /vistaMunicipal -->
+
     </main>
 
     <footer>
@@ -1532,7 +1653,8 @@
         // Google consume el gid, NO el nombre: renombrar una pestaña no cambia su gid.
         const SHEETS = {
             SEMANAL:       { nombre: 'SEMANAL', gid: '0' },
-            DESAPARECIDOS: { nombre: 'DESAPARECIDOS', gid: '1865808402' }
+            DESAPARECIDOS: { nombre: 'DESAPARECIDOS', gid: '1865808402' },
+            MUNICIPAL:     { nombre: 'Municipal',     gid: '1364159247' }
         };
 
         const HOJA_ACTIVA = SHEETS.SEMANAL;
@@ -5413,43 +5535,57 @@
             }
         }
 
+        /* Conmutador de N vistas. Antes era binario (una bandera esDesap y dos divs);
+           con la tercera pestaña se volvió un registro, de modo que agregar una cuarta
+           no vuelva a exigir reescribir la navegación. */
+        const VISTAS = [
+            { id: 'semanal',             div: 'vistaSemanal',        btn: 'navSemanalBtn', hash: 'semanal' },
+            { id: 'desaparecidos',       div: 'vistaDesaparecidos',  btn: 'navDesapBtn',   hash: 'desaparecidos' },
+            { id: 'incidenciamunicipal', div: 'vistaMunicipal',      btn: 'navMunBtn',     hash: 'IncidenciaMunicipal' }
+        ];
+
         function dsMostrarVista(cual, desdeHash) {
-            const vs = document.getElementById('vistaSemanal');
-            const vd = document.getElementById('vistaDesaparecidos');
-            const bs = document.getElementById('navSemanalBtn');
-            const bd = document.getElementById('navDesapBtn');
-            const esDesap = (cual === 'desaparecidos');
-            if (vs) vs.style.display = esDesap ? 'none' : '';
-            if (vd) vd.style.display = esDesap ? '' : 'none';
-            if (bs) bs.classList.toggle('btn-nav-off', esDesap);
-            if (bd) bd.classList.toggle('btn-nav-off', !esDesap);
+            const activa = VISTAS.find(v => v.id === cual) || VISTAS[0];
+
+            VISTAS.forEach(v => {
+                const d = document.getElementById(v.div);
+                const b = document.getElementById(v.btn);
+                if (d) d.style.display = (v.id === activa.id) ? '' : 'none';
+                if (b) b.classList.toggle('btn-nav-off', v.id !== activa.id);
+            });
 
             // Ruta en la URL: permite marcadores, recarga y botón Atrás.
-            // Ej.: .../Semanal-Plus/#desaparecidos
-            const destino = '#' + (esDesap ? 'desaparecidos' : 'semanal');
+            const destino = '#' + activa.hash;
             if (!desdeHash && window.location.hash !== destino) {
                 history.pushState(null, '', destino);
             }
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            if (esDesap && !dsData) dsCargar();
+            if (activa.id === 'desaparecidos' && !dsData) dsCargar();
+            if (activa.id === 'incidenciamunicipal' && !munData) munCargar();
         }
 
-        // Vista según el hash de entrada; sin hash, se abre el Reporte Semanal.
+        /* Vista según el hash. Se compara en minúsculas para que #IncidenciaMunicipal,
+           #incidenciamunicipal y #INCIDENCIAMUNICIPAL abran lo mismo. */
         function dsVistaDesdeHash() {
             const h = (window.location.hash || '').toLowerCase().replace('#', '');
-            return (h === 'desaparecidos' || h === 'desaparecidas') ? 'desaparecidos' : 'semanal';
+            if (h === 'desaparecidos' || h === 'desaparecidas') return 'desaparecidos';
+            if (h === 'incidenciamunicipal' || h === 'municipal') return 'incidenciamunicipal';
+            return 'semanal';
         }
 
         window.addEventListener('hashchange', () => dsMostrarVista(dsVistaDesdeHash(), true));
 
-        document.getElementById('navSemanalBtn').addEventListener('click', () => dsMostrarVista('semanal'));
-        document.getElementById('navDesapBtn').addEventListener('click', () => dsMostrarVista('desaparecidos'));
+        VISTAS.forEach(v => {
+            const b = document.getElementById(v.btn);
+            if (b) b.addEventListener('click', () => dsMostrarVista(v.id));
+        });
 
-        // Al cargar: si la URL trae #desaparecidos, se abre directamente esa vista.
-        if (dsVistaDesdeHash() === 'desaparecidos') {
-            dsMostrarVista('desaparecidos', true);
-        }
+        // Al cargar: si la URL trae un hash de vista, se abre directamente.
+        (function () {
+            const inicial = dsVistaDesdeHash();
+            if (inicial !== 'semanal') dsMostrarVista(inicial, true);
+        })();
 
         document.getElementById('dsGenerarBtn').addEventListener('click', () => {
             const st = document.getElementById('dsInfoStatus');
@@ -5596,6 +5732,655 @@
             observeReveal(document.getElementById('dsInfografia'));
             observeReveal(document.getElementById('dsAnalisis'));
         }
+
+
+        /* ==================================================================
+           ==========  MÓDULO: INCIDENCIA DELICTIVA MUNICIPAL  ==============
+           Fuente: SESNSP — Incidencia delictiva del fuero común, corte municipal.
+           Estructura larga: una fila por Municipio × Bien jurídico × Tipo ×
+           Subtipo × Modalidad, con los doce meses en columnas.
+
+           ADVERTENCIA METODOLÓGICA: son CARPETAS DE INVESTIGACIÓN, no víctimas.
+           Una carpeta puede incluir a varias personas. Por eso el homicidio nunca
+           se presenta agregado: doloso y culposo se muestran siempre por separado.
+           ================================================================== */
+
+        let munData = null;
+        let munCharts = [];
+        const munEstado = { delito: '__TODOS__', metrica: 'abs', expandido: {}, verTodo: {} };
+
+        const MUN_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                           'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        // Los nueve municipios del Área Metropolitana de Guadalajara.
+        const MUN_AMG = ['Guadalajara','Zapopan','San Pedro Tlaquepaque','Tlajomulco de Zúñiga',
+                         'Tonalá','El Salto','Ixtlahuacán de los Membrillos','Juanacatlán','Zapotlanejo'];
+
+        /* Población municipal — Censo de Población y Vivienda 2020, INEGI.
+           Suma verificada: 8,348,151 habitantes, coincide con el total estatal del censo.
+           Los 125 municipios empatan uno a uno con los nombres del padrón SESNSP.
+           NOTA: al ser cifras de 2020 aplicadas a incidencia de 2026, las tasas
+           quedan sobrestimadas en los municipios que más han crecido. */
+        const MUN_POBLACION = {
+            'Zapopan':1476491,'Guadalajara':1385629,'Tlajomulco de Zúñiga':727750,'San Pedro Tlaquepaque':687127,
+            'Tonalá':569913,'Puerto Vallarta':291839,'El Salto':232852,'Lagos de Moreno':172403,
+            'Tepatitlán de Morelos':150190,'Zapotlán el Grande':115141,'Ocotlán':106050,'Tala':87690,'Arandas':80609,
+            'San Juan de los Lagos':72230,'Ixtlahuacán de los Membrillos':67969,'La Barca':67937,
+            'Autlán de Navarro':64931,'Zapotlanejo':64806,'Atotonilco el Alto':64009,'Ameca':60386,'Chapala':55196,
+            'Poncitlán':53659,'Encarnación de Díaz':53039,'Jocotepec':47105,'Tequila':44353,'Ayotlán':41552,
+            'Cihuatlán':40139,'Teocaltiche':39839,'Tamazula de Gordiano':38955,'Tuxpan':37518,'Sayula':37186,
+            'Tomatlán':36316,'Zapotiltic':33713,'Ojuelos de Jalisco':33588,'Jalostotitlán':32678,
+            'San Miguel el Alto':31965,'Juanacatlán':30855,'Zacoalco de Torres':30472,'Cocula':29267,
+            'San Martín Hidalgo':28102,'El Grullo':25920,'Acatlán de Juárez':25250,'Jamay':24894,
+            'Ahualulco de Mercado':23630,'Tototlán':23573,'La Huerta':23258,'Acatic':23175,'Tizapán el Alto':22758,
+            'Yahualica de González Gallo':22394,'Mezquitic':22083,'Magdalena':21781,'Tapalpa':21245,'Degollado':21226,
+            'El Arenal':21115,'Casimiro Castillo':20548,'Ixtlahuacán del Río':20465,'Villa Hidalgo':20088,
+            'Etzatlán':20011,'Colotlán':19689,'Zapotlán del Rey':19279,'Unión de San Antonio':19069,
+            'Villa Corona':19063,'Jesús María':18982,'Cuautitlán de García Barragán':18370,
+            'San Ignacio Cerro Gordo':18341,'Cuquío':17820,'San Julián':16792,'Tecalitlán':16705,'Tecolotlán':16603,
+            'San Gabriel':16548,'Amatitán':16490,'Gómez Farías':16431,'Talpa de Allende':14997,'Mascota':14451,
+            'Mazamitla':14043,'Unión de Tula':13799,'Ayutla':12880,'Pihuamo':11386,'Villa Purificación':11303,
+            'Tolimán':11219,'Teocuitatlán de Corona':11039,'Cabo Corrientes':10940,'Huejuquilla el Alto':10015,
+            'Teuchitlán':9647,'San Juanito de Escobedo':9433,'Jilotlán de los Dolores':9425,'Hostotipaquillo':8732,
+            'Atoyac':8689,'Atemajac de Brizuela':7758,'Quitupan':7734,'San Diego de Alejandría':7609,'Tonila':7565,
+            'Zapotitlán de Vadillo':7466,'Tenamaxtlán':7302,'Bolaños':7043,'Tuxcueca':6702,'Valle de Guadalupe':6627,
+            'Concepción de Buenos Aires':6334,'Valle de Juárez':6151,'Chiquilistlán':5983,'Tonaya':5961,
+            'Huejúcar':5920,'Amacueca':5743,'Atengo':5599,'Juchitlán':5534,'Villa Guerrero':5525,'Tuxcacuesco':5482,
+            'El Limón':5368,'Mexticacán':5307,'San Sebastián del Oeste':5086,'Cañadas de Obregón':4388,
+            'Guachinango':4199,'Totatiche':4180,'Atenguillo':4176,'La Manzanilla de la Paz':4099,
+            'Techaluta de Montenegro':4072,'San Marcos':3791,'Mixtlán':3638,'Santa María de los Ángeles':3515,
+            'Chimaltitán':3270,'San Martín de Bolaños':3095,'San Cristóbal de la Barranca':2924,'Cuautla':2166,
+            'Ejutla':1981,'Santa María del Oro':1815        };
+        const MUN_POB_TOTAL = Object.values(MUN_POBLACION).reduce((a, b) => a + b, 0);
+
+        function munFetch() {
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.MUNICIPAL.gid}`;
+            return fetch(url).then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            });
+        }
+
+        function munParse(csvText) {
+            const filas = parseCSV(csvText);
+            if (!filas.length) throw new Error('La pestaña Municipal llegó vacía.');
+
+            const cab = filas[0].map(c => (c || '').trim());
+            const col = nombre => cab.findIndex(c => dsNorm(c) === dsNorm(nombre));
+
+            const iMuni = col('Municipio'), iBien = col('Bien jurídico afectado');
+            const iTipo = col('Tipo de delito'), iSub = col('Subtipo de delito'), iMod = col('Modalidad');
+            const iAnio = col('Año');
+            if (iMuni < 0 || iTipo < 0) throw new Error('La pestaña Municipal no tiene las columnas esperadas del SESNSP.');
+
+            const iMes = MUN_MESES.map(m => col(m));
+
+            const registros = [];
+            for (let f = 1; f < filas.length; f++) {
+                const r = filas[f];
+                if (!r || !r[iMuni]) continue;
+                const meses = iMes.map(i => (i >= 0 ? dsNum(r[i]) : null));
+                const total = meses.reduce((a, v) => a + (v || 0), 0);
+                registros.push({
+                    anio: iAnio >= 0 ? dsNum(r[iAnio]) : null,
+                    municipio: (r[iMuni] || '').trim(),
+                    bien: iBien >= 0 ? (r[iBien] || '').trim() : '',
+                    tipo: (r[iTipo] || '').trim(),
+                    subtipo: iSub >= 0 ? (r[iSub] || '').trim() : '',
+                    modalidad: iMod >= 0 ? (r[iMod] || '').trim() : '',
+                    meses, total
+                });
+            }
+            if (!registros.length) throw new Error('La pestaña Municipal no contiene registros.');
+
+            // Último mes con información: los posteriores llegan en cero y dibujarlos
+            // como caída real sería un error de lectura.
+            let ultimoMes = -1;
+            for (let m = 0; m < 12; m++) {
+                if (registros.some(r => (r.meses[m] || 0) > 0)) ultimoMes = m;
+            }
+
+            const municipios = Array.from(new Set(registros.map(r => r.municipio)))
+                                    .filter(m => dsNorm(m) !== 'NO ESPECIFICADO');
+            const tipos = Array.from(new Set(registros.map(r => r.tipo))).sort();
+            const anios = Array.from(new Set(registros.map(r => r.anio).filter(Boolean))).sort();
+
+            return { registros, municipios, tipos, anios, ultimoMes,
+                     total: registros.reduce((a, r) => a + r.total, 0) };
+        }
+
+        // ---------- Agregaciones ----------
+        const munFiltra = () => munEstado.delito === '__TODOS__'
+            ? munData.registros
+            : munData.registros.filter(r => r.tipo === munEstado.delito);
+
+        function munPorMunicipio(regs) {
+            const m = {};
+            (regs || munFiltra()).forEach(r => {
+                if (dsNorm(r.municipio) === 'NO ESPECIFICADO') return;
+                m[r.municipio] = (m[r.municipio] || 0) + r.total;
+            });
+            return m;
+        }
+
+        function munPorMes(regs) {
+            const out = new Array(12).fill(0);
+            (regs || munFiltra()).forEach(r => r.meses.forEach((v, i) => out[i] += (v || 0)));
+            return out;
+        }
+
+        function munAgrupa(campo, regs) {
+            const m = {};
+            (regs || munFiltra()).forEach(r => { m[r[campo]] = (m[r[campo]] || 0) + r.total; });
+            return m;
+        }
+
+        const munOrdena = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n || 9999);
+        const munEsAMG = m => MUN_AMG.indexOf(m) >= 0;
+
+        // Tasa por cada 100 mil habitantes (Censo 2020)
+        function munTasa(municipio, valor) {
+            const pob = MUN_POBLACION[municipio];
+            if (!pob) return null;
+            return +(valor / pob * 100000).toFixed(1);
+        }
+
+        function munValor(municipio, valor) {
+            if (munEstado.metrica !== 'tasa') return valor;
+            const t = munTasa(municipio, valor);
+            return t === null ? 0 : t;
+        }
+
+        // ---------- KPIs ----------
+        function munRenderKpis() {
+            const cont = document.getElementById('munKpiCards');
+            if (!cont || !munData) return;
+
+            const regs = munFiltra();
+            const total = regs.reduce((a, r) => a + r.total, 0);
+            const porMun = munPorMunicipio(regs);
+            const amg = Object.entries(porMun).filter(([m]) => munEsAMG(m)).reduce((a, x) => a + x[1], 0);
+            const top = munOrdena(porMun, 1)[0];
+            const meses = munPorMes(regs);
+            const activos = meses.filter(v => v > 0).length;
+            const tasaEstatal = MUN_POB_TOTAL ? (total / MUN_POB_TOTAL * 100000) : 0;
+
+            const tarjeta = (t, v, s) => `<div class="kpi"><div class="kpi-t">${t}</div>
+                <div class="kpi-v">${v}</div><div class="kpi-sub">${s}</div></div>`;
+
+            cont.innerHTML =
+                tarjeta('Carpetas acumuladas', nf(total),
+                        `${activos} mes${activos === 1 ? '' : 'es'} con información`) +
+                tarjeta('Concentración metropolitana', pf(total ? amg / total * 100 : 0, 1).replace('+', ''),
+                        `${nf(amg)} carpetas en los 9 municipios del AMG`) +
+                tarjeta('Municipio con más carpetas', top ? esc(top[0]) : '—',
+                        top ? `${nf(top[1])} carpetas · ${(top[1] / total * 100).toFixed(1)} % del estado` : '') +
+                tarjeta('Tasa estatal', tasaEstatal.toFixed(1),
+                        'Por cada 100 mil habitantes · Censo 2020');
+
+            const nota = document.getElementById('munKpiNota');
+            if (nota) nota.textContent = munEstado.delito === '__TODOS__'
+                ? 'Todos los delitos del catálogo SESNSP'
+                : munEstado.delito;
+        }
+
+        // ---------- Gráficas ----------
+        function munLienzo(id, titulo, nota, notaCarpetas) {
+            return `<div class="ds-chart">
+                        <div class="ds-chart-t">${titulo}</div>
+                        <div class="ds-chart-f">Fuente: SESNSP</div>
+                        ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
+                        <div class="ds-chart-box"><canvas id="${id}"></canvas></div>
+                        ${notaCarpetas ? `<div class="mun-nota">Carpetas de investigación abiertas, no víctimas: una carpeta puede incluir a más de una persona.</div>` : ''}
+                    </div>`;
+        }
+
+        function munCrear(id, cfg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const chart = new Chart(el, cfg);
+            munCharts.push(chart);
+            registrarGrafica(id, chart);   // sistema PLUS
+        }
+
+        function munRenderGraficas() {
+            const cont = document.getElementById('munGraficasContent');
+            if (!cont || !munData) return;
+            const t = tokens();
+
+            munCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
+            munCharts = [];
+
+            const regs = munFiltra();
+            const porMun = munPorMunicipio(regs);
+            const listaMun = munOrdena(porMun);
+            const esTasa = munEstado.metrica === 'tasa';
+            const unidad = esTasa ? 'Tasa por 100 mil' : 'Carpetas';
+
+            const chip = document.getElementById('munFiltro');
+            if (chip) chip.innerHTML = `<span class="info-estado">${munData.municipios.length} municipios · ${esTasa ? 'tasa por 100 mil habitantes (Censo 2020)' : 'carpetas de investigación'}</span>`;
+
+            const mesesEtq = MUN_MESES.slice();
+            const serieMes = munPorMes(regs);
+
+            cont.innerHTML =
+                munLienzo('mun1',  '1 · Top 15 municipios', 'Ordenados por el acumulado del año.') +
+                munLienzo('mun2',  '2 · AMG frente al interior del estado') +
+                munLienzo('mun3',  '3 · Concentración acumulada (Pareto)', 'Cuántos municipios explican qué proporción del total.') +
+                munLienzo('mun4',  '4 · Evolución mensual', 'Los meses sin información aparecen en cero.') +
+                munLienzo('mun5',  '5 · Acumulado del año') +
+                munLienzo('mun6',  '6 · AMG e interior, mes a mes') +
+                munLienzo('mun7',  '7 · Variación mensual', 'Diferencia contra el mes anterior.') +
+                munLienzo('mun8',  '8 · Composición por bien jurídico afectado') +
+                munLienzo('mun9',  '9 · Top 12 tipos de delito', null, true) +
+                munLienzo('mun10', '10 · Evolución de los cinco delitos principales', null, true) +
+                munLienzo('mun11', '11 · Homicidio doloso frente a culposo',
+                          'Nunca se presentan sumados: el culposo incluye accidentes de tránsito.', true) +
+                munLienzo('mun12', '12 · Modalidad del homicidio doloso', null, true) +
+                munLienzo('mun13', '13 · Robo por subtipo', null, true) +
+                munLienzo('mun14', '14 · Delitos contra la libertad y la seguridad sexual', null, true) +
+                munLienzo('mun15', '15 · Violencia familiar por municipio', 'Top 10 municipios.', true) +
+                munLienzo('mun16', '16 · Perfil delictivo de los cinco municipios mayores') +
+                munLienzo('mun17', '17 · Tasa por 100 mil habitantes', 'Top 15. Población del Censo 2020.') +
+                munLienzo('mun18', '18 · Carpetas frente a población', 'Cada punto es un municipio.') +
+                munLienzo('mun19', '19 · Distribución de municipios por volumen') +
+                munLienzo('mun20', '20 · Municipios sin incidencia registrada');
+
+            const barras = (id, etiquetas, datos, color, horizontal) => munCrear(id, {
+                type: 'bar',
+                data: { labels: etiquetas, datasets: [{ label: unidad, data: datos, backgroundColor: color || t.brand }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    indexAxis: horizontal ? 'y' : 'x',
+                    plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP },
+                    scales: ejes(t)
+                }
+            });
+
+            // 1 · Top 15 municipios
+            const top15 = listaMun.slice(0, 15);
+            barras('mun1', top15.map(x => x[0]),
+                   top15.map(x => munValor(x[0], x[1])), t.brand, true);
+
+            // 2 · AMG vs interior
+            const amgTot = listaMun.filter(x => munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
+            const intTot = listaMun.filter(x => !munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
+            munCrear('mun2', {
+                type: 'doughnut',
+                data: { labels: ['AMG (9 municipios)', 'Interior (116 municipios)'],
+                        datasets: [{ data: [amgTot, intTot], backgroundColor: [t.brand, t.accent] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom' }, tooltip: OPC_TOOLTIP } }
+            });
+
+            // 3 · Pareto
+            const totalGen = listaMun.reduce((a, x) => a + x[1], 0) || 1;
+            let acum = 0;
+            const pareto = listaMun.slice(0, 30).map(x => { acum += x[1]; return +(acum / totalGen * 100).toFixed(1); });
+            munCrear('mun3', {
+                type: 'line',
+                data: { labels: listaMun.slice(0, 30).map((x, i) => (i + 1) + '. ' + x[0]),
+                        datasets: [{ label: '% acumulado', data: pareto, borderColor: t.accent,
+                                     backgroundColor: t.accent + '20', fill: true, tension: .25, pointRadius: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP },
+                           scales: Object.assign({}, ejes(t), { y: { beginAtZero: true, max: 100 } }) }
+            });
+
+            // 4 · Evolución mensual
+            munCrear('mun4', {
+                type: 'line',
+                data: { labels: mesesEtq, datasets: [{ label: 'Carpetas', data: serieMes,
+                        borderColor: t.brand, backgroundColor: t.brand + '20', fill: true, tension: .3, pointRadius: 3 }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+
+            // 5 · Acumulado
+            let ac = 0;
+            munCrear('mun5', {
+                type: 'line',
+                data: { labels: mesesEtq, datasets: [{ label: 'Acumulado', data: serieMes.map(v => (ac += v)),
+                        borderColor: t.accent, backgroundColor: t.accent + '18', fill: true, tension: .25, pointRadius: 3 }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+
+            // 6 · AMG e interior mes a mes
+            const mesAMG = new Array(12).fill(0), mesInt = new Array(12).fill(0);
+            regs.forEach(r => r.meses.forEach((v, i) => {
+                if (munEsAMG(r.municipio)) mesAMG[i] += (v || 0); else mesInt[i] += (v || 0);
+            }));
+            munCrear('mun6', {
+                type: 'bar',
+                data: { labels: mesesEtq, datasets: [
+                    { label: 'AMG', data: mesAMG, backgroundColor: t.brand },
+                    { label: 'Interior', data: mesInt, backgroundColor: t.accent }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: {}, tooltip: OPC_TOOLTIP },
+                           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+            });
+
+            // 7 · Variación mensual
+            const varMes = serieMes.map((v, i) => i === 0 ? null : v - serieMes[i - 1]);
+            munCrear('mun7', {
+                type: 'bar',
+                data: { labels: mesesEtq, datasets: [{ label: 'Diferencia', data: varMes,
+                        backgroundColor: varMes.map(v => v === null ? t.muted : (v > 0 ? t.risk : t.down)) }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+
+            // 8 · Bien jurídico
+            const bienes = munOrdena(munAgrupa('bien', regs));
+            munCrear('mun8', {
+                type: 'doughnut',
+                data: { labels: bienes.map(x => x[0]), datasets: [{ data: bienes.map(x => x[1]),
+                        backgroundColor: bienes.map((x, i) => PALETA[i % PALETA.length]) }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } }
+            });
+
+            // 9 · Top tipos de delito
+            const tipos = munOrdena(munAgrupa('tipo', munData.registros), 12);
+            barras('mun9', tipos.map(x => x[0]), tipos.map(x => x[1]), t.brand, true);
+
+            // 10 · Evolución de los cinco principales
+            const top5t = tipos.slice(0, 5).map(x => x[0]);
+            munCrear('mun10', {
+                type: 'line',
+                data: { labels: mesesEtq, datasets: top5t.map((tp, i) => {
+                    const s = new Array(12).fill(0);
+                    munData.registros.filter(r => r.tipo === tp).forEach(r => r.meses.forEach((v, m) => s[m] += (v || 0)));
+                    return { label: tp, data: s, borderColor: PALETA[i % PALETA.length],
+                             backgroundColor: PALETA[i % PALETA.length] + '18', tension: .3, pointRadius: 2, fill: false };
+                }) },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+
+            // 11 · Homicidio doloso vs culposo — nunca agregados
+            const serieSub = sub => {
+                const s = new Array(12).fill(0);
+                munData.registros.filter(r => dsNorm(r.subtipo) === dsNorm(sub))
+                    .forEach(r => r.meses.forEach((v, m) => s[m] += (v || 0)));
+                return s;
+            };
+            munCrear('mun11', {
+                type: 'line',
+                data: { labels: mesesEtq, datasets: [
+                    { label: 'Homicidio doloso', data: serieSub('Homicidio doloso'), borderColor: t.risk,
+                      backgroundColor: t.risk + '18', tension: .3, pointRadius: 3, fill: false },
+                    { label: 'Homicidio culposo', data: serieSub('Homicidio culposo'), borderColor: t.muted,
+                      backgroundColor: t.muted + '18', tension: .3, pointRadius: 3, fill: false, borderDash: [5, 4] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: {}, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+
+            // 12 · Modalidad del homicidio doloso
+            const modDol = {};
+            munData.registros.filter(r => dsNorm(r.subtipo) === dsNorm('Homicidio doloso'))
+                .forEach(r => { modDol[r.modalidad] = (modDol[r.modalidad] || 0) + r.total; });
+            const md = munOrdena(modDol);
+            munCrear('mun12', {
+                type: 'doughnut',
+                data: { labels: md.map(x => x[0]), datasets: [{ data: md.map(x => x[1]),
+                        backgroundColor: md.map((x, i) => PALETA[i % PALETA.length]) }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } }
+            });
+
+            // 13 · Robo por subtipo
+            const robo = {};
+            munData.registros.filter(r => dsNorm(r.tipo) === dsNorm('Robo'))
+                .forEach(r => { robo[r.subtipo] = (robo[r.subtipo] || 0) + r.total; });
+            const rs = munOrdena(robo, 12);
+            barras('mun13', rs.map(x => x[0]), rs.map(x => x[1]), t.accent, true);
+
+            // 14 · Libertad y seguridad sexual
+            const sex = {};
+            munData.registros.filter(r => /SEXUAL|VIOLACION|HOSTIGAMIENTO|ABUSO/.test(dsNorm(r.tipo + ' ' + r.subtipo)))
+                .forEach(r => { sex[r.tipo] = (sex[r.tipo] || 0) + r.total; });
+            const sx = munOrdena(sex, 10);
+            barras('mun14', sx.map(x => x[0]), sx.map(x => x[1]), t.risk, true);
+
+            // 15 · Violencia familiar por municipio
+            const vf = {};
+            munData.registros.filter(r => dsNorm(r.tipo) === dsNorm('Violencia familiar'))
+                .forEach(r => { if (dsNorm(r.municipio) !== 'NO ESPECIFICADO') vf[r.municipio] = (vf[r.municipio] || 0) + r.total; });
+            const vfl = munOrdena(vf, 10);
+            barras('mun15', vfl.map(x => x[0]), vfl.map(x => x[1]), t.brand, true);
+
+            // 16 · Perfil delictivo de los cinco mayores
+            const top5m = listaMun.slice(0, 5).map(x => x[0]);
+            const top6tipos = munOrdena(munAgrupa('tipo', munData.registros), 6).map(x => x[0]);
+            munCrear('mun16', {
+                type: 'bar',
+                data: { labels: top5m, datasets: top6tipos.map((tp, i) => ({
+                    label: tp,
+                    data: top5m.map(mu => munData.registros
+                        .filter(r => r.municipio === mu && r.tipo === tp)
+                        .reduce((a, r) => a + r.total, 0)),
+                    backgroundColor: PALETA[i % PALETA.length]
+                })) },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP },
+                           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+            });
+
+            // 17 · Tasa por 100 mil
+            const tasas = listaMun.map(([m, v]) => [m, munTasa(m, v)])
+                                  .filter(x => x[1] !== null && MUN_POBLACION[x[0]] >= 5000)
+                                  .sort((a, b) => b[1] - a[1]).slice(0, 15);
+            barras('mun17', tasas.map(x => x[0]), tasas.map(x => x[1]), t.accent, true);
+
+            // 18 · Dispersión población vs carpetas
+            munCrear('mun18', {
+                type: 'scatter',
+                data: { datasets: [{ label: 'Municipio',
+                    data: listaMun.filter(x => MUN_POBLACION[x[0]]).map(x => ({ x: MUN_POBLACION[x[0]], y: x[1], m: x[0] })),
+                    backgroundColor: t.brand + 'AA', pointRadius: 4 }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false },
+                        tooltip: Object.assign({}, OPC_TOOLTIP, { callbacks: {
+                            label: c => ` ${c.raw.m}: ${nf(c.raw.y)} carpetas · ${nf(c.raw.x)} hab.` } }) },
+                    scales: { x: { type: 'logarithmic', title: { display: true, text: 'Población (Censo 2020)' } },
+                              y: { beginAtZero: true, title: { display: true, text: 'Carpetas' } } } }
+            });
+
+            // 19 · Distribución por volumen
+            const cortes = [[0, 0, 'Sin incidencia'], [1, 49, '1 a 49'], [50, 199, '50 a 199'],
+                            [200, 999, '200 a 999'], [1000, 4999, '1,000 a 4,999'], [5000, Infinity, '5,000 o más']];
+            const dist = cortes.map(([a, b]) => munData.municipios
+                .filter(m => { const v = porMun[m] || 0; return v >= a && v <= b; }).length);
+            barras('mun19', cortes.map(c => c[2]), dist, t.brand, false);
+
+            // 20 · Municipios sin incidencia
+            const sinInc = munData.municipios.filter(m => (porMun[m] || 0) === 0);
+            munCrear('mun20', {
+                type: 'doughnut',
+                data: { labels: ['Con incidencia', 'Sin incidencia registrada'],
+                        datasets: [{ data: [munData.municipios.length - sinInc.length, sinInc.length],
+                                     backgroundColor: [t.brand, t.muted] }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                           plugins: { legend: { position: 'bottom' }, tooltip: OPC_TOOLTIP } }
+            });
+
+            // El sistema PLUS revive cada gráfica al volver a entrar en pantalla.
+            observarTodos('#munGraficasContent .ds-chart');
+        }
+
+        /* ---------- Tabla dinámica jerárquica ----------
+           Arranca en tres filas: AMG, Interior y el total del estado. Cada región
+           se despliega con "+" y muestra sus municipios ordenados por total del año.
+           El interior son 116 municipios: se muestran los 20 primeros y el resto
+           queda tras un segundo "+", para no volcar de golpe una lista ilegible. */
+        function munRenderTabla() {
+            const head = document.getElementById('munPivotHead');
+            const body = document.getElementById('munPivotBody');
+            if (!head || !body || !munData) return;
+
+            const filtro = document.getElementById('munTablaDelito');
+            const delito = filtro ? filtro.value : '__TODOS__';
+            const buscar = dsNorm((document.getElementById('munTablaBuscar') || {}).value || '');
+
+            const regs = delito === '__TODOS__' ? munData.registros
+                                                : munData.registros.filter(r => r.tipo === delito);
+
+            const porMun = {};
+            regs.forEach(r => {
+                if (dsNorm(r.municipio) === 'NO ESPECIFICADO') return;
+                if (!porMun[r.municipio]) porMun[r.municipio] = { meses: new Array(12).fill(0), total: 0 };
+                r.meses.forEach((v, i) => porMun[r.municipio].meses[i] += (v || 0));
+                porMun[r.municipio].total += r.total;
+            });
+
+            const municipios = Object.keys(porMun).sort((a, b) => porMun[b].total - porMun[a].total);
+            const amg = municipios.filter(munEsAMG);
+            const interior = municipios.filter(m => !munEsAMG(m));
+
+            const sumar = lista => {
+                const acc = { meses: new Array(12).fill(0), total: 0 };
+                lista.forEach(m => {
+                    porMun[m].meses.forEach((v, i) => acc.meses[i] += v);
+                    acc.total += porMun[m].total;
+                });
+                return acc;
+            };
+
+            head.innerHTML = `<tr>
+                <th style="min-width:210px">Región / Municipio</th>
+                ${MUN_MESES.map(m => `<th class="mun-num">${m.slice(0, 3)}</th>`).join('')}
+                <th class="mun-num">Total 2026</th>
+            </tr>`;
+
+            const celdas = d => MUN_MESES.map((m, i) =>
+                `<td class="mun-num">${d.meses[i] ? nf(d.meses[i]) : '<span class="mun-cero">—</span>'}</td>`).join('');
+
+            const filaRegion = (id, nombre, datos, n, abierto) => `
+                <tr class="mun-fila-region">
+                    <td><button type="button" class="mun-exp" data-region="${id}"
+                        aria-expanded="${abierto ? 'true' : 'false'}">${abierto ? '−' : '+'}</button>
+                        <b>${nombre}</b> <span class="mun-cuenta">${n} municipios</span></td>
+                    ${celdas(datos)}
+                    <td class="mun-num"><b>${nf(datos.total)}</b></td>
+                </tr>`;
+
+            const filaMun = m => `
+                <tr class="mun-fila-muni">
+                    <td class="mun-sangria">${esc(m)}</td>
+                    ${celdas(porMun[m])}
+                    <td class="mun-num">${nf(porMun[m].total)}</td>
+                </tr>`;
+
+            const visibles = lista => buscar
+                ? lista.filter(m => dsNorm(m).includes(buscar))
+                : lista;
+
+            let html = '';
+
+            // --- AMG ---
+            const abAmg = !!munEstado.expandido.amg || !!buscar;
+            html += filaRegion('amg', 'AMG', sumar(amg), amg.length, abAmg);
+            if (abAmg) html += visibles(amg).map(filaMun).join('');
+
+            // --- Interior ---
+            const abInt = !!munEstado.expandido.interior || !!buscar;
+            html += filaRegion('interior', 'Interior del Estado', sumar(interior), interior.length, abInt);
+            if (abInt) {
+                const vis = visibles(interior);
+                const todo = !!munEstado.verTodo.interior || !!buscar;
+                const mostrar = todo ? vis : vis.slice(0, 20);
+                html += mostrar.map(filaMun).join('');
+                if (!todo && vis.length > 20) {
+                    html += `<tr class="mun-fila-mas"><td colspan="14">
+                        <button type="button" class="mun-exp mun-exp-mas" data-vertodo="interior">+</button>
+                        Ver los ${vis.length - 20} municipios restantes</td></tr>`;
+                }
+            }
+
+            // --- Total ---
+            const totalEstado = sumar(municipios);
+            html += `<tr class="mun-fila-total">
+                        <td><b>TOTAL JALISCO</b> <span class="mun-cuenta">${municipios.length} municipios</span></td>
+                        ${celdas(totalEstado)}
+                        <td class="mun-num"><b>${nf(totalEstado.total)}</b></td>
+                     </tr>`;
+
+            body.innerHTML = html;
+        }
+
+        // ---------- Orquestación ----------
+        function munLlenarSelectores() {
+            const tipos = munData.tipos.slice().sort();
+            ['munDelitoSelect', 'munTablaDelito'].forEach(id => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const actual = sel.value;
+                sel.innerHTML = '<option value="__TODOS__">Todos los delitos</option>' +
+                    tipos.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+                if (actual) sel.value = actual;
+            });
+        }
+
+        function munRenderCinta() {
+            if (!munData) return;
+            const ult = munData.ultimoMes;
+            const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+            set('munCorte', (ult >= 0 ? MUN_MESES[ult] : '—') + ' ' + (munData.anios[munData.anios.length - 1] || ''));
+            set('munNMuni', nf(munData.municipios.length));
+            set('munTotal', nf(munData.total));
+        }
+
+        function munRefrescar() {
+            munRenderKpis();
+            munRenderGraficas();
+            munRenderTabla();
+        }
+
+        async function munCargar() {
+            const cont = document.getElementById('munGraficasContent');
+            try {
+                if (cont) cont.innerHTML = '<div class="sk sk-card" style="height:200px"></div>';
+                munData = munParse(await munFetch());
+                munLlenarSelectores();
+                munRenderCinta();
+                munRefrescar();
+                observeReveal(document.getElementById('munKpis'));
+                observeReveal(document.getElementById('munTabla'));
+            } catch (e) {
+                console.error('❌ Incidencia municipal:', e);
+                if (cont) cont.innerHTML = '<p class="an-empty">No se pudieron cargar los datos municipales: ' + esc(e.message) + '</p>';
+            }
+        }
+
+        // ---------- Interacción ----------
+        document.addEventListener('click', (e) => {
+            const exp = e.target.closest('.mun-exp');
+            if (!exp) return;
+            if (exp.dataset.vertodo) {
+                munEstado.verTodo[exp.dataset.vertodo] = true;
+            } else if (exp.dataset.region) {
+                munEstado.expandido[exp.dataset.region] = !munEstado.expandido[exp.dataset.region];
+            }
+            munRenderTabla();
+        });
+
+        ['munDelitoSelect'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', (e) => {
+                munEstado.delito = e.target.value;
+                munRenderKpis();
+                munRenderGraficas();
+            });
+        });
+
+        ['munTablaDelito', 'munTablaBuscar'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener(id === 'munTablaBuscar' ? 'input' : 'change', munRenderTabla);
+        });
+
+        conmutar('munMetricaBtns', 'metrica', v => { munEstado.metrica = v; munRenderGraficas(); });
 
     </script>
 </body>
