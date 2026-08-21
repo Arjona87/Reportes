@@ -1233,6 +1233,30 @@
             border-radius: var(--r-sm); padding: 9px 13px; margin-top: 12px;
         }
         .mun-lectura b { color: var(--brand); }
+
+        /* ===== Encabezado: botón claro y selector de región ===== */
+        /* El texto va en azul institucional, no blanco: sobre blanco daría 1.00:1
+           y sobre el naranja 2.69:1, ambos por debajo del mínimo WCAG AA (4.5:1).
+           Con #18345D quedan en 12.44:1 y 4.62:1 respectivamente. */
+        .btn-claro {
+            background: #FFFFFF;
+            color: #18345D;
+            border: 1px solid rgba(255, 255, 255, .85);
+            font-weight: 700;
+        }
+        .btn-claro:hover { background: #EEF3F9; color: #18345D; }
+
+        .select-region {
+            background: var(--accent);
+            color: #18345D;
+            border: 1px solid rgba(255, 255, 255, .45);
+            font-weight: 800;
+            letter-spacing: .02em;
+        }
+        .select-region option { background: #FFFFFF; color: var(--ink); font-weight: 600; }
+
+        /* El selector de región solo aplica al Reporte Semanal. */
+        #grupoRegion[hidden] { display: none !important; }
     </style>
 </head>
 <body>
@@ -1252,22 +1276,22 @@
             </div>
 
             <div class="header-right">
-                <div class="control-group">
-                    <label for="regionSelect">Región</label>
-                    <select id="regionSelect">
-                        <option value="jalisco">Jalisco</option>
+                <div class="control-group" id="grupoRegion">
+                    <label for="regionSelect">Seleccionar Región</label>
+                    <select id="regionSelect" class="select-region">
+                        <option value="jalisco">JALISCO</option>
                         <option value="amg">AMG</option>
                     </select>
                 </div>
-                <button class="btn btn-primary" id="updateBtn">Actualizar datos</button>
+                <button class="btn btn-claro" id="updateBtn">Actualizar</button>
                 <button class="btn-icono" id="temaBtn" title="Cambiar entre modo claro y Dark Command Mode" aria-label="Cambiar tema">◐</button>
             </div>
         </div>
 
         <nav class="tabs" aria-label="Vistas del tablero">
-            <button class="btn-nav" id="navSemanalBtn">Incidencia delictiva</button>
+            <button class="btn-nav" id="navSemanalBtn">Reporte Semanal</button>
             <button class="btn-nav btn-nav-off" id="navDesapBtn">Personas desaparecidas</button>
-            <button class="btn-nav btn-nav-off" id="navMunBtn">I.D. Municipal JAL</button>
+            <button class="btn-nav btn-nav-off" id="navMunBtn">Incidencia Municipal</button>
         </nav>
     </header>
 
@@ -1518,7 +1542,7 @@
             </div>
             <div class="panel-cuerpo">
                 <div id="dsGraficasContent">
-                    <p class="an-empty">Selecciona «Actualizar datos» para generar las gráficas.</p>
+                    <p class="an-empty">Selecciona «Actualizar» para generar las gráficas.</p>
                 </div>
             </div>
         </section>
@@ -2182,7 +2206,7 @@
             marcarEstado('No se pudo leer la hoja: ' + message, 'falla');
             const c = document.getElementById('summaryCards');
             if (c) c.innerHTML = `<div class="error-message">No se pudo leer la hoja de origen: ${message}.
-                Revisa la conexión y vuelve a seleccionar «Actualizar datos». Si el problema
+                Revisa la conexión y vuelve a seleccionar «Actualizar». Si el problema
                 persiste, verifica que la pestaña «${HOJA_ACTIVA.nombre}» siga publicada.</div>`;
         }
 
@@ -3272,7 +3296,7 @@
             if (!tbody) return;
 
             if (!region || !region.delitos || !Object.keys(region.delitos).length) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Todavía no hay datos cargados. Selecciona «Actualizar datos».</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">Todavía no hay datos cargados. Selecciona «Actualizar».</td></tr>';
                 return;
             }
 
@@ -4439,9 +4463,19 @@
                 updateUI();
                 generarInfografia();
             }
+            // Se refrescan también las vistas ya cargadas, para que "Actualizar"
+            // signifique lo mismo en las tres pestañas.
+            // No se nombra munData aquí: está declarada con `let` más abajo y tocarla
+            // desde este punto lanzaría ReferenceError (typeof tampoco protege del TDZ).
+            // El registro de cargadores resuelve la llamada sin esa dependencia.
             if (dsData) { dsData = null; dsCargar(); }
+            Object.keys(VISTAS_CARGADAS).forEach(idVista => {
+                if (idVista === 'desaparecidos' || !VISTAS_CARGADAS[idVista]) return;
+                const recargar = CARGADORES[idVista];
+                if (recargar) recargar();
+            });
             btn.disabled = false;
-            btn.textContent = 'Actualizar datos';
+            btn.textContent = 'Actualizar';
         });
 
         /* =====================================================================
@@ -5600,13 +5634,21 @@
                 if (b) b.classList.toggle('btn-nav-off', v.id !== activa.id);
             });
 
+            // El selector Jalisco/AMG solo gobierna el Reporte Semanal: en las otras
+            // vistas no interviene en ningún cálculo, así que se oculta para no
+            // sugerir un filtro que en realidad no se está aplicando.
+            const grupoRegion = document.getElementById('grupoRegion');
+            if (grupoRegion) grupoRegion.hidden = (activa.id !== 'semanal');
+
             // Ruta en la URL: permite marcadores, recarga y botón Atrás.
             const destino = '#' + activa.hash;
             if (!desdeHash && window.location.hash !== destino) {
                 history.pushState(null, '', destino);
             }
 
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            // Al conmutar de pestaña se vuelve arriba; en la carga inicial no,
+            // para no forzar un desplazamiento que el usuario no pidió.
+            if (!desdeHash) window.scrollTo({ top: 0, behavior: 'smooth' });
 
             // Carga diferida: la vista solo descarga sus datos la primera vez.
             const cargar = CARGADORES[activa.id];
@@ -5636,8 +5678,9 @@
            Se aplaza con setTimeout(0) para que el bloque de código termine de ejecutarse
            y todos los módulos queden definidos antes de conmutar de vista. */
         setTimeout(function () {
-            const inicial = dsVistaDesdeHash();
-            if (inicial !== 'semanal') dsMostrarVista(inicial, true);
+            // Se llama SIEMPRE, incluso para 'semanal': así el encabezado queda
+            // sincronizado en la primera carga y no solo al conmutar de pestaña.
+            dsMostrarVista(dsVistaDesdeHash(), true);
         }, 0);
 
         document.getElementById('dsGenerarBtn').addEventListener('click', () => {
@@ -6533,6 +6576,7 @@
 
         async function munCargar() {
             const cont = document.getElementById('munGraficasContent');
+            munData = null;   // permite que "Actualizar" vuelva a leer la hoja
             try {
                 if (cont) cont.innerHTML = '<div class="sk sk-card" style="height:200px"></div>';
                 munData = munParse(await munFetch());
