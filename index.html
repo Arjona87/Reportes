@@ -5571,6 +5571,19 @@
         /* Conmutador de N vistas. Antes era binario (una bandera esDesap y dos divs);
            con la tercera pestaña se volvió un registro, de modo que agregar una cuarta
            no vuelva a exigir reescribir la navegación. */
+        /* Cada vista con carga diferida inscribe aquí su función.
+           No se puede referenciar munData/munCargar directamente desde este punto:
+           están declarados con `let` MÁS ABAJO en el mismo bloque de código, así que
+           tocarlos antes lanza "Cannot access 'munData' before initialization"
+           y aborta todo el código posterior. */
+        const CARGADORES = {};
+        const VISTAS_CARGADAS = {};
+
+        function registrarCargador(idVista, fn) { CARGADORES[idVista] = fn; }
+
+        // dsCargar ya está declarado más arriba: se inscribe aquí, después de CARGADORES.
+        registrarCargador('desaparecidos', dsCargar);
+
         const VISTAS = [
             { id: 'semanal',             div: 'vistaSemanal',        btn: 'navSemanalBtn', hash: 'semanal' },
             { id: 'desaparecidos',       div: 'vistaDesaparecidos',  btn: 'navDesapBtn',   hash: 'desaparecidos' },
@@ -5594,8 +5607,13 @@
             }
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
-            if (activa.id === 'desaparecidos' && !dsData) dsCargar();
-            if (activa.id === 'incidenciamunicipal' && !munData) munCargar();
+
+            // Carga diferida: la vista solo descarga sus datos la primera vez.
+            const cargar = CARGADORES[activa.id];
+            if (cargar && !VISTAS_CARGADAS[activa.id]) {
+                VISTAS_CARGADAS[activa.id] = true;
+                cargar();
+            }
         }
 
         /* Vista según el hash. Se compara en minúsculas para que #IncidenciaMunicipal,
@@ -5614,11 +5632,13 @@
             if (b) b.addEventListener('click', () => dsMostrarVista(v.id));
         });
 
-        // Al cargar: si la URL trae un hash de vista, se abre directamente.
-        (function () {
+        /* Al cargar: si la URL trae un hash de vista, se abre directamente.
+           Se aplaza con setTimeout(0) para que el bloque de código termine de ejecutarse
+           y todos los módulos queden definidos antes de conmutar de vista. */
+        setTimeout(function () {
             const inicial = dsVistaDesdeHash();
             if (inicial !== 'semanal') dsMostrarVista(inicial, true);
-        })();
+        }, 0);
 
         document.getElementById('dsGenerarBtn').addEventListener('click', () => {
             const st = document.getElementById('dsInfoStatus');
@@ -6562,6 +6582,9 @@
         });
 
         conmutar('munMetricaBtns', 'metrica', v => { munEstado.metrica = v; munRenderGraficas(); });
+
+        // El módulo municipal ya está definido: se inscribe para la carga diferida.
+        registrarCargador('incidenciamunicipal', munCargar);
 
     </script>
 </body>
