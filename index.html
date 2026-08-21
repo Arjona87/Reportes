@@ -1219,6 +1219,20 @@
             border-top: 2px solid var(--brand);
         }
         .mun-fila-total .mun-cuenta, .mun-fila-total .mun-cero { color: rgba(255,255,255,.7); }
+
+        .mun-intro { margin-bottom: 16px; }
+        .mun-kicker {
+            display: block; font-size: 10.5px; font-weight: 800;
+            letter-spacing: .10em; text-transform: uppercase;
+            color: var(--accent); margin-bottom: 4px;
+        }
+        .mun-intro p { font-size: 13px; line-height: 1.65; color: var(--muted); margin: 0; }
+        .mun-lectura {
+            font-size: 12.5px; line-height: 1.7; color: var(--ink);
+            border-left: 3px solid var(--brand); background: var(--surface-2);
+            border-radius: var(--r-sm); padding: 9px 13px; margin-top: 12px;
+        }
+        .mun-lectura b { color: var(--brand); }
     </style>
 </head>
 <body>
@@ -1555,6 +1569,11 @@
         </div>
 
         <section id="munAviso">
+            <div class="mun-nota" id="munNotaAnios">
+                <b>Cobertura temporal.</b> Por ahora solo hay datos de <b>2026</b> disponibles.
+                El filtro de año ya está habilitado y se poblará automáticamente conforme se
+                carguen los ejercicios de 2018 a 2025 en la hoja.
+            </div>
             <div class="mun-nota mun-nota-fuerte">
                 <b>Carpetas de investigación abiertas.</b> Las cifras del SESNSP contabilizan
                 <em>carpetas de investigación</em>, no víctimas. Una sola carpeta puede incluir a más de
@@ -1572,6 +1591,10 @@
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">PANORAMA GENERAL</span>
+                    <p>Cifras acumuladas del año bajo el filtro seleccionado. La concentración metropolitana compara los 9 municipios del AMG contra los 116 restantes.</p>
+                </div>
                 <div class="summary-cards" id="munKpiCards">
                     <div class="sk sk-card"></div><div class="sk sk-card"></div>
                     <div class="sk sk-card"></div><div class="sk sk-card"></div>
@@ -1588,6 +1611,8 @@
             </div>
             <div class="panel-cuerpo">
                 <div class="chart-barra">
+                    <label class="info-estado" for="munAnioSelect">Año</label>
+                    <select id="munAnioSelect"></select>
                     <label class="info-estado" for="munDelitoSelect">Tipo de delito</label>
                     <select id="munDelitoSelect"><option value="__TODOS__">Todos los delitos</option></select>
                     <div class="conmutador" id="munMetricaBtns" role="group" aria-label="Métrica">
@@ -1595,6 +1620,10 @@
                         <button data-metrica="tasa">Tasa por 100 mil</button>
                     </div>
                     <span id="munFiltro"></span>
+                </div>
+<div class="mun-intro">
+                    <span class="mun-kicker">LECTURA TERRITORIAL Y DELICTIVA</span>
+                    <p>Veinte gráficas sobre el padrón municipal del SESNSP. Cada una incluye su lectura al pie: qué muestra y cuál es el hallazgo.</p>
                 </div>
                 <div id="munGraficasContent"></div>
             </div>
@@ -1608,6 +1637,10 @@
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">DETALLE NAVEGABLE</span>
+                    <p>Comienza agrupada en AMG e Interior del Estado. Despliega cada región con el botón "+" para ver sus municipios, ordenados por total del año.</p>
+                </div>
                 <div class="table-controls">
                     <select id="munTablaDelito"><option value="__TODOS__">Todos los delitos</option></select>
                     <input type="text" id="munTablaBuscar" placeholder="Buscar municipio…">
@@ -5747,7 +5780,7 @@
 
         let munData = null;
         let munCharts = [];
-        const munEstado = { delito: '__TODOS__', metrica: 'abs', expandido: {}, verTodo: {} };
+        const munEstado = { anio: '__TODOS__', delito: '__TODOS__', metrica: 'abs', expandido: {}, verTodo: {} };
 
         const MUN_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                            'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -5850,9 +5883,14 @@
         }
 
         // ---------- Agregaciones ----------
-        const munFiltra = () => munEstado.delito === '__TODOS__'
+        // El filtro de año se aplica antes que cualquier otro: define el universo.
+        const munPorAnio = () => munEstado.anio === '__TODOS__'
             ? munData.registros
-            : munData.registros.filter(r => r.tipo === munEstado.delito);
+            : munData.registros.filter(r => String(r.anio) === String(munEstado.anio));
+
+        const munFiltra = () => munEstado.delito === '__TODOS__'
+            ? munPorAnio()
+            : munPorAnio().filter(r => r.tipo === munEstado.delito);
 
         function munPorMunicipio(regs) {
             const m = {};
@@ -5931,13 +5969,32 @@
                         <div class="ds-chart-f">Fuente: SESNSP</div>
                         ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
                         <div class="ds-chart-box"><canvas id="${id}"></canvas></div>
+                        <div class="mun-lectura" id="${id}-lec"></div>
                         ${notaCarpetas ? `<div class="mun-nota">Carpetas de investigación abiertas, no víctimas: una carpeta puede incluir a más de una persona.</div>` : ''}
                     </div>`;
+        }
+
+        /* Lectura interpretativa: una frase que dice qué muestra la gráfica.
+           Sin ella, el lector tiene que deducir el hallazgo por su cuenta. */
+        function munLectura(id, html) {
+            const el = document.getElementById(id + '-lec');
+            if (el) el.innerHTML = html;
         }
 
         function munCrear(id, cfg) {
             const el = document.getElementById(id);
             if (!el) return;
+
+            // Las 20 gráficas se construyeron sin adjuntar los plugins, y por eso salían
+            // sin etiquetas: el valor solo aparecía al pasar el cursor. Los plugins ya
+            // existían y funcionaban en la pestaña de Desaparecidos.
+            const tipo = cfg.type;
+            if (tipo === 'doughnut' || tipo === 'pie') {
+                cfg.plugins = [dsDonaPlugin];
+            } else if (tipo !== 'scatter') {
+                cfg.plugins = [dsEtiquetasPlugin, dsTotalApiladoPlugin];
+            }
+
             const chart = new Chart(el, cfg);
             munCharts.push(chart);
             registrarGrafica(id, chart);   // sistema PLUS
@@ -5969,7 +6026,7 @@
                 munLienzo('mun3',  '3 · Concentración acumulada (Pareto)', 'Cuántos municipios explican qué proporción del total.') +
                 munLienzo('mun4',  '4 · Evolución mensual', 'Los meses sin información aparecen en cero.') +
                 munLienzo('mun5',  '5 · Acumulado del año') +
-                munLienzo('mun6',  '6 · AMG e interior, mes a mes') +
+                munLienzo('mun6',  '6 · AMG por municipio frente al interior, mes a mes', 'Cada municipio metropolitano lleva color propio; los 116 municipios del interior se agrupan en gris. La cifra sobre cada columna es el total del mes.') +
                 munLienzo('mun7',  '7 · Variación mensual', 'Diferencia contra el mes anterior.') +
                 munLienzo('mun8',  '8 · Composición por bien jurídico afectado') +
                 munLienzo('mun9',  '9 · Top 12 tipos de delito', null, true) +
@@ -6046,19 +6103,37 @@
                            plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
             });
 
-            // 6 · AMG e interior mes a mes
-            const mesAMG = new Array(12).fill(0), mesInt = new Array(12).fill(0);
-            regs.forEach(r => r.meses.forEach((v, i) => {
-                if (munEsAMG(r.municipio)) mesAMG[i] += (v || 0); else mesInt[i] += (v || 0);
-            }));
+            // 6 · AMG desglosado municipio a municipio, frente al interior en un solo bloque.
+            // Los nueve municipios metropolitanos llevan color propio; los 116 restantes
+            // se agrupan, porque el interés está en ver qué municipio del AMG mueve el total.
+            const serieMun = nombre => {
+                const out = new Array(12).fill(0);
+                regs.filter(r => r.municipio === nombre)
+                    .forEach(r => r.meses.forEach((v, i) => out[i] += (v || 0)));
+                return out;
+            };
+            const mesInterior = new Array(12).fill(0);
+            regs.forEach(r => { if (!munEsAMG(r.municipio)) r.meses.forEach((v, i) => mesInterior[i] += (v || 0)); });
+
+            // Se ordenan de mayor a menor para que las franjas gruesas queden abajo.
+            const amgOrden = MUN_AMG.slice().sort((a, b) => (porMun[b] || 0) - (porMun[a] || 0));
+
             munCrear('mun6', {
                 type: 'bar',
-                data: { labels: mesesEtq, datasets: [
-                    { label: 'AMG', data: mesAMG, backgroundColor: t.brand },
-                    { label: 'Interior', data: mesInt, backgroundColor: t.accent }] },
+                data: { labels: mesesEtq, datasets:
+                    amgOrden.map((nom, i) => ({
+                        label: nom, data: serieMun(nom),
+                        backgroundColor: PALETA[i % PALETA.length], stack: 'z'
+                    })).concat([{
+                        label: 'Interior del estado (116 municipios)',
+                        data: mesInterior, backgroundColor: '#9AA7B4', stack: 'z'
+                    }]) },
                 options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: {}, tooltip: OPC_TOOLTIP },
-                           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
+                           plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } },
+                                      tooltip: OPC_TOOLTIP,
+                                      dsEtiquetas: { enabled: false },
+                                      dsTotalApilado: { enabled: true } },
+                           scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '8%' } } }
             });
 
             // 7 · Variación mensual
@@ -6206,6 +6281,88 @@
                            plugins: { legend: { position: 'bottom' }, tooltip: OPC_TOOLTIP } }
             });
 
+            // ---- Lecturas interpretativas ----
+            // Cada gráfica dice en una frase cuál es su hallazgo, para que el lector
+            // no tenga que deducirlo del eje.
+            const pctDe = (v, tot) => tot ? (v / tot * 100).toFixed(1) + ' %' : '—';
+            const totGen = listaMun.reduce((a, x) => a + x[1], 0);
+            const B = x => '<b>' + esc(String(x)) + '</b>';
+
+            if (top15.length) munLectura('mun1',
+                `${B(top15[0][0])} encabeza con ${B(nf(top15[0][1]))} ${esTasa ? 'por 100 mil' : 'carpetas'}, ` +
+                `${pctDe(top15[0][1], totGen)} del estado. Los tres primeros suman ` +
+                `${B(pctDe(top15.slice(0, 3).reduce((a, x) => a + x[1], 0), totGen))}.`);
+
+            munLectura('mun2', `El AMG concentra ${B(pctDe(amgTot, amgTot + intTot))} de las carpetas con ` +
+                `9 de los 125 municipios; el interior aporta ${B(pctDe(intTot, amgTot + intTot))} con 116.`);
+
+            const i80 = pareto.findIndex(v => v >= 80);
+            munLectura('mun3', i80 >= 0
+                ? `${B(i80 + 1)} municipios explican el 80 % del total estatal.`
+                : `Ni los 30 municipios con más carpetas alcanzan el 80 % del total.`);
+
+            const mesesConDato = serieMes.map((v, i) => [i, v]).filter(x => x[1] > 0);
+            if (mesesConDato.length) {
+                const mx = mesesConDato.reduce((a, x) => x[1] > a[1] ? x : a);
+                const mn = mesesConDato.reduce((a, x) => x[1] < a[1] ? x : a);
+                munLectura('mun4', `El mes más alto es ${B(MUN_MESES[mx[0]])} con ${B(nf(mx[1]))} y el más bajo ` +
+                    `${B(MUN_MESES[mn[0]])} con ${B(nf(mn[1]))}. Hay información hasta ` +
+                    `${B(MUN_MESES[mesesConDato[mesesConDato.length - 1][0]])}.`);
+                munLectura('mun5', `Al cierre de ${B(MUN_MESES[mesesConDato[mesesConDato.length - 1][0]])} el acumulado es ` +
+                    `${B(nf(serieMes.reduce((a, v) => a + v, 0)))}, con un promedio de ` +
+                    `${B(nf(Math.round(serieMes.reduce((a, v) => a + v, 0) / mesesConDato.length)))} por mes.`);
+            }
+
+            const amgMes = amgOrden.map(n => [n, serieMun(n).reduce((a, v) => a + v, 0)]).sort((a, b) => b[1] - a[1]);
+            if (amgMes.length) munLectura('mun6',
+                `Dentro del AMG, ${B(amgMes[0][0])} aporta ${B(nf(amgMes[0][1]))} ` +
+                `(${pctDe(amgMes[0][1], amgTot)} del área metropolitana). El interior completo suma ` +
+                `${B(nf(mesInterior.reduce((a, v) => a + v, 0)))}.`);
+
+            const vv = varMes.filter(v => v !== null);
+            if (vv.length) {
+                const alzas = vv.filter(v => v > 0).length;
+                munLectura('mun7', `De ${B(vv.length)} cambios mensuales, ${B(alzas)} fueron al alza y ` +
+                    `${B(vv.length - alzas)} a la baja.`);
+            }
+
+            if (bienes.length) munLectura('mun8', `${B(bienes[0][0])} concentra ` +
+                `${B(pctDe(bienes[0][1], bienes.reduce((a, x) => a + x[1], 0)))} de las carpetas.`);
+
+            if (tipos.length) munLectura('mun9', `${B(tipos[0][0])} es el delito más frecuente con ` +
+                `${B(nf(tipos[0][1]))} carpetas, ${B(pctDe(tipos[0][1], munData.total))} del total estatal.`);
+
+            munLectura('mun10', `Se contrastan los cinco delitos de mayor volumen. Las series comparten escala, ` +
+                `así que la distancia vertical entre líneas es la brecha real de casos.`);
+
+            const totDol = serieSub('Homicidio doloso').reduce((a, v) => a + v, 0);
+            const totCul = serieSub('Homicidio culposo').reduce((a, v) => a + v, 0);
+            munLectura('mun11', `Homicidio doloso: ${B(nf(totDol))} carpetas. Homicidio culposo: ${B(nf(totCul))}. ` +
+                `Sumarlos daría ${B(nf(totDol + totCul))}, cifra que se leería como violencia intencional ` +
+                `cuando ${B(pctDe(totCul, totDol + totCul))} corresponde a hechos culposos, sobre todo de tránsito.`);
+
+            if (md.length) munLectura('mun12', `${B(md[0][0])} es la modalidad predominante del homicidio doloso, ` +
+                `con ${B(pctDe(md[0][1], md.reduce((a, x) => a + x[1], 0)))} de los casos.`);
+
+            if (rs.length) munLectura('mun13', `${B(rs[0][0])} encabeza los robos con ${B(nf(rs[0][1]))} carpetas.`);
+            if (sx.length) munLectura('mun14', `${B(sx[0][0])} es el más frecuente de este grupo, con ${B(nf(sx[0][1]))} carpetas.`);
+            if (vfl.length) munLectura('mun15', `${B(vfl[0][0])} registra ${B(nf(vfl[0][1]))} carpetas por violencia familiar, ` +
+                `${B(pctDe(vfl[0][1], vfl.reduce((a, x) => a + x[1], 0)))} de los diez municipios mostrados.`);
+
+            munLectura('mun16', `Cada barra es un municipio y cada color un delito: permite ver si su perfil ` +
+                `delictivo se parece o difiere del de sus vecinos.`);
+
+            if (tasas.length) munLectura('mun17', `${B(tasas[0][0])} tiene la tasa más alta con ` +
+                `${B(tasas[0][1])} por cada 100 mil habitantes. Se excluyen municipios de menos de 5,000 habitantes, ` +
+                `donde unos pocos casos disparan la tasa.`);
+
+            munLectura('mun18', `La relación entre tamaño e incidencia no es proporcional: los puntos por encima ` +
+                `de la nube tienen más carpetas de las que su población haría esperar.`);
+
+            munLectura('mun19', `${B(dist[0])} municipios no registraron carpetas y ${B(dist[1])} registraron menos de 50.`);
+            munLectura('mun20', `${B(sinInc.length)} de ${B(munData.municipios.length)} municipios no registran carpetas ` +
+                `bajo el filtro actual. Ausencia de registro no equivale a ausencia de delito.`);
+
             // El sistema PLUS revive cada gráfica al volver a entrar en pantalla.
             observarTodos('#munGraficasContent .ds-chart');
         }
@@ -6224,8 +6381,8 @@
             const delito = filtro ? filtro.value : '__TODOS__';
             const buscar = dsNorm((document.getElementById('munTablaBuscar') || {}).value || '');
 
-            const regs = delito === '__TODOS__' ? munData.registros
-                                                : munData.registros.filter(r => r.tipo === delito);
+            const base = munPorAnio();
+            const regs = delito === '__TODOS__' ? base : base.filter(r => r.tipo === delito);
 
             const porMun = {};
             regs.forEach(r => {
@@ -6312,6 +6469,22 @@
 
         // ---------- Orquestación ----------
         function munLlenarSelectores() {
+            const selA = document.getElementById('munAnioSelect');
+            if (selA) {
+                const anios = munData.anios.slice().sort((x, y) => y - x);
+                selA.innerHTML = (anios.length > 1 ? '<option value="__TODOS__">Todos los años</option>' : '') +
+                    anios.map(a => `<option value="${a}">${a}</option>`).join('');
+                // Con un solo ejercicio cargado, se selecciona ese y no "Todos".
+                if (anios.length === 1) { selA.value = String(anios[0]); munEstado.anio = String(anios[0]); }
+            }
+            const nota = document.getElementById('munNotaAnios');
+            if (nota) {
+                const anios = munData.anios.slice().sort();
+                nota.innerHTML = anios.length > 1
+                    ? `<b>Cobertura temporal.</b> Datos disponibles de <b>${anios[0]}</b> a <b>${anios[anios.length - 1]}</b>.`
+                    : `<b>Cobertura temporal.</b> Por ahora solo hay datos de <b>${anios[0] || '—'}</b> disponibles. ` +
+                      `El filtro de año ya está habilitado y se poblará automáticamente conforme se carguen los ejercicios anteriores en la hoja.`;
+            }
             const tipos = munData.tipos.slice().sort();
             ['munDelitoSelect', 'munTablaDelito'].forEach(id => {
                 const sel = document.getElementById(id);
@@ -6365,6 +6538,14 @@
             }
             munRenderTabla();
         });
+
+        (function () {
+            const el = document.getElementById('munAnioSelect');
+            if (el) el.addEventListener('change', (e) => {
+                munEstado.anio = e.target.value;
+                munRefrescar();
+            });
+        })();
 
         ['munDelitoSelect'].forEach(id => {
             const el = document.getElementById(id);
