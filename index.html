@@ -1257,6 +1257,14 @@
 
         /* El selector de región solo aplica al Reporte Semanal. */
         #grupoRegion[hidden] { display: none !important; }
+
+        .mun-vertodos {
+            background: none; border: 1px solid var(--line); color: var(--brand);
+            border-radius: var(--r-sm); padding: 6px 11px;
+            font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+        }
+        .mun-vertodos:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
+        #munViolenciaBtns[hidden] { display: none !important; }
     </style>
 </head>
 <body>
@@ -1637,8 +1645,14 @@
                 <div class="chart-barra">
                     <label class="info-estado" for="munAnioSelect">Año</label>
                     <select id="munAnioSelect"></select>
-                    <label class="info-estado" for="munDelitoSelect">Tipo de delito</label>
+                    <label class="info-estado" for="munDelitoSelect">Delito</label>
                     <select id="munDelitoSelect"><option value="__TODOS__">Todos los delitos</option></select>
+                    <button type="button" class="mun-vertodos" id="munVerTodosBtn">Ver todos los delitos</button>
+                    <div class="conmutador" id="munViolenciaBtns" role="group" aria-label="Modalidad de violencia" hidden>
+                        <button data-violencia="__TODAS__" class="on">Todos</button>
+                        <button data-violencia="Con violencia">Con violencia</button>
+                        <button data-violencia="Sin violencia">Sin violencia</button>
+                    </div>
                     <div class="conmutador" id="munMetricaBtns" role="group" aria-label="Métrica">
                         <button data-metrica="abs" class="on">Carpetas</button>
                         <button data-metrica="tasa">Tasa por 100 mil</button>
@@ -5843,10 +5857,50 @@
 
         let munData = null;
         let munCharts = [];
-        const munEstado = { anio: '__TODOS__', delito: '__TODOS__', metrica: 'abs', expandido: {}, verTodo: {} };
+        const munEstado = { anio: '__TODOS__', delito: '__TODOS__', nivel: 'tipo',
+                            violencia: '__TODAS__', catalogoCompleto: false,
+                            metrica: 'abs', expandido: {}, verTodo: {} };
 
         const MUN_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                            'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+        /* Catálogo destacado del selector.
+           La lista mezcla los DOS niveles de la jerarquía SESNSP: unos delitos existen
+           como "Tipo" y otros solo como "Subtipo". Por eso cada entrada declara su
+           nivel: filtrar por el campo equivocado devolvería cero resultados. */
+        const MUN_DESTACADOS = [
+            { n: 'Extorsión',                       nivel: 'tipo' },
+            { n: 'Feminicidio',                     nivel: 'tipo' },
+            { n: 'Fraude',                          nivel: 'tipo' },
+            { n: 'Homicidio doloso',                nivel: 'sub'  },
+            { n: 'Homicidio culposo',               nivel: 'sub'  },
+            { n: 'Tentativa de homicidio doloso',   nivel: 'sub'  },
+            { n: 'Narcomenudeo',                    nivel: 'tipo' },
+            { n: 'Privación ilegal de la libertad', nivel: 'tipo' },
+            { n: 'Secuestro',                       nivel: 'tipo' },
+            { n: 'Violencia familiar',              nivel: 'tipo' },
+            { n: 'Robo de vehículo automotor - Coche de 4 ruedas', nivel: 'sub' },
+            { n: 'Robo de vehículo automotor - Motocicleta',       nivel: 'sub' },
+            { n: 'Robo de vehículo automotor - Embarcaciones',     nivel: 'sub' },
+            { n: 'Robo a transeúnte en vía pública',               nivel: 'sub' },
+            { n: 'Robo a transeúnte en espacio abierto al público',nivel: 'sub' },
+            { n: 'Robo a negocio',                                 nivel: 'sub' },
+            { n: 'Robo a casa habitación',                         nivel: 'sub' },
+            { n: 'Robo de autopartes',                             nivel: 'sub' },
+            { n: 'Robo a transportista',                           nivel: 'sub' },
+            { n: 'Robo de ganado',                                 nivel: 'sub' },
+            { n: 'Robo en transporte público individual',          nivel: 'sub' },
+            { n: 'Robo en transporte público colectivo',           nivel: 'sub' },
+            { n: 'Robo en transporte individual',                  nivel: 'sub' },
+            { n: 'Robo a institución bancaria',                    nivel: 'sub' },
+            { n: 'Robo de maquinaria - Tractores y/o montacargas',  nivel: 'sub' },
+            { n: 'Robo de maquinaria - Cables, tubos y otros objetos destinados a servicios públicos', nivel: 'sub' },
+            { n: 'Robo de maquinaria - Herramienta industrial o agrícola', nivel: 'sub' }
+        ];
+
+        // Modalidades de violencia. Verificado: en el padrón SESNSP solo el tipo Robo
+        // las utiliza; ningún otro delito se desagrega así.
+        const MUN_VIOLENCIA = ['Con violencia', 'Sin violencia'];
 
         // Los nueve municipios del Área Metropolitana de Guadalajara.
         const MUN_AMG = ['Guadalajara','Zapopan','San Pedro Tlaquepaque','Tlajomulco de Zúñiga',
@@ -5951,9 +6005,31 @@
             ? munData.registros
             : munData.registros.filter(r => String(r.anio) === String(munEstado.anio));
 
-        const munFiltra = () => munEstado.delito === '__TODOS__'
-            ? munPorAnio()
-            : munPorAnio().filter(r => r.tipo === munEstado.delito);
+        // ¿El delito seleccionado pertenece al tipo Robo? De ello depende que el
+        // conmutador de violencia tenga sentido.
+        function munEsRobo() {
+            if (munEstado.delito === '__TODOS__') return false;
+            if (munEstado.nivel === 'tipo') return dsNorm(munEstado.delito) === dsNorm('Robo');
+            const r = munData.registros.find(x => x.subtipo === munEstado.delito);
+            return !!r && dsNorm(r.tipo) === dsNorm('Robo');
+        }
+
+        function munFiltra() {
+            let regs = munPorAnio();
+
+            if (munEstado.delito !== '__TODOS__') {
+                const campo = munEstado.nivel === 'sub' ? 'subtipo' : 'tipo';
+                regs = regs.filter(r => r[campo] === munEstado.delito);
+            }
+
+            // La violencia solo se aplica cuando el delito es un robo: en cualquier
+            // otro caso filtraría por una modalidad que ese delito no usa y dejaría
+            // el tablero en cero sin explicación.
+            if (munEstado.violencia !== '__TODAS__' && munEsRobo()) {
+                regs = regs.filter(r => r.modalidad === munEstado.violencia);
+            }
+            return regs;
+        }
 
         function munPorMunicipio(regs) {
             const m = {};
@@ -6097,14 +6173,15 @@
                 munLienzo('mun11', '11 · Homicidio doloso frente a culposo',
                           'Nunca se presentan sumados: el culposo incluye accidentes de tránsito.', true) +
                 munLienzo('mun12', '12 · Modalidad del homicidio doloso', null, true) +
-                munLienzo('mun13', '13 · Robo por subtipo', null, true) +
+                munLienzo('mun13', '13 · Robo por subtipo, con y sin violencia', 'Todos los subtipos de robo del padrón traen esta desagregación.', true) +
                 munLienzo('mun14', '14 · Delitos contra la libertad y la seguridad sexual', null, true) +
                 munLienzo('mun15', '15 · Violencia familiar por municipio', 'Top 10 municipios.', true) +
                 munLienzo('mun16', '16 · Perfil delictivo de los cinco municipios mayores') +
                 munLienzo('mun17', '17 · Tasa por 100 mil habitantes', 'Top 15. Población del Censo 2020.') +
                 munLienzo('mun18', '18 · Carpetas frente a población', 'Cada punto es un municipio.') +
                 munLienzo('mun19', '19 · Distribución de municipios por volumen') +
-                munLienzo('mun20', '20 · Municipios sin incidencia registrada');
+                munLienzo('mun20', '20 · Municipios sin incidencia registrada') +
+                munLienzo('mun21', '21 · Intensidad de violencia por subtipo de robo', 'Porcentaje de carpetas cometidas con violencia. Solo subtipos con 20 o más carpetas.', true);
 
             const barras = (id, etiquetas, datos, color, horizontal) => munCrear(id, {
                 type: 'bar',
@@ -6268,12 +6345,44 @@
                            plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } }
             });
 
-            // 13 · Robo por subtipo
-            const robo = {};
-            munData.registros.filter(r => dsNorm(r.tipo) === dsNorm('Robo'))
-                .forEach(r => { robo[r.subtipo] = (robo[r.subtipo] || 0) + r.total; });
+            // 13 · Robo por subtipo, desglosado por modalidad de violencia.
+            // Todos los subtipos de robo del padrón traen esta desagregación.
+            const roboRegs = munPorAnio().filter(r => dsNorm(r.tipo) === dsNorm('Robo'));
+            const robo = {}, roboCV = {}, roboSV = {};
+            roboRegs.forEach(r => {
+                robo[r.subtipo] = (robo[r.subtipo] || 0) + r.total;
+                if (r.modalidad === 'Con violencia') roboCV[r.subtipo] = (roboCV[r.subtipo] || 0) + r.total;
+                if (r.modalidad === 'Sin violencia') roboSV[r.subtipo] = (roboSV[r.subtipo] || 0) + r.total;
+            });
             const rs = munOrdena(robo, 12);
-            barras('mun13', rs.map(x => x[0]), rs.map(x => x[1]), t.accent, true);
+            munCrear('mun13', {
+                type: 'bar',
+                data: { labels: rs.map(x => x[0]), datasets: [
+                    { label: 'Con violencia', data: rs.map(x => roboCV[x[0]] || 0), backgroundColor: t.risk },
+                    { label: 'Sin violencia', data: rs.map(x => roboSV[x[0]] || 0), backgroundColor: t.brand }] },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP },
+                    scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true, ticks: { font: { size: 10 } } } } }
+            });
+
+            // 21 · Proporción de violencia por subtipo de robo.
+            // El apilado muestra volumen; esta muestra intensidad, que es lo que
+            // distingue un fenómeno de otro: no es lo mismo un robo de autopartes
+            // que un asalto a transeúnte, aunque ambos sean "robo".
+            const rsProp = rs.filter(x => x[1] >= 20)
+                .map(x => ({ n: x[0], tot: x[1], pct: +((roboCV[x[0]] || 0) / x[1] * 100).toFixed(1) }))
+                .sort((a, b) => b.pct - a.pct);
+            munCrear('mun21', {
+                type: 'bar',
+                data: { labels: rsProp.map(x => x.n), datasets: [
+                    { label: '% con violencia', data: rsProp.map(x => x.pct),
+                      backgroundColor: rsProp.map(x => x.pct >= 50 ? t.risk : (x.pct >= 20 ? t.accent : t.brand)) }] },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    plugins: { legend: { display: false },
+                        tooltip: Object.assign({}, OPC_TOOLTIP, { callbacks: {
+                            label: c => ` ${c.parsed.x} % con violencia · ${nf(rsProp[c.dataIndex].tot)} carpetas` } }) },
+                    scales: { x: { beginAtZero: true, max: 100 }, y: { ticks: { font: { size: 10 } } } } }
+            });
 
             // 14 · Libertad y seguridad sexual
             const sex = {};
@@ -6407,7 +6516,14 @@
             if (md.length) munLectura('mun12', `${B(md[0][0])} es la modalidad predominante del homicidio doloso, ` +
                 `con ${B(pctDe(md[0][1], md.reduce((a, x) => a + x[1], 0)))} de los casos.`);
 
-            if (rs.length) munLectura('mun13', `${B(rs[0][0])} encabeza los robos con ${B(nf(rs[0][1]))} carpetas.`);
+            const cvTot = Object.values(roboCV).reduce((a, v) => a + v, 0);
+            const svTot = Object.values(roboSV).reduce((a, v) => a + v, 0);
+            if (rs.length) munLectura('mun13', `${B(rs[0][0])} encabeza los robos con ${B(nf(rs[0][1]))} carpetas. ` +
+                `En conjunto, ${B(pctDe(cvTot, cvTot + svTot))} de los robos se cometieron con violencia.`);
+            if (rsProp.length) munLectura('mun21',
+                `${B(rsProp[0].n)} es el robo más violento: ${B(rsProp[0].pct + ' %')} de sus carpetas ocurrieron con violencia. ` +
+                `En el extremo opuesto, ${B(rsProp[rsProp.length - 1].n)} registra ${B(rsProp[rsProp.length - 1].pct + ' %')}. ` +
+                `Son fenómenos distintos que el total de "robo" agrega en una sola cifra.`);
             if (sx.length) munLectura('mun14', `${B(sx[0][0])} es el más frecuente de este grupo, con ${B(nf(sx[0][1]))} carpetas.`);
             if (vfl.length) munLectura('mun15', `${B(vfl[0][0])} registra ${B(nf(vfl[0][1]))} carpetas por violencia familiar, ` +
                 `${B(pctDe(vfl[0][1], vfl.reduce((a, x) => a + x[1], 0)))} de los diez municipios mostrados.`);
@@ -6445,7 +6561,16 @@
             const buscar = dsNorm((document.getElementById('munTablaBuscar') || {}).value || '');
 
             const base = munPorAnio();
-            const regs = delito === '__TODOS__' ? base : base.filter(r => r.tipo === delito);
+            let regs = base;
+            if (delito !== '__TODOS__') {
+                const i = delito.indexOf('::');
+                const nivel = i > 0 ? delito.slice(0, i) : 'tipo';
+                const nombre = i > 0 ? delito.slice(i + 2) : delito;
+                regs = regs.filter(r => r[nivel === 'sub' ? 'subtipo' : 'tipo'] === nombre);
+            }
+            if (munEstado.violencia !== '__TODAS__' && munEsRobo()) {
+                regs = regs.filter(r => r.modalidad === munEstado.violencia);
+            }
 
             const porMun = {};
             regs.forEach(r => {
@@ -6548,15 +6673,58 @@
                     : `<b>Cobertura temporal.</b> Por ahora solo hay datos de <b>${anios[0] || '—'}</b> disponibles. ` +
                       `El filtro de año ya está habilitado y se poblará automáticamente conforme se carguen los ejercicios anteriores en la hoja.`;
             }
-            const tipos = munData.tipos.slice().sort();
+            /* Opciones del selector.
+               Se ocultan los delitos sin ningún registro bajo el año vigente. Es una
+               regla general, no una excepción escrita a mano: si un delito vuelve a
+               registrar casos, reaparece solo; si otro cae a cero, desaparece. */
+            const base = munPorAnio();
+            const totalDe = (nombre, nivel) => {
+                const campo = nivel === 'sub' ? 'subtipo' : 'tipo';
+                return base.filter(r => r[campo] === nombre).reduce((a, r) => a + r.total, 0);
+            };
+
+            const destacados = MUN_DESTACADOS
+                .map(d => Object.assign({}, d, { total: totalDe(d.n, d.nivel) }))
+                .filter(d => d.total > 0);
+
+            const ocultos = MUN_DESTACADOS.length - destacados.length;
+
+            const opcion = (n, nivel, tot) =>
+                `<option value="${esc(nivel + '::' + n)}">${esc(n)}${tot !== undefined ? ` (${nf(tot)})` : ''}</option>`;
+
+            let opciones = '<option value="__TODOS__">Todos los delitos</option>';
+            opciones += '<optgroup label="Delitos prioritarios">' +
+                destacados.map(d => opcion(d.n, d.nivel, d.total)).join('') + '</optgroup>';
+
+            if (munEstado.catalogoCompleto) {
+                const yaEstan = new Set(destacados.map(d => d.nivel + '::' + d.n));
+                const tiposOtros = munData.tipos.slice().sort()
+                    .filter(t => !yaEstan.has('tipo::' + t) && totalDe(t, 'tipo') > 0);
+                const subsOtros = Array.from(new Set(base.map(r => r.subtipo))).filter(Boolean).sort()
+                    .filter(t => !yaEstan.has('sub::' + t) && totalDe(t, 'sub') > 0);
+                opciones += '<optgroup label="Resto del catálogo — Tipo de delito">' +
+                    tiposOtros.map(t => opcion(t, 'tipo')).join('') + '</optgroup>';
+                opciones += '<optgroup label="Resto del catálogo — Subtipo de delito">' +
+                    subsOtros.map(t => opcion(t, 'sub')).join('') + '</optgroup>';
+            }
+
             ['munDelitoSelect', 'munTablaDelito'].forEach(id => {
                 const sel = document.getElementById(id);
                 if (!sel) return;
                 const actual = sel.value;
-                sel.innerHTML = '<option value="__TODOS__">Todos los delitos</option>' +
-                    tipos.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
-                if (actual) sel.value = actual;
+                sel.innerHTML = opciones;
+                if (actual && sel.querySelector(`option[value="${CSS.escape(actual)}"]`)) sel.value = actual;
             });
+
+            const btnVer = document.getElementById('munVerTodosBtn');
+            if (btnVer) {
+                btnVer.textContent = munEstado.catalogoCompleto
+                    ? 'Ver solo delitos prioritarios'
+                    : 'Ver todos los delitos';
+                btnVer.title = ocultos > 0
+                    ? `${ocultos} delito(s) prioritario(s) sin registros en el periodo no se muestran.`
+                    : '';
+            }
         }
 
         function munRenderCinta() {
@@ -6611,13 +6779,52 @@
             });
         })();
 
-        ['munDelitoSelect'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('change', (e) => {
-                munEstado.delito = e.target.value;
-                munRenderKpis();
-                munRenderGraficas();
+        function munAplicarDelito(valor) {
+            if (valor === '__TODOS__') {
+                munEstado.delito = '__TODOS__';
+                munEstado.nivel = 'tipo';
+            } else {
+                const i = valor.indexOf('::');
+                munEstado.nivel = valor.slice(0, i);
+                munEstado.delito = valor.slice(i + 2);
+            }
+
+            /* El conmutador de violencia solo aparece con robos. Al ocultarlo se
+               reinicia a "Todos": si conservara la selección, quedaría un filtro
+               activo que el usuario ya no puede ver ni desactivar. */
+            const grupo = document.getElementById('munViolenciaBtns');
+            const esRobo = munEsRobo();
+            if (grupo) {
+                grupo.hidden = !esRobo;
+                if (!esRobo && munEstado.violencia !== '__TODAS__') {
+                    munEstado.violencia = '__TODAS__';
+                    grupo.querySelectorAll('button').forEach(b =>
+                        b.classList.toggle('on', b.dataset.violencia === '__TODAS__'));
+                }
+            }
+
+            munRenderKpis();
+            munRenderGraficas();
+        }
+
+        (function () {
+            const el = document.getElementById('munDelitoSelect');
+            if (el) el.addEventListener('change', (e) => munAplicarDelito(e.target.value));
+        })();
+
+        (function () {
+            const btn = document.getElementById('munVerTodosBtn');
+            if (btn) btn.addEventListener('click', () => {
+                munEstado.catalogoCompleto = !munEstado.catalogoCompleto;
+                munLlenarSelectores();
             });
+        })();
+
+        conmutar('munViolenciaBtns', 'violencia', v => {
+            munEstado.violencia = v;
+            munRenderKpis();
+            munRenderGraficas();
+            munRenderTabla();
         });
 
         ['munTablaDelito', 'munTablaBuscar'].forEach(id => {
