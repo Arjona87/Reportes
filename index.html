@@ -1289,6 +1289,29 @@
         #munTablaDelito[hidden], #munTablaMunicipio[hidden] { display: none !important; }
 
         .ds-chart-row-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+
+        /* Barra de filtros fija bajo el encabezado: permite cambiar el delito desde
+           cualquier gráfica sin volver al inicio de la sección.
+           El desplazamiento superior se calcula en tiempo de ejecución con la altura
+           real del encabezado, que cambia entre escritorio y móvil. */
+        .mun-barra-fija {
+            position: sticky;
+            top: var(--offset-fijo, 84px);
+            z-index: 40;
+            background: var(--surface);
+            border: 1px solid var(--line-soft);
+            border-radius: var(--r-sm);
+            padding: 10px 12px;
+            margin: 0 0 16px;
+            box-shadow: var(--shadow-lift);
+        }
+        .ds-chart-box-alto { height: 480px; }
+
+        @media (max-width: 768px) {
+            .mun-barra-fija { padding: 8px; gap: 6px; }
+            .mun-barra-fija .info-estado { display: none; }
+            .ds-chart-box-alto { height: 420px; }
+        }
     </style>
 </head>
 <body>
@@ -1666,7 +1689,7 @@
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
-                <div class="chart-barra">
+                <div class="chart-barra mun-barra-fija">
                     <label class="info-estado" for="munAnioSelect">Año</label>
                     <select id="munAnioSelect"></select>
                     <label class="info-estado" for="munDelitoSelect">Delito</label>
@@ -2935,6 +2958,21 @@
         }
 
         const OPC_TOOLTIP = { enabled: false, external: tooltipExterno, mode: 'index', intersect: false };
+
+        /* Variante para gráficas apiladas: añade el TOTAL de la columna al pie del
+           tooltip. Sin él hay que sumar mentalmente diez segmentos para saber cuánto
+           midió el mes. */
+        const TOOLTIP_CON_TOTAL = Object.assign({}, OPC_TOOLTIP, {
+            callbacks: {
+                footer: items => {
+                    const suma = items.reduce((a, it) => {
+                        const v = Number(it.parsed && it.parsed.y !== undefined ? it.parsed.y : it.parsed.x);
+                        return a + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    return 'Total: ' + suma.toLocaleString('es-MX');
+                }
+            }
+        });
 
         // Registro único de gráficas del módulo semanal, para destruirlas antes de
         // redibujar. Sin esto, Chart.js apila instancias sobre el mismo lienzo y la
@@ -4991,8 +5029,11 @@
 
                     const validos = ds.data.filter(v => v !== null && v !== undefined).length;
                     // Densidad: 36 semanas → 1 de cada 3; series medias → 1 de cada 2; cortas → todas.
-                    const paso = (tipo === 'bar' && horizontal) ? 1
-                               : (validos > 20 ? 3 : (validos > 11 ? 2 : 1));
+                    // cfg.paso permite forzar la densidad: hay gráficas donde saltarse
+                    // una de cada dos etiquetas deja fuera valores que sí importan.
+                    const paso = cfg.paso ? cfg.paso
+                               : ((tipo === 'bar' && horizontal) ? 1
+                               : (validos > 20 ? 3 : (validos > 11 ? 2 : 1)));
                     const ultimoIdx = ds.data.reduce((acc, v, i) => (v !== null && v !== undefined) ? i : acc, -1);
 
                     ctx.save();
@@ -5067,7 +5108,7 @@
 
                 const ctx = chart.ctx;
                 const nPuntos = chart.data.labels.length;
-                const paso = nPuntos > 20 ? 3 : (nPuntos > 11 ? 2 : 1);
+                const paso = cfg.paso ? cfg.paso : (nPuntos > 20 ? 3 : (nPuntos > 11 ? 2 : 1));
                 const ultimo = nPuntos - 1;
 
                 ctx.save();
@@ -5107,6 +5148,14 @@
         function dsCrear(id, cfg) {
             const el = document.getElementById(id);
             if (!el) return;
+
+            // Mismo ajuste de eje que en la vista municipal: la gráfica de Top 10
+            // municipios es horizontal y sufría el mismo desfase de tooltip.
+            cfg.options = cfg.options || {};
+            if (!cfg.options.interaction && typeof interaccionEje === 'function') {
+                cfg.options.interaction = interaccionEje(cfg);
+            }
+
             const tipo = cfg.type;
             if (tipo === 'doughnut' || tipo === 'pie') {
                 cfg.plugins = [dsDonaPlugin];
@@ -6148,12 +6197,12 @@
         }
 
         // ---------- Gráficas ----------
-        function munLienzo(id, titulo, nota, notaCarpetas) {
+        function munLienzo(id, titulo, nota, notaCarpetas, alto) {
             return `<div class="ds-chart">
                         <div class="ds-chart-t">${titulo}</div>
                         <div class="ds-chart-f">Fuente: SESNSP</div>
                         ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
-                        <div class="ds-chart-box"><canvas id="${id}"></canvas></div>
+                        <div class="ds-chart-box${alto ? ' ds-chart-box-' + alto : ''}"><canvas id="${id}"></canvas></div>
                         <div class="mun-lectura" id="${id}-lec"></div>
                         ${notaCarpetas ? `<div class="mun-nota">Carpetas de investigación abiertas, no víctimas: una carpeta puede incluir a más de una persona.</div>` : ''}
                     </div>`;
@@ -6166,9 +6215,24 @@
             if (el) el.innerHTML = html;
         }
 
+        /* La distancia al cursor se mide en el eje de las CATEGORÍAS.
+           Chart.js usa axis:'x' por omisión con mode:'index'; en las gráficas
+           horizontales (indexAxis:'y') las categorías van en Y, así que el índice
+           se resolvía por la posición horizontal del cursor y el tooltip mostraba
+           una fila distinta a la señalada. */
+        function interaccionEje(cfg) {
+            const tipo = cfg.type;
+            if (tipo === 'scatter') return { mode: 'nearest', intersect: true, axis: 'xy' };
+            const horizontal = cfg.options && cfg.options.indexAxis === 'y';
+            return { mode: 'index', intersect: false, axis: horizontal ? 'y' : 'x' };
+        }
+
         function munCrear(id, cfg) {
             const el = document.getElementById(id);
             if (!el) return;
+
+            cfg.options = cfg.options || {};
+            cfg.options.interaction = cfg.options.interaction || interaccionEje(cfg);
 
             // Las 20 gráficas se construyeron sin adjuntar los plugins, y por eso salían
             // sin etiquetas: el valor solo aparecía al pasar el cursor. Los plugins ya
@@ -6214,10 +6278,12 @@
 
             cont.innerHTML =
                 munLienzo('mun1',  '1 · AMG por municipio e Interior del Estado',
-                          'Cifra absoluta y tasa por cada 100 mil habitantes en la misma vista. Población del Censo 2020.') +
+                          'Cifra absoluta y tasa por cada 100 mil habitantes en la misma vista. Población del Censo 2020.',
+                          false, 'alto') +
                 '<div class="ds-chart-row ds-chart-row-3">' +
                 munLienzo('mun2',  '2 · AMG frente al interior') +
-                munLienzo('mun3',  '3 · Bien jurídico afectado') +
+                munLienzo('mun3',  '3 · Bien jurídico afectado',
+                          'Composición del catálogo completo del año: no responde al filtro de delito. Cada delito pertenece a un solo bien jurídico, así que al filtrar uno el reparto colapsaría al 100 %.') +
                 munLienzo('mun4',  '4 · Modalidad del homicidio doloso', null, true) +
                 '</div>' +
                 munLienzo('mun5',  '5 · Concentración acumulada (Pareto)',
@@ -6302,7 +6368,10 @@
                 options: opcDona
             });
 
-            const bienes = munOrdena(munAgrupa('bien', regs));
+            // Deliberadamente NO usa `regs`: con un delito filtrado, todas sus carpetas
+            // pertenecen al mismo bien jurídico y la dona mostraba 100 % en una sola
+            // porción. Con el año completo conserva su función: mostrar la composición.
+            const bienes = munOrdena(munAgrupa('bien', munPorAnio()));
             munCrear('mun3', {
                 type: 'doughnut',
                 data: { labels: bienes.map(x => x[0]), datasets: [{ data: bienes.map(x => x[1]),
@@ -6336,14 +6405,21 @@
             munCrear('mun5', {
                 type: 'bar',
                 data: { labels: etqPareto, datasets: [
-                    { type: 'bar', label: 'Carpetas', yAxisID: 'y',
+                    // order mayor = se dibuja ANTES, por tanto queda debajo.
+                    // La línea llevaba el mismo order que las barras y la primera,
+                    // muy alta, la tapaba por completo.
+                    { type: 'bar', label: 'Carpetas', yAxisID: 'y', order: 2,
                       data: top15p.map(x => x[1]).concat([restoSuma]),
                       backgroundColor: top15p.map(() => t.brand).concat(['#9AA7B4']) },
-                    { type: 'line', label: '% acumulado', yAxisID: 'y2', data: pareto,
-                      borderColor: t.accent, backgroundColor: t.accent + '20',
-                      tension: .25, pointRadius: 3, fill: false }] },
+                    { type: 'line', label: '% acumulado', yAxisID: 'y2', data: pareto, order: 0,
+                      borderColor: t.accent, backgroundColor: t.accent + '20', borderWidth: 2.6,
+                      tension: .25, pointRadius: 4, pointBackgroundColor: t.accent,
+                      pointBorderColor: '#fff', pointBorderWidth: 1.5, fill: false }] },
                 options: { responsive: true, maintainAspectRatio: false,
-                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP },
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP,
+                               // Con 16 barras la densidad automática saltaba una de cada dos
+                               // y dejaba sin valor a Zapopan y a los demás índices impares.
+                               dsEtiquetas: { paso: 1 } },
                     scales: {
                         y:  { beginAtZero: true, title: { display: true, text: 'Carpetas', font: { size: 10 } } },
                         y2: { position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false },
@@ -6390,9 +6466,11 @@
                     }]) },
                 options: { responsive: true, maintainAspectRatio: false,
                            plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } },
-                                      tooltip: OPC_TOOLTIP,
+                                      tooltip: TOOLTIP_CON_TOTAL,
                                       dsEtiquetas: { enabled: false },
-                                      dsTotalApilado: { enabled: true } },
+                                      // paso 1: con 12 meses la densidad automática dejaba
+                                      // febrero y abril sin su cifra de total.
+                                      dsTotalApilado: { enabled: true, paso: 1 } },
                            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '8%' } } }
             });
 
@@ -7093,6 +7171,18 @@
         })();
 
         conmutar('munMetricaBtns', 'metrica', v => { munEstado.metrica = v; munRenderGraficas(); });
+
+        /* Altura real del encabezado fijo. Se recalcula al redimensionar porque el
+           encabezado cambia de alto entre escritorio y móvil; fijarla a un valor
+           constante dejaría la barra tapada o flotando en uno de los dos casos. */
+        function munCalcularOffset() {
+            const h = document.querySelector('header');
+            const alto = h ? Math.round(h.getBoundingClientRect().height) : 84;
+            document.documentElement.style.setProperty('--offset-fijo', (alto + 6) + 'px');
+        }
+        window.addEventListener('resize', munCalcularOffset);
+        window.addEventListener('load', munCalcularOffset);
+        munCalcularOffset();
 
         // El módulo municipal ya está definido: se inscribe para la carga diferida.
         registrarCargador('incidenciamunicipal', munCargar);
