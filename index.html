@@ -1265,6 +1265,20 @@
         }
         .mun-vertodos:hover { background: var(--brand); color: #fff; border-color: var(--brand); }
         #munViolenciaBtns[hidden] { display: none !important; }
+
+        .mun-invertir {
+            display: inline-flex; align-items: center; gap: 7px;
+            background: var(--brand); color: #fff; border: none;
+            border-radius: var(--r-sm); padding: 8px 13px;
+            font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap;
+            transition: filter .18s ease, transform .18s ease;
+        }
+        .mun-invertir:hover { filter: brightness(1.12); }
+        .mun-invertir:active { transform: translateY(1px); }
+        .mun-invertir[aria-pressed="true"] { background: var(--accent); color: #18345D; }
+        .mun-invertir-ico { font-size: 16px; line-height: 1; font-weight: 800; }
+        .mun-exp-hueco { display: inline-block; width: 20px; margin-right: 8px; }
+        #munTablaDelito[hidden], #munTablaMunicipio[hidden] { display: none !important; }
     </style>
 </head>
 <body>
@@ -1680,7 +1694,13 @@
                     <p>Comienza agrupada en AMG e Interior del Estado. Despliega cada región con el botón "+" para ver sus municipios, ordenados por total del año.</p>
                 </div>
                 <div class="table-controls">
+                    <button type="button" class="mun-invertir" id="munInvertirBtn"
+                            aria-pressed="false" title="Intercambia los ejes de la tabla">
+                        <span class="mun-invertir-ico" aria-hidden="true">⇄</span>
+                        <span id="munInvertirTxt">Ver delitos por municipio</span>
+                    </button>
                     <select id="munTablaDelito"><option value="__TODOS__">Todos los delitos</option></select>
+                    <select id="munTablaMunicipio" hidden><option value="__TODOS__">Todos los municipios</option></select>
                     <input type="text" id="munTablaBuscar" placeholder="Buscar municipio…">
                 </div>
                 <div class="table-wrapper">
@@ -5859,7 +5879,8 @@
         let munCharts = [];
         const munEstado = { anio: '__TODOS__', delito: '__TODOS__', nivel: 'tipo',
                             violencia: '__TODAS__', catalogoCompleto: false,
-                            metrica: 'abs', expandido: {}, verTodo: {} };
+                            metrica: 'abs', expandido: {}, verTodo: {},
+                            tablaInvertida: false, municipioTabla: '__TODOS__' };
 
         const MUN_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                            'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -6551,7 +6572,14 @@
            se despliega con "+" y muestra sus municipios ordenados por total del año.
            El interior son 116 municipios: se muestran los 20 primeros y el resto
            queda tras un segundo "+", para no volcar de golpe una lista ilegible. */
+        /* La tabla tiene dos modos que comparten el mismo motor de agregación.
+           No se duplica la función: cada modo decide QUÉ agrupa, no CÓMO.
+           Duplicarla llevaría a que ambas copias se desincronizaran con el tiempo. */
         function munRenderTabla() {
+            return munEstado.tablaInvertida ? munTablaPorDelito() : munTablaPorMunicipio();
+        }
+
+        function munTablaPorMunicipio() {
             const head = document.getElementById('munPivotHead');
             const body = document.getElementById('munPivotBody');
             if (!head || !body || !munData) return;
@@ -6655,6 +6683,168 @@
             body.innerHTML = html;
         }
 
+
+        /* ---------- Modo invertido: delitos de un municipio ----------
+           Mismo esqueleto que el modo normal, pero la jerarquía pasa a ser la nativa
+           del SESNSP: Tipo de delito → Subtipo. Los tipos con un solo subtipo no
+           llevan "+": desplegarlos mostraría un renglón idéntico al padre. */
+        function munTablaPorDelito() {
+            const head = document.getElementById('munPivotHead');
+            const body = document.getElementById('munPivotBody');
+            if (!head || !body || !munData) return;
+
+            const buscar = dsNorm((document.getElementById('munTablaBuscar') || {}).value || '');
+            const municipio = munEstado.municipioTabla;
+
+            let regs = munPorAnio().filter(r => dsNorm(r.municipio) !== 'NO ESPECIFICADO');
+            if (municipio !== '__TODOS__') regs = regs.filter(r => r.municipio === municipio);
+
+            // Agregación por tipo, y dentro de cada tipo por subtipo.
+            const porTipo = {};
+            regs.forEach(r => {
+                if (!porTipo[r.tipo]) porTipo[r.tipo] = { meses: new Array(12).fill(0), total: 0, subs: {} };
+                const t = porTipo[r.tipo];
+                r.meses.forEach((v, i) => t.meses[i] += (v || 0));
+                t.total += r.total;
+
+                if (!t.subs[r.subtipo]) t.subs[r.subtipo] = { meses: new Array(12).fill(0), total: 0 };
+                const sub = t.subs[r.subtipo];
+                r.meses.forEach((v, i) => sub.meses[i] += (v || 0));
+                sub.total += r.total;
+            });
+
+            // Solo delitos con registro, en orden descendente por total del año.
+            let tipos = Object.keys(porTipo)
+                .filter(t => porTipo[t].total > 0)
+                .sort((a, b) => porTipo[b].total - porTipo[a].total);
+
+            if (buscar) tipos = tipos.filter(t =>
+                dsNorm(t).includes(buscar) ||
+                Object.keys(porTipo[t].subs).some(sb => dsNorm(sb).includes(buscar)));
+
+            const etiquetaMun = municipio === '__TODOS__' ? 'TODOS LOS MUNICIPIOS' : municipio.toUpperCase();
+
+            head.innerHTML = `<tr>
+                <th style="min-width:250px">Delito${municipio === '__TODOS__' ? '' : ' — ' + esc(municipio)}</th>
+                ${MUN_MESES.map(m => `<th class="mun-num">${m.slice(0, 3)}</th>`).join('')}
+                <th class="mun-num">Total ${munEstado.anio === '__TODOS__' ? '' : munEstado.anio}</th>
+            </tr>`;
+
+            const celdas = d => MUN_MESES.map((m, i) =>
+                `<td class="mun-num">${d.meses[i] ? nf(d.meses[i]) : '<span class="mun-cero">—</span>'}</td>`).join('');
+
+            if (!tipos.length) {
+                body.innerHTML = `<tr><td colspan="14" class="text-center">
+                    Sin registros para ${esc(etiquetaMun.toLowerCase())} bajo el filtro actual.</td></tr>`;
+                return;
+            }
+
+            // Top 20 por omisión: 39 tipos de golpe vuelven la tabla ilegible.
+            const todo = !!munEstado.verTodo.delitos || !!buscar;
+            const visibles = todo ? tipos : tipos.slice(0, 20);
+
+            let html = '';
+            visibles.forEach(t => {
+                const d = porTipo[t];
+                const subs = Object.keys(d.subs)
+                    .filter(sb => d.subs[sb].total > 0)
+                    .sort((a, b) => d.subs[b].total - d.subs[a].total);
+
+                // Un tipo con un solo subtipo no aporta nada al desplegarse.
+                const desplegable = subs.length > 1;
+                const abierto = !!munEstado.expandido['d:' + t];
+
+                html += `<tr class="mun-fila-region">
+                    <td>${desplegable
+                        ? `<button type="button" class="mun-exp" data-region="d:${esc(t)}"
+                             aria-expanded="${abierto ? 'true' : 'false'}">${abierto ? '−' : '+'}</button>`
+                        : '<span class="mun-exp-hueco"></span>'}
+                        <b>${esc(t)}</b>${desplegable ? ` <span class="mun-cuenta">${subs.length} subtipos</span>` : ''}</td>
+                    ${celdas(d)}
+                    <td class="mun-num"><b>${nf(d.total)}</b></td>
+                </tr>`;
+
+                if (desplegable && abierto) {
+                    subs.forEach(sb => {
+                        html += `<tr class="mun-fila-muni">
+                            <td class="mun-sangria">${esc(sb)}</td>
+                            ${celdas(d.subs[sb])}
+                            <td class="mun-num">${nf(d.subs[sb].total)}</td>
+                        </tr>`;
+                    });
+                }
+            });
+
+            if (!todo && tipos.length > 20) {
+                html += `<tr class="mun-fila-mas"><td colspan="14">
+                    <button type="button" class="mun-exp mun-exp-mas" data-vertodo="delitos">+</button>
+                    Ver los ${tipos.length - 20} delitos restantes</td></tr>`;
+            }
+
+            const totalGeneral = tipos.reduce((acc, t) => {
+                porTipo[t].meses.forEach((v, i) => acc.meses[i] += v);
+                acc.total += porTipo[t].total;
+                return acc;
+            }, { meses: new Array(12).fill(0), total: 0 });
+
+            html += `<tr class="mun-fila-total">
+                        <td><b>TOTAL — ${esc(etiquetaMun)}</b>
+                            <span class="mun-cuenta">${tipos.length} delitos</span></td>
+                        ${celdas(totalGeneral)}
+                        <td class="mun-num"><b>${nf(totalGeneral.total)}</b></td>
+                     </tr>`;
+
+            body.innerHTML = html;
+        }
+
+        /* Alterna el modo y adapta los controles: si el desplegable siguiera
+           mostrando delitos mientras las filas SON delitos, el filtro no tendría
+           sentido y el usuario no podría elegir municipio. */
+        function munAlternarTabla() {
+            munEstado.tablaInvertida = !munEstado.tablaInvertida;
+            const inv = munEstado.tablaInvertida;
+
+            const btn = document.getElementById('munInvertirBtn');
+            const txt = document.getElementById('munInvertirTxt');
+            const selD = document.getElementById('munTablaDelito');
+            const selM = document.getElementById('munTablaMunicipio');
+            const busc = document.getElementById('munTablaBuscar');
+
+            if (btn) btn.setAttribute('aria-pressed', inv ? 'true' : 'false');
+            if (txt) txt.textContent = inv ? 'Ver municipios por delito' : 'Ver delitos por municipio';
+            if (selD) selD.hidden = inv;
+            if (selM) selM.hidden = !inv;
+            if (busc) { busc.value = ''; busc.placeholder = inv ? 'Buscar delito…' : 'Buscar municipio…'; }
+
+            // Cada modo tiene su propia jerarquía desplegada.
+            munEstado.expandido = {};
+            munEstado.verTodo = {};
+            munRenderTabla();
+        }
+
+        function munLlenarMunicipios() {
+            const sel = document.getElementById('munTablaMunicipio');
+            if (!sel || !munData) return;
+
+            const base = munPorAnio();
+            const tot = {};
+            base.forEach(r => {
+                if (dsNorm(r.municipio) === 'NO ESPECIFICADO') return;
+                tot[r.municipio] = (tot[r.municipio] || 0) + r.total;
+            });
+            const conDatos = Object.keys(tot).filter(m => tot[m] > 0)
+                                    .sort((a, b) => tot[b] - tot[a]);
+
+            const opt = m => `<option value="${esc(m)}">${esc(m)} (${nf(tot[m])})</option>`;
+            const amg = conDatos.filter(munEsAMG), interior = conDatos.filter(m => !munEsAMG(m));
+
+            const actual = sel.value;
+            sel.innerHTML = '<option value="__TODOS__">Todos los municipios</option>' +
+                (amg.length ? '<optgroup label="Área Metropolitana de Guadalajara">' + amg.map(opt).join('') + '</optgroup>' : '') +
+                (interior.length ? '<optgroup label="Interior del Estado">' + interior.map(opt).join('') + '</optgroup>' : '');
+            if (actual && sel.querySelector(`option[value="${CSS.escape(actual)}"]`)) sel.value = actual;
+        }
+
         // ---------- Orquestación ----------
         function munLlenarSelectores() {
             const selA = document.getElementById('munAnioSelect');
@@ -6749,6 +6939,7 @@
                 if (cont) cont.innerHTML = '<div class="sk sk-card" style="height:200px"></div>';
                 munData = munParse(await munFetch());
                 munLlenarSelectores();
+                munLlenarMunicipios();
                 munRenderCinta();
                 munRefrescar();
                 observeReveal(document.getElementById('munKpis'));
@@ -6775,6 +6966,7 @@
             const el = document.getElementById('munAnioSelect');
             if (el) el.addEventListener('change', (e) => {
                 munEstado.anio = e.target.value;
+                munLlenarMunicipios();   // el padrón con datos cambia según el año
                 munRefrescar();
             });
         })();
@@ -6831,6 +7023,19 @@
             const el = document.getElementById(id);
             if (el) el.addEventListener(id === 'munTablaBuscar' ? 'input' : 'change', munRenderTabla);
         });
+
+        (function () {
+            const btn = document.getElementById('munInvertirBtn');
+            if (btn) btn.addEventListener('click', munAlternarTabla);
+
+            const selM = document.getElementById('munTablaMunicipio');
+            if (selM) selM.addEventListener('change', (e) => {
+                munEstado.municipioTabla = e.target.value;
+                munEstado.expandido = {};
+                munEstado.verTodo = {};
+                munRenderTabla();
+            });
+        })();
 
         conmutar('munMetricaBtns', 'metrica', v => { munEstado.metrica = v; munRenderGraficas(); });
 
