@@ -1294,16 +1294,28 @@
            cualquier gráfica sin volver al inicio de la sección.
            El desplazamiento superior se calcula en tiempo de ejecución con la altura
            real del encabezado, que cambia entre escritorio y móvil. */
+        /* z-index 150: por encima del contenido y de las gráficas, por debajo del
+           encabezado (200), para que al desplazarse pase por detrás de él. */
         .mun-barra-fija {
             position: sticky;
             top: var(--offset-fijo, 84px);
-            z-index: 40;
+            z-index: 150;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
             background: var(--surface);
-            border: 1px solid var(--line-soft);
-            border-radius: var(--r-sm);
-            padding: 10px 12px;
-            margin: 0 0 16px;
-            box-shadow: var(--shadow-lift);
+            border: 1px solid var(--line);
+            border-radius: var(--r-lg);
+            padding: 11px 14px;
+            margin: 0 0 var(--gap);
+            box-shadow: var(--shadow);
+        }
+        /* Al despegarse del flujo se marca con acento, para que se note que
+           quedó fija y no es una barra más del contenido. */
+        .mun-barra-fija.pegada {
+            border-color: var(--accent);
+            box-shadow: 0 6px 18px rgba(16, 34, 51, .16);
         }
         .ds-chart-box-alto { height: 480px; }
 
@@ -1662,6 +1674,31 @@
             </div>
         </section>
 
+        <!-- Barra de filtros fija.
+             Vive FUERA de los paneles: esos llevan overflow:hidden para recortar
+             sus esquinas redondeadas, y position:sticky deja de funcionar en cuanto
+             cualquier ancestro tiene overflow distinto de visible. El navegador no
+             avisa: simplemente trata el elemento como estático.
+             Al colgarla directamente de la vista, gobierna las gráficas y la tabla
+             desde cualquier punto del scroll. -->
+        <div class="mun-barra-fija" id="munBarraFija">
+            <label class="info-estado" for="munAnioSelect">Año</label>
+            <select id="munAnioSelect"></select>
+            <label class="info-estado" for="munDelitoSelect">Delito</label>
+            <select id="munDelitoSelect"><option value="__TODOS__">Todos los delitos</option></select>
+            <button type="button" class="mun-vertodos" id="munVerTodosBtn">Ver todos los delitos</button>
+            <div class="conmutador" id="munViolenciaBtns" role="group" aria-label="Modalidad de violencia" hidden>
+                <button data-violencia="__TODAS__" class="on">Todos</button>
+                <button data-violencia="Con violencia">Con violencia</button>
+                <button data-violencia="Sin violencia">Sin violencia</button>
+            </div>
+            <div class="conmutador" id="munMetricaBtns" role="group" aria-label="Métrica">
+                <button data-metrica="abs" class="on">Carpetas</button>
+                <button data-metrica="tasa">Tasa por 100 mil</button>
+            </div>
+            <span id="munFiltro"></span>
+        </div>
+
         <section id="munKpis">
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span>
@@ -1689,23 +1726,6 @@
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
-                <div class="chart-barra mun-barra-fija">
-                    <label class="info-estado" for="munAnioSelect">Año</label>
-                    <select id="munAnioSelect"></select>
-                    <label class="info-estado" for="munDelitoSelect">Delito</label>
-                    <select id="munDelitoSelect"><option value="__TODOS__">Todos los delitos</option></select>
-                    <button type="button" class="mun-vertodos" id="munVerTodosBtn">Ver todos los delitos</button>
-                    <div class="conmutador" id="munViolenciaBtns" role="group" aria-label="Modalidad de violencia" hidden>
-                        <button data-violencia="__TODAS__" class="on">Todos</button>
-                        <button data-violencia="Con violencia">Con violencia</button>
-                        <button data-violencia="Sin violencia">Sin violencia</button>
-                    </div>
-                    <div class="conmutador" id="munMetricaBtns" role="group" aria-label="Métrica">
-                        <button data-metrica="abs" class="on">Carpetas</button>
-                        <button data-metrica="tasa">Tasa por 100 mil</button>
-                    </div>
-                    <span id="munFiltro"></span>
-                </div>
 <div class="mun-intro">
                     <span class="mun-kicker">LECTURA TERRITORIAL Y DELICTIVA</span>
                     <p>Veinte gráficas sobre el padrón municipal del SESNSP. Cada una incluye su lectura al pie: qué muestra y cuál es el hallazgo.</p>
@@ -7183,6 +7203,22 @@
         window.addEventListener('resize', munCalcularOffset);
         window.addEventListener('load', munCalcularOffset);
         munCalcularOffset();
+
+        /* Marca visual cuando la barra queda fija. IntersectionObserver con un
+           centinela justo encima: cuando ese punto sale de pantalla, la barra ya
+           está pegada al encabezado. */
+        (function () {
+            const barra = document.getElementById('munBarraFija');
+            if (!barra || !('IntersectionObserver' in window)) return;
+
+            const centinela = document.createElement('div');
+            centinela.style.cssText = 'height:1px;margin:0;padding:0';
+            barra.parentNode.insertBefore(centinela, barra);
+
+            new IntersectionObserver(([e]) => {
+                barra.classList.toggle('pegada', !e.isIntersecting);
+            }, { rootMargin: '-120px 0px 0px 0px', threshold: 0 }).observe(centinela);
+        })();
 
         // El módulo municipal ya está definido: se inscribe para la carga diferida.
         registrarCargador('incidenciamunicipal', munCargar);
