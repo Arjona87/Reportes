@@ -7,7 +7,10 @@
     <title>Centro de Mando — Incidencia Delictiva y Personas Desaparecidas | CGES Jalisco</title>
 
     <!-- Chart.js para gráficas -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Versión mayor fijada a propósito: sin el @4 se sirve "latest", y el día que
+         se publique una versión 5 con cambios incompatibles el tablero dejaría de
+         funcionar sin que nadie haya tocado el archivo. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 
     <!-- Poppins (display + Canvas) e Inter (texto y cifras). Si no cargan, Canvas usa Arial. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5988,6 +5991,7 @@
 
         function ensureRevealObserver() {
             if (plusRevealObserver) return plusRevealObserver;
+            if (typeof IntersectionObserver === 'undefined') return null;
             plusRevealObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (!entry.isIntersecting || !isPlusEnabled()) return;
@@ -6007,8 +6011,10 @@
 
         function observeReveal(el) {
             if (!el || el.dataset.plusObservado) return;
+            const obs = ensureRevealObserver();
+            if (!obs) return;
             el.dataset.plusObservado = '1';
-            ensureRevealObserver().observe(el);
+            try { obs.observe(el); } catch (e) { console.warn('PLUS:', e.message); }
         }
 
         function observarTodos(selector, raiz) {
@@ -6022,6 +6028,10 @@
 
         function ensurePlusChartObserver() {
             if (plusChartObserver) return plusChartObserver;
+            // Sin IntersectionObserver el sistema PLUS se desactiva, pero el tablero
+            // debe seguir dibujándose: antes la excepción subía hasta updateUI() y
+            // dejaba la página entera sin contenido.
+            if (typeof IntersectionObserver === 'undefined') return null;
             plusChartObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (!entry.isIntersecting || !isPlusEnabled()) return;
@@ -6051,11 +6061,17 @@
            una gráfica nueva, la entrada del mapa se sobreescribe. */
         function registrarGrafica(idCanvas, chart) {
             if (!idCanvas || !chart) return chart;
-            PLUS_GRAFICAS.set(idCanvas, chart);
-            const el = document.getElementById(idCanvas);
-            if (el && !el.dataset.plusChartObservado) {
-                el.dataset.plusChartObservado = '1';
-                ensurePlusChartObserver().observe(el);
+            // Registrar una gráfica es un extra: nunca debe poder impedir que se dibuje.
+            try {
+                PLUS_GRAFICAS.set(idCanvas, chart);
+                const obs = ensurePlusChartObserver();
+                const el = document.getElementById(idCanvas);
+                if (obs && el && !el.dataset.plusChartObservado) {
+                    el.dataset.plusChartObservado = '1';
+                    obs.observe(el);
+                }
+            } catch (e) {
+                console.warn('PLUS: no se pudo registrar', idCanvas, e.message);
             }
             return chart;
         }
@@ -7404,12 +7420,33 @@
         }
 
         // ---------- Descarga y parseo ----------
+        /* La hoja tiene 116 columnas y el módulo usa 27. Bajarla completa son 19.5 MB
+           por visita; pidiendo solo las columnas necesarias con gviz/tq son 5 MB — un
+           74 % menos. Además, como las cuatro pestañas leen el MISMO documento, una
+           descarga de 19.5 MB retrasa también a las otras hojas.
+           Si la consulta fallara, se recurre a la exportación completa. */
+        const FIS_COLUMNAS = 'A,U,W,X,Z,Q,R,AL,DA,AN,CW,CU,BW,BX,AD,AB,AV,AX,CC,N,BI,DI,BB,BC,BD,CL,F';
+
         function fisFetch() {
-            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.FISCALIA.gid}`;
-            return fetch(url).then(r => {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.text();
-            });
+            const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+                         `?tqx=out:csv&gid=${SHEETS.FISCALIA.gid}` +
+                         `&tq=${encodeURIComponent('select ' + FIS_COLUMNAS)}`;
+
+            return fetch(base)
+                .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                .then(txt => {
+                    // gviz responde con una página de error si la consulta no es válida.
+                    if (/^\s*</.test(txt) || txt.indexOf('wkt_geom') === -1) throw new Error('respuesta no utilizable');
+                    return txt;
+                })
+                .catch(err => {
+                    console.warn('Fiscalía: gviz no disponible (' + err.message + '), se usa la exportación completa.');
+                    const alt = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.FISCALIA.gid}`;
+                    return fetch(alt).then(r => {
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.text();
+                    });
+                });
         }
 
         const fisNum = v => {
@@ -7957,6 +7994,10 @@
             const cont = document.getElementById('fisGraficasContent');
             try {
                 if (cont) cont.innerHTML = '<div class="sk sk-card" style="height:220px"></div>';
+                const aviso = document.getElementById('fisCalidad');
+                if (aviso) aviso.innerHTML = '<b>Descargando el registro…</b> Son cerca de 5 MB: ' +
+                    'en una conexión lenta puede tardar. Las demás pestañas siguen disponibles.';
+
                 // Las librerías pesadas se piden en paralelo con los datos.
                 const [csv] = await Promise.all([fisFetch(), fisCargarLibs()]);
                 fisData = fisParse(csv);
@@ -7995,7 +8036,10 @@
             if (r) r.addEventListener('click', fisGenerarReporte);
         })();
 
-        registrarCargador('fiscalia', fisCargar);
+        /* Se aplaza un instante para no competir con la descarga inicial del Reporte
+           Semanal: las cuatro hojas viven en el MISMO documento de Google, y una
+           petición pesada retrasa a las demás. */
+        registrarCargador('fiscalia', () => setTimeout(fisCargar, 400));
 
     </script>
 </body>
