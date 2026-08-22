@@ -804,6 +804,40 @@
         .data-table th:nth-child(3), .data-table th:nth-child(4) { text-align: right; }
         .data-table input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
 
+        /* ---- Tablas compactas · SOLO vista Fiscalía ----------------------------
+           Modificador LOCAL. No se altera `.data-table`, que comparten el Reporte
+           Semanal e Incidencia Municipal y sí necesita su `min-width: 700px`.
+           Estas cuatro tablas viven a dos columnas dentro de un `ds-chart-row`
+           (~550 px cada una), así que ese mínimo forzaba el desplazamiento lateral
+           y cortaba las columnas Total y %.
+           Va DESPUÉS de las reglas de `.data-table`: misma especificidad, gana la
+           posterior. El `overflow-x: auto` del contenedor se conserva como red de
+           seguridad en pantallas muy estrechas. */
+        .data-table-compacta { min-width: 0; font-size: 12px; }
+        .data-table-compacta thead th { font-size: 9.5px; letter-spacing: .04em; padding: 8px 6px; }
+        .data-table-compacta tbody td { padding: 6px 6px; }
+        /* La elipsis se aplica solo al cuerpo: los encabezados son cortos y no se
+           les toca `overflow`, para no interferir con su `position: sticky`. */
+        .data-table-compacta tbody td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* Cruce día × franja: 1 etiqueta + 7 días + Total = 9 columnas. */
+        .data-table-cruce { table-layout: fixed; }
+        .data-table-cruce th:first-child, .data-table-cruce td:first-child { width: 20%; }
+        .data-table-cruce th:not(:first-child), .data-table-cruce td:not(:first-child) { width: 10%; }
+
+        /* Ranking con municipio: Municipio · Colonia · Eventos · %. */
+        .data-table-rank4 { table-layout: fixed; }
+        .data-table-rank4 th:nth-child(1), .data-table-rank4 td:nth-child(1) { width: 30%; }
+        .data-table-rank4 th:nth-child(2), .data-table-rank4 td:nth-child(2) { width: 40%; }
+        .data-table-rank4 th:nth-child(3), .data-table-rank4 td:nth-child(3) { width: 17%; }
+        .data-table-rank4 th:nth-child(4), .data-table-rank4 td:nth-child(4) { width: 13%; }
+
+        /* Ranking sin municipio: Sector · Eventos · %. */
+        .data-table-rank3 { table-layout: fixed; }
+        .data-table-rank3 th:nth-child(1), .data-table-rank3 td:nth-child(1) { width: 55%; }
+        .data-table-rank3 th:nth-child(2), .data-table-rank3 td:nth-child(2) { width: 27%; }
+        .data-table-rank3 th:nth-child(3), .data-table-rank3 td:nth-child(3) { width: 18%; }
+
         .variation-cell {
             display: inline-block;
             font-weight: 600;
@@ -7746,8 +7780,10 @@
                 fisLienzo('fisG6', '6 · Top municipios: eventos y tasa por 100 mil',
                           'Población del Censo 2020. La tasa permite comparar municipios de distinto tamaño.', true) +
                 fisLienzo('fisG7', '7 · Distribución por franja horaria') +
+                '<div class="ds-chart-row">' +
                 fisLienzo('fisG8', '8 · Marcas más afectadas', 'Solo aplica a delitos con objeto vehicular.') +
                 fisLienzo('fisG9', '9 · Submarcas más afectadas') +
+                '</div>' +
                 fisLienzo('fisG10', '10 · Giro comercial más afectado', 'Aplica a robo a negocio.');
 
             const barras = (id, etq, datos, color, horiz) => fisCrear(id, {
@@ -7890,7 +7926,7 @@
                 <div class="ds-chart">
                     <div class="ds-chart-t">${titulo}</div>
                     <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
-                    <div class="table-wrapper"><table class="data-table"><thead><tr>
+                    <div class="table-wrapper"><table class="data-table data-table-compacta data-table-cruce"><thead><tr>
                         <th></th>${FIS_DIAS_CORTO.map(d => `<th class="mun-num">${d}</th>`).join('')}
                         <th class="mun-num">Total</th></tr></thead><tbody>
                         ${FIS_FRANJAS.map(f => `<tr>
@@ -7916,15 +7952,19 @@
                 <div class="ds-chart">
                     <div class="ds-chart-t">${titulo}</div>
                     <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
-                    <div class="table-wrapper"><table class="data-table"><thead><tr>
+                    <div class="table-wrapper"><table class="data-table data-table-compacta ${conMun ? 'data-table-rank4' : 'data-table-rank3'}"><thead><tr>
                         ${conMun ? '<th>Municipio</th>' : ''}<th>${conMun ? 'Colonia' : 'Sector'}</th>
                         <th class="mun-num">Eventos</th><th class="mun-num">%</th>
                     </tr></thead><tbody>
                         ${top.map(([k, v]) => {
                             const p = regs.length ? (v / regs.length * 100).toFixed(1) : '0.0';
                             const partes = k.split('||');
-                            return `<tr>${conMun ? `<td>${esc(partes[0])}</td>` : ''}
-                                <td>${esc(conMun ? partes[1] : k)}</td>
+                            /* Con la tabla comprimida los nombres largos se recortan con
+                               elipsis: el `title` devuelve el texto íntegro al pasar el cursor,
+                               para que no se pierda información. */
+                            const nom = conMun ? partes[1] : k;
+                            return `<tr>${conMun ? `<td title="${esc(partes[0])}">${esc(partes[0])}</td>` : ''}
+                                <td title="${esc(nom)}">${esc(nom)}</td>
                                 <td class="mun-num">${nf(v)}</td><td class="mun-num">${p} %</td></tr>`;
                         }).join('')}
                     </tbody></table></div>
