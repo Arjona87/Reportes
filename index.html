@@ -929,6 +929,14 @@
         }
         .cges-tip .tip-l { display: flex; justify-content: space-between; gap: 16px; }
 
+        .cges-tip .tip-n { display: inline-flex; align-items: center; gap: 7px; color: rgba(255,255,255,.92); }
+        .cges-tip .tip-sw {
+            width: 10px; height: 10px; flex: 0 0 10px;
+            border-radius: 2px; display: inline-block;
+            border: 1px solid rgba(255,255,255,.35);
+        }
+        .cges-tip .tip-l b { color: #fff; white-space: nowrap; }
+
         /* =====================================================================
            INFOGRAFÍA
            ===================================================================== */
@@ -1279,6 +1287,8 @@
         .mun-invertir-ico { font-size: 16px; line-height: 1; font-weight: 800; }
         .mun-exp-hueco { display: inline-block; width: 20px; margin-right: 8px; }
         #munTablaDelito[hidden], #munTablaMunicipio[hidden] { display: none !important; }
+
+        .ds-chart-row-3 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
     </style>
 </head>
 <body>
@@ -2887,11 +2897,26 @@
 
             const titulo = (tt.title && tt.title[0]) ? tt.title[0] : '';
             const lineas = (tt.body || []).map((b, i) => {
-                const color = (tt.labelColors && tt.labelColors[i]) ? tt.labelColors[i].borderColor : 'currentColor';
-                const partes = String(b.lines[0] || '').split(':');
-                const etq = partes.shift();
-                const val = partes.join(':').trim();
-                return `<div class="tip-l"><span style="color:${color}">${etq}</span><b>${val}</b></div>`;
+                /* El nombre de la serie se pintaba con labelColors[i].borderColor.
+                   En las gráficas de barras los datasets solo definen backgroundColor,
+                   así que borderColor caía al valor por omisión de Chart.js —
+                   rgba(0,0,0,0.1)— y el texto quedaba invisible sobre el fondo oscuro
+                   del tooltip: se veía la cifra pero no a qué correspondía.
+                   Ahora el color va en un cuadro indicador y el texto en tono legible. */
+                const lc = (tt.labelColors && tt.labelColors[i]) ? tt.labelColors[i] : {};
+                const muestra = lc.backgroundColor || lc.borderColor || 'currentColor';
+
+                // Se separa por el PRIMER ':' nada más: varios delitos del catálogo
+                // llevan dos puntos en el nombre y se truncaban.
+                const linea = String(b.lines[0] || '');
+                const corte = linea.indexOf(':');
+                const etq = corte > -1 ? linea.slice(0, corte) : linea;
+                const val = corte > -1 ? linea.slice(corte + 1).trim() : '';
+
+                return `<div class="tip-l">
+                            <span class="tip-n"><i class="tip-sw" style="background:${muestra}"></i>${etq}</span>
+                            <b>${val}</b>
+                        </div>`;
             }).join('');
 
             const pie = (tt.footer && tt.footer.length)
@@ -6180,29 +6205,42 @@
             const mesesEtq = MUN_MESES.slice();
             const serieMes = munPorMes(regs);
 
+            // Los meses sin información deben quedar VACÍOS, no en cero: con 0 las
+            // líneas se desplomaban en agosto y parecía una caída real de la incidencia.
+            const ultimo = munData.ultimoMes;
+            const cortar = arr => arr.map((v, i) => (ultimo >= 0 && i > ultimo) ? null : v);
+
+            const serieMesC = cortar(serieMes);
+
             cont.innerHTML =
-                munLienzo('mun1',  '1 · Top 15 municipios', 'Ordenados por el acumulado del año.') +
-                munLienzo('mun2',  '2 · AMG frente al interior del estado') +
-                munLienzo('mun3',  '3 · Concentración acumulada (Pareto)', 'Cuántos municipios explican qué proporción del total.') +
-                munLienzo('mun4',  '4 · Evolución mensual', 'Los meses sin información aparecen en cero.') +
-                munLienzo('mun5',  '5 · Acumulado del año') +
-                munLienzo('mun6',  '6 · AMG por municipio frente al interior, mes a mes', 'Cada municipio metropolitano lleva color propio; los 116 municipios del interior se agrupan en gris. La cifra sobre cada columna es el total del mes.') +
-                munLienzo('mun7',  '7 · Variación mensual', 'Diferencia contra el mes anterior.') +
-                munLienzo('mun8',  '8 · Composición por bien jurídico afectado') +
-                munLienzo('mun9',  '9 · Top 12 tipos de delito', null, true) +
-                munLienzo('mun10', '10 · Evolución de los cinco delitos principales', null, true) +
-                munLienzo('mun11', '11 · Homicidio doloso frente a culposo',
+                munLienzo('mun1',  '1 · AMG por municipio e Interior del Estado',
+                          'Cifra absoluta y tasa por cada 100 mil habitantes en la misma vista. Población del Censo 2020.') +
+                '<div class="ds-chart-row ds-chart-row-3">' +
+                munLienzo('mun2',  '2 · AMG frente al interior') +
+                munLienzo('mun3',  '3 · Bien jurídico afectado') +
+                munLienzo('mun4',  '4 · Modalidad del homicidio doloso', null, true) +
+                '</div>' +
+                munLienzo('mun5',  '5 · Concentración acumulada (Pareto)',
+                          'Los 15 municipios con más carpetas, y el resto agrupado en una decimosexta barra.') +
+                munLienzo('mun6',  '6 · Evolución mensual', 'Los meses sin información quedan vacíos.') +
+                munLienzo('mun7',  '7 · Acumulado del año') +
+                munLienzo('mun8',  '8 · AMG por municipio frente al interior, mes a mes',
+                          'Cada municipio metropolitano lleva color propio; los 116 del interior se agrupan en gris.') +
+                munLienzo('mun9',  '9 · Variación mensual', 'Diferencia contra el mes anterior.') +
+                munLienzo('mun10', '10 · Top 12 tipos de delito', null, true) +
+                munLienzo('mun11', '11 · Evolución de los cinco delitos principales', null, true) +
+                munLienzo('mun12', '12 · Homicidio doloso frente a culposo',
                           'Nunca se presentan sumados: el culposo incluye accidentes de tránsito.', true) +
-                munLienzo('mun12', '12 · Modalidad del homicidio doloso', null, true) +
-                munLienzo('mun13', '13 · Robo por subtipo, con y sin violencia', 'Todos los subtipos de robo del padrón traen esta desagregación.', true) +
-                munLienzo('mun14', '14 · Delitos contra la libertad y la seguridad sexual', null, true) +
-                munLienzo('mun15', '15 · Violencia familiar por municipio', 'Top 10 municipios.', true) +
-                munLienzo('mun16', '16 · Perfil delictivo de los cinco municipios mayores') +
-                munLienzo('mun17', '17 · Tasa por 100 mil habitantes', 'Top 15. Población del Censo 2020.') +
-                munLienzo('mun18', '18 · Carpetas frente a población', 'Cada punto es un municipio.') +
-                munLienzo('mun19', '19 · Distribución de municipios por volumen') +
-                munLienzo('mun20', '20 · Municipios sin incidencia registrada') +
-                munLienzo('mun21', '21 · Intensidad de violencia por subtipo de robo', 'Porcentaje de carpetas cometidas con violencia. Solo subtipos con 20 o más carpetas.', true);
+                munLienzo('mun13', '13 · Robo por subtipo, con y sin violencia',
+                          'Todos los subtipos de robo del padrón traen esta desagregación.', true) +
+                munLienzo('mun14', '14 · Intensidad de violencia por subtipo de robo',
+                          'Porcentaje de carpetas cometidas con violencia. Solo subtipos con 20 o más carpetas.', true) +
+                munLienzo('mun15', '15 · Delitos contra la libertad y la seguridad sexual', null, true) +
+                munLienzo('mun16', '16 · Violencia familiar por municipio', 'Top 10 municipios.', true) +
+                munLienzo('mun17', '17 · Perfil delictivo de los cinco municipios mayores') +
+                munLienzo('mun18', '18 · Tasa por 100 mil habitantes', 'Top 15 del estado. Población del Censo 2020.') +
+                munLienzo('mun19', '19 · Carpetas frente a población', 'Cada punto es un municipio.') +
+                munLienzo('mun20', '20 · Distribución de municipios por volumen');
 
             const barras = (id, etiquetas, datos, color, horizontal) => munCrear(id, {
                 type: 'bar',
@@ -6215,79 +6253,140 @@
                 }
             });
 
-            // 1 · Top 15 municipios
-            const top15 = listaMun.slice(0, 15);
-            barras('mun1', top15.map(x => x[0]),
-                   top15.map(x => munValor(x[0], x[1])), t.brand, true);
-
-            // 2 · AMG vs interior
-            const amgTot = listaMun.filter(x => munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
-            const intTot = listaMun.filter(x => !munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
-            munCrear('mun2', {
-                type: 'doughnut',
-                data: { labels: ['AMG (9 municipios)', 'Interior (116 municipios)'],
-                        datasets: [{ data: [amgTot, intTot], backgroundColor: [t.brand, t.accent] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom' }, tooltip: OPC_TOOLTIP } }
-            });
-
-            // 3 · Pareto
-            const totalGen = listaMun.reduce((a, x) => a + x[1], 0) || 1;
-            let acum = 0;
-            const pareto = listaMun.slice(0, 30).map(x => { acum += x[1]; return +(acum / totalGen * 100).toFixed(1); });
-            munCrear('mun3', {
-                type: 'line',
-                data: { labels: listaMun.slice(0, 30).map((x, i) => (i + 1) + '. ' + x[0]),
-                        datasets: [{ label: '% acumulado', data: pareto, borderColor: t.accent,
-                                     backgroundColor: t.accent + '20', fill: true, tension: .25, pointRadius: 2 }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP },
-                           scales: Object.assign({}, ejes(t), { y: { beginAtZero: true, max: 100 } }) }
-            });
-
-            // 4 · Evolución mensual
-            munCrear('mun4', {
-                type: 'line',
-                data: { labels: mesesEtq, datasets: [{ label: 'Carpetas', data: serieMes,
-                        borderColor: t.brand, backgroundColor: t.brand + '20', fill: true, tension: .3, pointRadius: 3 }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
-            });
-
-            // 5 · Acumulado
-            let ac = 0;
-            munCrear('mun5', {
-                type: 'line',
-                data: { labels: mesesEtq, datasets: [{ label: 'Acumulado', data: serieMes.map(v => (ac += v)),
-                        borderColor: t.accent, backgroundColor: t.accent + '18', fill: true, tension: .25, pointRadius: 3 }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
-            });
-
-            // 6 · AMG desglosado municipio a municipio, frente al interior en un solo bloque.
-            // Los nueve municipios metropolitanos llevan color propio; los 116 restantes
-            // se agrupan, porque el interés está en ver qué municipio del AMG mueve el total.
+            // ---- 1 · AMG desglosado + Interior, con doble métrica ----
             const serieMun = nombre => {
                 const out = new Array(12).fill(0);
                 regs.filter(r => r.municipio === nombre)
                     .forEach(r => r.meses.forEach((v, i) => out[i] += (v || 0)));
                 return out;
             };
+            const amgOrden = MUN_AMG.slice().sort((a, b) => (porMun[b] || 0) - (porMun[a] || 0));
+            const intCarpetas = listaMun.filter(x => !munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
+            const intPoblacion = MUN_POB_TOTAL - MUN_AMG.reduce((a, m) => a + (MUN_POBLACION[m] || 0), 0);
+
+            const filas1 = amgOrden.map(m => ({
+                n: m, abs: porMun[m] || 0,
+                tasa: MUN_POBLACION[m] ? +((porMun[m] || 0) / MUN_POBLACION[m] * 100000).toFixed(1) : 0
+            })).concat([{
+                n: 'Interior del Estado (116 mun.)', abs: intCarpetas,
+                tasa: intPoblacion > 0 ? +(intCarpetas / intPoblacion * 100000).toFixed(1) : 0
+            }]);
+
+            munCrear('mun1', {
+                type: 'bar',
+                data: { labels: filas1.map(x => x.n), datasets: [
+                    { label: 'Carpetas de investigación', data: filas1.map(x => x.abs),
+                      backgroundColor: t.brand, xAxisID: 'x' },
+                    { label: 'Tasa por 100 mil habitantes', data: filas1.map(x => x.tasa),
+                      backgroundColor: t.accent, xAxisID: 'x2' }] },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP },
+                    scales: {
+                        x:  { position: 'bottom', beginAtZero: true,
+                              title: { display: true, text: 'Carpetas', color: t.brand, font: { size: 10 } } },
+                        x2: { position: 'top', beginAtZero: true, grid: { drawOnChartArea: false },
+                              title: { display: true, text: 'Tasa por 100 mil', color: t.accent, font: { size: 10 } } },
+                        y:  { ticks: { font: { size: 10 } } } } }
+            });
+
+            // ---- 2, 3, 4 · Donas en una sola fila ----
+            const opcDona = { responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } };
+
+            const amgTot = listaMun.filter(x => munEsAMG(x[0])).reduce((a, x) => a + x[1], 0);
+            const intTot = intCarpetas;
+            munCrear('mun2', {
+                type: 'doughnut',
+                data: { labels: ['AMG (9 municipios)', 'Interior (116 municipios)'],
+                        datasets: [{ data: [amgTot, intTot], backgroundColor: [t.brand, t.accent] }] },
+                options: opcDona
+            });
+
+            const bienes = munOrdena(munAgrupa('bien', regs));
+            munCrear('mun3', {
+                type: 'doughnut',
+                data: { labels: bienes.map(x => x[0]), datasets: [{ data: bienes.map(x => x[1]),
+                        backgroundColor: bienes.map((x, i) => PALETA[i % PALETA.length]) }] },
+                options: opcDona
+            });
+
+            const modDol = {};
+            munData.registros.filter(r => dsNorm(r.subtipo) === dsNorm('Homicidio doloso'))
+                .forEach(r => { modDol[r.modalidad] = (modDol[r.modalidad] || 0) + r.total; });
+            const md = munOrdena(modDol);
+            munCrear('mun4', {
+                type: 'doughnut',
+                data: { labels: md.map(x => x[0]), datasets: [{ data: md.map(x => x[1]),
+                        backgroundColor: md.map((x, i) => PALETA[i % PALETA.length]) }] },
+                options: opcDona
+            });
+
+            // ---- 5 · Pareto: top 15 con nombre legible + el resto agrupado ----
+            const totalGen = listaMun.reduce((a, x) => a + x[1], 0) || 1;
+            const top15p = listaMun.slice(0, 15);
+            const restoP = listaMun.slice(15);
+            const restoSuma = restoP.reduce((a, x) => a + x[1], 0);
+
+            const etqPareto = top15p.map((x, i) => (i + 1) + '. ' + x[0])
+                .concat([`16. Todos los demás (${restoP.length} municipios)`]);
+            let acum = 0;
+            const pareto = top15p.map(x => { acum += x[1]; return +(acum / totalGen * 100).toFixed(1); })
+                                 .concat([100]);
+
+            munCrear('mun5', {
+                type: 'bar',
+                data: { labels: etqPareto, datasets: [
+                    { type: 'bar', label: 'Carpetas', yAxisID: 'y',
+                      data: top15p.map(x => x[1]).concat([restoSuma]),
+                      backgroundColor: top15p.map(() => t.brand).concat(['#9AA7B4']) },
+                    { type: 'line', label: '% acumulado', yAxisID: 'y2', data: pareto,
+                      borderColor: t.accent, backgroundColor: t.accent + '20',
+                      tension: .25, pointRadius: 3, fill: false }] },
+                options: { responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP },
+                    scales: {
+                        y:  { beginAtZero: true, title: { display: true, text: 'Carpetas', font: { size: 10 } } },
+                        y2: { position: 'right', beginAtZero: true, max: 100, grid: { drawOnChartArea: false },
+                              title: { display: true, text: '% acumulado', color: t.accent, font: { size: 10 } } },
+                        x:  { ticks: { font: { size: 9 }, maxRotation: 60, minRotation: 45 } } } }
+            });
+
+            const linea = (id, datasets, extra) => munCrear(id, {
+                type: 'line',
+                data: { labels: mesesEtq, datasets },
+                options: Object.assign({
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP },
+                    scales: ejes(t)
+                }, extra || {})
+            });
+
+            // ---- 6 · Evolución mensual ----
+            linea('mun6', [{ label: 'Carpetas', data: serieMesC, borderColor: t.brand,
+                backgroundColor: t.brand + '20', fill: true, tension: .3, pointRadius: 3, spanGaps: false }]);
+
+            // ---- 7 · Acumulado: se detiene en el último mes con dato ----
+            let ac = 0;
+            const acumulado = serieMes.map((v, i) => {
+                if (ultimo >= 0 && i > ultimo) return null;
+                ac += v; return ac;
+            });
+            linea('mun7', [{ label: 'Acumulado', data: acumulado, borderColor: t.accent,
+                backgroundColor: t.accent + '18', fill: true, tension: .25, pointRadius: 3, spanGaps: false }]);
+
+            // ---- 8 · AMG desglosado + interior, mes a mes ----
             const mesInterior = new Array(12).fill(0);
             regs.forEach(r => { if (!munEsAMG(r.municipio)) r.meses.forEach((v, i) => mesInterior[i] += (v || 0)); });
 
-            // Se ordenan de mayor a menor para que las franjas gruesas queden abajo.
-            const amgOrden = MUN_AMG.slice().sort((a, b) => (porMun[b] || 0) - (porMun[a] || 0));
-
-            munCrear('mun6', {
+            munCrear('mun8', {
                 type: 'bar',
                 data: { labels: mesesEtq, datasets:
                     amgOrden.map((nom, i) => ({
-                        label: nom, data: serieMun(nom),
+                        label: nom, data: cortar(serieMun(nom)),
                         backgroundColor: PALETA[i % PALETA.length], stack: 'z'
                     })).concat([{
                         label: 'Interior del estado (116 municipios)',
-                        data: mesInterior, backgroundColor: '#9AA7B4', stack: 'z'
+                        data: cortar(mesInterior), backgroundColor: '#9AA7B4', stack: 'z'
                     }]) },
                 options: { responsive: true, maintainAspectRatio: false,
                            plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } },
@@ -6297,9 +6396,13 @@
                            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '8%' } } }
             });
 
-            // 7 · Variación mensual
-            const varMes = serieMes.map((v, i) => i === 0 ? null : v - serieMes[i - 1]);
-            munCrear('mun7', {
+            // ---- 9 · Variación mensual ----
+            const varMes = serieMes.map((v, i) => {
+                if (i === 0) return null;
+                if (ultimo >= 0 && i > ultimo) return null;
+                return v - serieMes[i - 1];
+            });
+            munCrear('mun9', {
                 type: 'bar',
                 data: { labels: mesesEtq, datasets: [{ label: 'Diferencia', data: varMes,
                         backgroundColor: varMes.map(v => v === null ? t.muted : (v > 0 ? t.risk : t.down)) }] },
@@ -6307,67 +6410,35 @@
                            plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
             });
 
-            // 8 · Bien jurídico
-            const bienes = munOrdena(munAgrupa('bien', regs));
-            munCrear('mun8', {
-                type: 'doughnut',
-                data: { labels: bienes.map(x => x[0]), datasets: [{ data: bienes.map(x => x[1]),
-                        backgroundColor: bienes.map((x, i) => PALETA[i % PALETA.length]) }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } }
-            });
+            // ---- 10 · Top tipos de delito ----
+            const tipos = munOrdena(munAgrupa('tipo', munPorAnio()), 12);
+            barras('mun10', tipos.map(x => x[0]), tipos.map(x => x[1]), t.brand, true);
 
-            // 9 · Top tipos de delito
-            const tipos = munOrdena(munAgrupa('tipo', munData.registros), 12);
-            barras('mun9', tipos.map(x => x[0]), tipos.map(x => x[1]), t.brand, true);
-
-            // 10 · Evolución de los cinco principales
+            // ---- 11 · Evolución de los cinco principales ----
             const top5t = tipos.slice(0, 5).map(x => x[0]);
-            munCrear('mun10', {
-                type: 'line',
-                data: { labels: mesesEtq, datasets: top5t.map((tp, i) => {
-                    const s = new Array(12).fill(0);
-                    munData.registros.filter(r => r.tipo === tp).forEach(r => r.meses.forEach((v, m) => s[m] += (v || 0)));
-                    return { label: tp, data: s, borderColor: PALETA[i % PALETA.length],
-                             backgroundColor: PALETA[i % PALETA.length] + '18', tension: .3, pointRadius: 2, fill: false };
-                }) },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
-            });
+            linea('mun11', top5t.map((tp, i) => {
+                const ser = new Array(12).fill(0);
+                munPorAnio().filter(r => r.tipo === tp).forEach(r => r.meses.forEach((v, m) => ser[m] += (v || 0)));
+                return { label: tp, data: cortar(ser), borderColor: PALETA[i % PALETA.length],
+                         backgroundColor: PALETA[i % PALETA.length] + '18', tension: .3, pointRadius: 2, fill: false, spanGaps: false };
+            }));
 
-            // 11 · Homicidio doloso vs culposo — nunca agregados
+            // ---- 12 · Homicidio doloso frente a culposo ----
             const serieSub = sub => {
-                const s = new Array(12).fill(0);
-                munData.registros.filter(r => dsNorm(r.subtipo) === dsNorm(sub))
-                    .forEach(r => r.meses.forEach((v, m) => s[m] += (v || 0)));
-                return s;
+                const ser = new Array(12).fill(0);
+                munPorAnio().filter(r => dsNorm(r.subtipo) === dsNorm(sub))
+                    .forEach(r => r.meses.forEach((v, m) => ser[m] += (v || 0)));
+                return ser;
             };
-            munCrear('mun11', {
-                type: 'line',
-                data: { labels: mesesEtq, datasets: [
-                    { label: 'Homicidio doloso', data: serieSub('Homicidio doloso'), borderColor: t.risk,
-                      backgroundColor: t.risk + '18', tension: .3, pointRadius: 3, fill: false },
-                    { label: 'Homicidio culposo', data: serieSub('Homicidio culposo'), borderColor: t.muted,
-                      backgroundColor: t.muted + '18', tension: .3, pointRadius: 3, fill: false, borderDash: [5, 4] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: {}, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
-            });
+            const sDol = serieSub('Homicidio doloso'), sCul = serieSub('Homicidio culposo');
+            linea('mun12', [
+                { label: 'Homicidio doloso', data: cortar(sDol), borderColor: t.risk,
+                  backgroundColor: t.risk + '18', tension: .3, pointRadius: 3, fill: false, spanGaps: false },
+                { label: 'Homicidio culposo', data: cortar(sCul), borderColor: t.muted,
+                  backgroundColor: t.muted + '18', tension: .3, pointRadius: 3, fill: false, borderDash: [5, 4], spanGaps: false }
+            ]);
 
-            // 12 · Modalidad del homicidio doloso
-            const modDol = {};
-            munData.registros.filter(r => dsNorm(r.subtipo) === dsNorm('Homicidio doloso'))
-                .forEach(r => { modDol[r.modalidad] = (modDol[r.modalidad] || 0) + r.total; });
-            const md = munOrdena(modDol);
-            munCrear('mun12', {
-                type: 'doughnut',
-                data: { labels: md.map(x => x[0]), datasets: [{ data: md.map(x => x[1]),
-                        backgroundColor: md.map((x, i) => PALETA[i % PALETA.length]) }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } }
-            });
-
-            // 13 · Robo por subtipo, desglosado por modalidad de violencia.
-            // Todos los subtipos de robo del padrón traen esta desagregación.
+            // ---- 13 y 14 · Robo por subtipo y su intensidad de violencia ----
             const roboRegs = munPorAnio().filter(r => dsNorm(r.tipo) === dsNorm('Robo'));
             const robo = {}, roboCV = {}, roboSV = {};
             roboRegs.forEach(r => {
@@ -6386,47 +6457,43 @@
                     scales: { x: { stacked: true, beginAtZero: true }, y: { stacked: true, ticks: { font: { size: 10 } } } } }
             });
 
-            // 21 · Proporción de violencia por subtipo de robo.
-            // El apilado muestra volumen; esta muestra intensidad, que es lo que
-            // distingue un fenómeno de otro: no es lo mismo un robo de autopartes
-            // que un asalto a transeúnte, aunque ambos sean "robo".
             const rsProp = rs.filter(x => x[1] >= 20)
                 .map(x => ({ n: x[0], tot: x[1], pct: +((roboCV[x[0]] || 0) / x[1] * 100).toFixed(1) }))
                 .sort((a, b) => b.pct - a.pct);
-            munCrear('mun21', {
+            munCrear('mun14', {
                 type: 'bar',
                 data: { labels: rsProp.map(x => x.n), datasets: [
-                    { label: '% con violencia', data: rsProp.map(x => x.pct),
+                    { label: 'Porcentaje con violencia', data: rsProp.map(x => x.pct),
                       backgroundColor: rsProp.map(x => x.pct >= 50 ? t.risk : (x.pct >= 20 ? t.accent : t.brand)) }] },
                 options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
                     plugins: { legend: { display: false },
                         tooltip: Object.assign({}, OPC_TOOLTIP, { callbacks: {
-                            label: c => ` ${c.parsed.x} % con violencia · ${nf(rsProp[c.dataIndex].tot)} carpetas` } }) },
+                            label: c => `Con violencia: ${c.parsed.x} % · ${nf(rsProp[c.dataIndex].tot)} carpetas` } }) },
                     scales: { x: { beginAtZero: true, max: 100 }, y: { ticks: { font: { size: 10 } } } } }
             });
 
-            // 14 · Libertad y seguridad sexual
+            // ---- 15 · Libertad y seguridad sexual ----
             const sex = {};
-            munData.registros.filter(r => /SEXUAL|VIOLACION|HOSTIGAMIENTO|ABUSO/.test(dsNorm(r.tipo + ' ' + r.subtipo)))
+            munPorAnio().filter(r => /SEXUAL|VIOLACION|HOSTIGAMIENTO|ABUSO/.test(dsNorm(r.tipo + ' ' + r.subtipo)))
                 .forEach(r => { sex[r.tipo] = (sex[r.tipo] || 0) + r.total; });
             const sx = munOrdena(sex, 10);
-            barras('mun14', sx.map(x => x[0]), sx.map(x => x[1]), t.risk, true);
+            barras('mun15', sx.map(x => x[0]), sx.map(x => x[1]), t.risk, true);
 
-            // 15 · Violencia familiar por municipio
+            // ---- 16 · Violencia familiar por municipio ----
             const vf = {};
-            munData.registros.filter(r => dsNorm(r.tipo) === dsNorm('Violencia familiar'))
+            munPorAnio().filter(r => dsNorm(r.tipo) === dsNorm('Violencia familiar'))
                 .forEach(r => { if (dsNorm(r.municipio) !== 'NO ESPECIFICADO') vf[r.municipio] = (vf[r.municipio] || 0) + r.total; });
             const vfl = munOrdena(vf, 10);
-            barras('mun15', vfl.map(x => x[0]), vfl.map(x => x[1]), t.brand, true);
+            barras('mun16', vfl.map(x => x[0]), vfl.map(x => x[1]), t.brand, true);
 
-            // 16 · Perfil delictivo de los cinco mayores
+            // ---- 17 · Perfil delictivo de los cinco mayores ----
             const top5m = listaMun.slice(0, 5).map(x => x[0]);
-            const top6tipos = munOrdena(munAgrupa('tipo', munData.registros), 6).map(x => x[0]);
-            munCrear('mun16', {
+            const top6tipos = munOrdena(munAgrupa('tipo', munPorAnio()), 6).map(x => x[0]);
+            munCrear('mun17', {
                 type: 'bar',
                 data: { labels: top5m, datasets: top6tipos.map((tp, i) => ({
                     label: tp,
-                    data: top5m.map(mu => munData.registros
+                    data: top5m.map(mu => munPorAnio()
                         .filter(r => r.municipio === mu && r.tipo === tp)
                         .reduce((a, r) => a + r.total, 0)),
                     backgroundColor: PALETA[i % PALETA.length]
@@ -6436,14 +6503,14 @@
                            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } }
             });
 
-            // 17 · Tasa por 100 mil
+            // ---- 18 · Tasa por 100 mil ----
             const tasas = listaMun.map(([m, v]) => [m, munTasa(m, v)])
                                   .filter(x => x[1] !== null && MUN_POBLACION[x[0]] >= 5000)
                                   .sort((a, b) => b[1] - a[1]).slice(0, 15);
-            barras('mun17', tasas.map(x => x[0]), tasas.map(x => x[1]), t.accent, true);
+            barras('mun18', tasas.map(x => x[0]), tasas.map(x => x[1]), t.accent, true);
 
-            // 18 · Dispersión población vs carpetas
-            munCrear('mun18', {
+            // ---- 19 · Dispersión población frente a carpetas ----
+            munCrear('mun19', {
                 type: 'scatter',
                 data: { datasets: [{ label: 'Municipio',
                     data: listaMun.filter(x => MUN_POBLACION[x[0]]).map(x => ({ x: MUN_POBLACION[x[0]], y: x[1], m: x[0] })),
@@ -6451,116 +6518,104 @@
                 options: { responsive: true, maintainAspectRatio: false,
                     plugins: { legend: { display: false },
                         tooltip: Object.assign({}, OPC_TOOLTIP, { callbacks: {
-                            label: c => ` ${c.raw.m}: ${nf(c.raw.y)} carpetas · ${nf(c.raw.x)} hab.` } }) },
+                            label: c => `${c.raw.m}: ${nf(c.raw.y)} carpetas · ${nf(c.raw.x)} habitantes` } }) },
                     scales: { x: { type: 'logarithmic', title: { display: true, text: 'Población (Censo 2020)' } },
                               y: { beginAtZero: true, title: { display: true, text: 'Carpetas' } } } }
             });
 
-            // 19 · Distribución por volumen
+            // ---- 20 · Distribución por volumen ----
             const cortes = [[0, 0, 'Sin incidencia'], [1, 49, '1 a 49'], [50, 199, '50 a 199'],
                             [200, 999, '200 a 999'], [1000, 4999, '1,000 a 4,999'], [5000, Infinity, '5,000 o más']];
             const dist = cortes.map(([a, b]) => munData.municipios
                 .filter(m => { const v = porMun[m] || 0; return v >= a && v <= b; }).length);
-            barras('mun19', cortes.map(c => c[2]), dist, t.brand, false);
+            barras('mun20', cortes.map(c => c[2]), dist, t.brand, false);
 
-            // 20 · Municipios sin incidencia
-            const sinInc = munData.municipios.filter(m => (porMun[m] || 0) === 0);
-            munCrear('mun20', {
-                type: 'doughnut',
-                data: { labels: ['Con incidencia', 'Sin incidencia registrada'],
-                        datasets: [{ data: [munData.municipios.length - sinInc.length, sinInc.length],
-                                     backgroundColor: [t.brand, t.muted] }] },
-                options: { responsive: true, maintainAspectRatio: false,
-                           plugins: { legend: { position: 'bottom' }, tooltip: OPC_TOOLTIP } }
-            });
-
-            // ---- Lecturas interpretativas ----
-            // Cada gráfica dice en una frase cuál es su hallazgo, para que el lector
-            // no tenga que deducirlo del eje.
+            // ---- Lecturas interpretativas, remapeadas a la nueva numeración ----
             const pctDe = (v, tot) => tot ? (v / tot * 100).toFixed(1) + ' %' : '—';
-            const totGen = listaMun.reduce((a, x) => a + x[1], 0);
             const B = x => '<b>' + esc(String(x)) + '</b>';
 
-            if (top15.length) munLectura('mun1',
-                `${B(top15[0][0])} encabeza con ${B(nf(top15[0][1]))} ${esTasa ? 'por 100 mil' : 'carpetas'}, ` +
-                `${pctDe(top15[0][1], totGen)} del estado. Los tres primeros suman ` +
-                `${B(pctDe(top15.slice(0, 3).reduce((a, x) => a + x[1], 0), totGen))}.`);
+            const masAlta = filas1.slice().sort((a, b) => b.tasa - a.tasa)[0];
+            const masAbs  = filas1.slice().sort((a, b) => b.abs - a.abs)[0];
+            munLectura('mun1',
+                `${B(masAbs.n)} concentra el mayor volumen con ${B(nf(masAbs.abs))} carpetas, ` +
+                `pero la tasa más alta es la de ${B(masAlta.n)}: ${B(masAlta.tasa)} por cada 100 mil habitantes. ` +
+                `El volumen mide carga; la tasa, intensidad relativa al tamaño del municipio.`);
 
             munLectura('mun2', `El AMG concentra ${B(pctDe(amgTot, amgTot + intTot))} de las carpetas con ` +
                 `9 de los 125 municipios; el interior aporta ${B(pctDe(intTot, amgTot + intTot))} con 116.`);
 
-            const i80 = pareto.findIndex(v => v >= 80);
-            munLectura('mun3', i80 >= 0
-                ? `${B(i80 + 1)} municipios explican el 80 % del total estatal.`
-                : `Ni los 30 municipios con más carpetas alcanzan el 80 % del total.`);
+            if (bienes.length) munLectura('mun3', `${B(bienes[0][0])} concentra ` +
+                `${B(pctDe(bienes[0][1], bienes.reduce((a, x) => a + x[1], 0)))} de las carpetas.`);
 
-            const mesesConDato = serieMes.map((v, i) => [i, v]).filter(x => x[1] > 0);
-            if (mesesConDato.length) {
-                const mx = mesesConDato.reduce((a, x) => x[1] > a[1] ? x : a);
-                const mn = mesesConDato.reduce((a, x) => x[1] < a[1] ? x : a);
-                munLectura('mun4', `El mes más alto es ${B(MUN_MESES[mx[0]])} con ${B(nf(mx[1]))} y el más bajo ` +
-                    `${B(MUN_MESES[mn[0]])} con ${B(nf(mn[1]))}. Hay información hasta ` +
-                    `${B(MUN_MESES[mesesConDato[mesesConDato.length - 1][0]])}.`);
-                munLectura('mun5', `Al cierre de ${B(MUN_MESES[mesesConDato[mesesConDato.length - 1][0]])} el acumulado es ` +
+            if (md.length) munLectura('mun4', `${B(md[0][0])} es la modalidad predominante del homicidio doloso, ` +
+                `con ${B(pctDe(md[0][1], md.reduce((a, x) => a + x[1], 0)))} de los casos.`);
+
+            const i80 = pareto.findIndex(v => v >= 80);
+            munLectura('mun5', i80 >= 0 && i80 < 15
+                ? `${B(i80 + 1)} municipios explican el 80 % del total estatal. Los ${B(restoP.length)} restantes ` +
+                  `suman ${B(nf(restoSuma))} carpetas, ${B(pctDe(restoSuma, totalGen))} del total.`
+                : `Los 15 municipios con más carpetas suman ${B(pctDe(totalGen - restoSuma, totalGen))} del total estatal.`);
+
+            const conDato = serieMes.map((v, i) => [i, v]).filter(x => x[1] > 0);
+            if (conDato.length) {
+                const mx = conDato.reduce((a, x) => x[1] > a[1] ? x : a);
+                const mn = conDato.reduce((a, x) => x[1] < a[1] ? x : a);
+                munLectura('mun6', `El mes más alto es ${B(MUN_MESES[mx[0]])} con ${B(nf(mx[1]))} y el más bajo ` +
+                    `${B(MUN_MESES[mn[0]])} con ${B(nf(mn[1]))}. Hay información hasta ${B(MUN_MESES[ultimo])}.`);
+                munLectura('mun7', `Al cierre de ${B(MUN_MESES[ultimo])} el acumulado es ` +
                     `${B(nf(serieMes.reduce((a, v) => a + v, 0)))}, con un promedio de ` +
-                    `${B(nf(Math.round(serieMes.reduce((a, v) => a + v, 0) / mesesConDato.length)))} por mes.`);
+                    `${B(nf(Math.round(serieMes.reduce((a, v) => a + v, 0) / conDato.length)))} por mes.`);
             }
 
-            const amgMes = amgOrden.map(n => [n, serieMun(n).reduce((a, v) => a + v, 0)]).sort((a, b) => b[1] - a[1]);
-            if (amgMes.length) munLectura('mun6',
+            const amgMes = amgOrden.map(n => [n, porMun[n] || 0]).sort((a, b) => b[1] - a[1]);
+            if (amgMes.length) munLectura('mun8',
                 `Dentro del AMG, ${B(amgMes[0][0])} aporta ${B(nf(amgMes[0][1]))} ` +
-                `(${pctDe(amgMes[0][1], amgTot)} del área metropolitana). El interior completo suma ` +
-                `${B(nf(mesInterior.reduce((a, v) => a + v, 0)))}.`);
+                `(${pctDe(amgMes[0][1], amgTot)} del área metropolitana). El interior completo suma ${B(nf(intTot))}.`);
 
             const vv = varMes.filter(v => v !== null);
             if (vv.length) {
                 const alzas = vv.filter(v => v > 0).length;
-                munLectura('mun7', `De ${B(vv.length)} cambios mensuales, ${B(alzas)} fueron al alza y ` +
+                munLectura('mun9', `De ${B(vv.length)} cambios mensuales, ${B(alzas)} fueron al alza y ` +
                     `${B(vv.length - alzas)} a la baja.`);
             }
 
-            if (bienes.length) munLectura('mun8', `${B(bienes[0][0])} concentra ` +
-                `${B(pctDe(bienes[0][1], bienes.reduce((a, x) => a + x[1], 0)))} de las carpetas.`);
-
-            if (tipos.length) munLectura('mun9', `${B(tipos[0][0])} es el delito más frecuente con ` +
+            if (tipos.length) munLectura('mun10', `${B(tipos[0][0])} es el delito más frecuente con ` +
                 `${B(nf(tipos[0][1]))} carpetas, ${B(pctDe(tipos[0][1], munData.total))} del total estatal.`);
 
-            munLectura('mun10', `Se contrastan los cinco delitos de mayor volumen. Las series comparten escala, ` +
+            munLectura('mun11', `Se contrastan los cinco delitos de mayor volumen. Las series comparten escala, ` +
                 `así que la distancia vertical entre líneas es la brecha real de casos.`);
 
-            const totDol = serieSub('Homicidio doloso').reduce((a, v) => a + v, 0);
-            const totCul = serieSub('Homicidio culposo').reduce((a, v) => a + v, 0);
-            munLectura('mun11', `Homicidio doloso: ${B(nf(totDol))} carpetas. Homicidio culposo: ${B(nf(totCul))}. ` +
+            const totDol = sDol.reduce((a, v) => a + v, 0);
+            const totCul = sCul.reduce((a, v) => a + v, 0);
+            munLectura('mun12', `Homicidio doloso: ${B(nf(totDol))} carpetas. Homicidio culposo: ${B(nf(totCul))}. ` +
                 `Sumarlos daría ${B(nf(totDol + totCul))}, cifra que se leería como violencia intencional ` +
                 `cuando ${B(pctDe(totCul, totDol + totCul))} corresponde a hechos culposos, sobre todo de tránsito.`);
-
-            if (md.length) munLectura('mun12', `${B(md[0][0])} es la modalidad predominante del homicidio doloso, ` +
-                `con ${B(pctDe(md[0][1], md.reduce((a, x) => a + x[1], 0)))} de los casos.`);
 
             const cvTot = Object.values(roboCV).reduce((a, v) => a + v, 0);
             const svTot = Object.values(roboSV).reduce((a, v) => a + v, 0);
             if (rs.length) munLectura('mun13', `${B(rs[0][0])} encabeza los robos con ${B(nf(rs[0][1]))} carpetas. ` +
                 `En conjunto, ${B(pctDe(cvTot, cvTot + svTot))} de los robos se cometieron con violencia.`);
-            if (rsProp.length) munLectura('mun21',
+
+            if (rsProp.length) munLectura('mun14',
                 `${B(rsProp[0].n)} es el robo más violento: ${B(rsProp[0].pct + ' %')} de sus carpetas ocurrieron con violencia. ` +
                 `En el extremo opuesto, ${B(rsProp[rsProp.length - 1].n)} registra ${B(rsProp[rsProp.length - 1].pct + ' %')}. ` +
                 `Son fenómenos distintos que el total de "robo" agrega en una sola cifra.`);
-            if (sx.length) munLectura('mun14', `${B(sx[0][0])} es el más frecuente de este grupo, con ${B(nf(sx[0][1]))} carpetas.`);
-            if (vfl.length) munLectura('mun15', `${B(vfl[0][0])} registra ${B(nf(vfl[0][1]))} carpetas por violencia familiar, ` +
+
+            if (sx.length) munLectura('mun15', `${B(sx[0][0])} es el más frecuente de este grupo, con ${B(nf(sx[0][1]))} carpetas.`);
+            if (vfl.length) munLectura('mun16', `${B(vfl[0][0])} registra ${B(nf(vfl[0][1]))} carpetas por violencia familiar, ` +
                 `${B(pctDe(vfl[0][1], vfl.reduce((a, x) => a + x[1], 0)))} de los diez municipios mostrados.`);
 
-            munLectura('mun16', `Cada barra es un municipio y cada color un delito: permite ver si su perfil ` +
+            munLectura('mun17', `Cada barra es un municipio y cada color un delito: permite ver si su perfil ` +
                 `delictivo se parece o difiere del de sus vecinos.`);
 
-            if (tasas.length) munLectura('mun17', `${B(tasas[0][0])} tiene la tasa más alta con ` +
+            if (tasas.length) munLectura('mun18', `${B(tasas[0][0])} tiene la tasa más alta del estado con ` +
                 `${B(tasas[0][1])} por cada 100 mil habitantes. Se excluyen municipios de menos de 5,000 habitantes, ` +
                 `donde unos pocos casos disparan la tasa.`);
 
-            munLectura('mun18', `La relación entre tamaño e incidencia no es proporcional: los puntos por encima ` +
+            munLectura('mun19', `La relación entre tamaño e incidencia no es proporcional: los puntos por encima ` +
                 `de la nube tienen más carpetas de las que su población haría esperar.`);
 
-            munLectura('mun19', `${B(dist[0])} municipios no registraron carpetas y ${B(dist[1])} registraron menos de 50.`);
-            munLectura('mun20', `${B(sinInc.length)} de ${B(munData.municipios.length)} municipios no registran carpetas ` +
+            munLectura('mun20', `${B(dist[0])} municipios no registraron carpetas y ${B(dist[1])} registraron menos de 50 ` +
                 `bajo el filtro actual. Ausencia de registro no equivale a ausencia de delito.`);
 
             // El sistema PLUS revive cada gráfica al volver a entrar en pantalla.
