@@ -7373,11 +7373,13 @@
         let fisCharts = [];
         let fisMapa = null, fisCapa = null;
         const fisEstado = { delito: '__TODOS__', anio: '__TODOS__', mes: '__TODOS__',
-                            municipio: '__TODOS__', violencia: '__TODAS__', mapa: 'calor' };
+                            municipio: '__TODOS__', violencia: '__TODAS__', mapa: 'calor',
+                            anioG5: null };
 
         const FIS_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
                            'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
         const FIS_DIAS = ['LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO','DOMINGO'];
+        const FIS_DIAS_CORTO = ['LUN','MAR','MIÉ','JUE','VIE','SÁB','DOM'];
         const FIS_FRANJAS = ['Madrugada','Mañana','Tarde','Noche'];
 
         /* Gobernanza de datos: columnas que NUNCA se leen ni se muestran, aunque
@@ -7425,7 +7427,7 @@
            74 % menos. Además, como las cuatro pestañas leen el MISMO documento, una
            descarga de 19.5 MB retrasa también a las otras hojas.
            Si la consulta fallara, se recurre a la exportación completa. */
-        const FIS_COLUMNAS = 'A,U,W,X,Z,Q,R,AL,DA,AN,CW,CU,BW,BX,AD,AB,AV,AX,CC,N,BI,DI,BB,BC,BD,CL,F';
+        const FIS_COLUMNAS = 'A,U,AP,M,W,X,Z,Q,R,AL,DA,AN,CW,CU,BW,BX,AD,AB,AV,AX,CC,N,DI,BB,BC,BD,CL,F';
 
         function fisFetch() {
             const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
@@ -7461,15 +7463,15 @@
             const cab = filas[0].map(c => (c || '').trim());
             const col = n => cab.indexOf(n);
             const C = {};
-            ['wkt_geom','Delito','Modalidad','Violencia','Modus_oper','MES','AÑO','MUNICIPIO','MunicipioG',
-             'COLONIA','ColoniaGeo','ZonaGeo','Marca','Submarca','MONTO','OBJETOS_RO','GIR_COMER','TIP_TRANSP',
-             'SituaciOn','HORA_HECHO','DIA_SEM','AMG','TIPO_ASENT','CANT_EXIG','CANT_PAG','CANT_RECU',
-             'TotalVicti','LATITUD','LONGITUD','DISTRITO'].forEach(k => { C[k] = col(k); });
+            ['wkt_geom','Delito','Delito_EST','FECHA_DE_H','Modalidad','Violencia','Modus_oper','MES','AÑO',
+             'MUNICIPIO','MunicipioG','COLONIA','ColoniaGeo','ZonaGeo','Marca','Submarca','MONTO','OBJETOS_RO',
+             'GIR_COMER','TIP_TRANSP','SituaciOn','HORA_HECHO','AMG','CANT_EXIG','CANT_PAG','CANT_RECU',
+             'TotalVicti','DISTRITO'].forEach(k => { C[k] = col(k); });
 
             const g = (r, k) => (C[k] >= 0 && r[C[k]] != null) ? String(r[C[k]]).trim() : '';
 
             // Auditoría en vivo: los problemas se cuentan y se muestran, no se ocultan.
-            const audit = { total: 0, delitoInvalido: 0, latTexto: 0, amgIntruso: 0, sinGeo: 0, mesRaro: 0 };
+            const audit = { total: 0, delitoInvalido: 0, latTexto: 0, amgIntruso: 0, sinGeo: 0, mesRaro: 0, sinFecha: 0 };
             const NIV = /^[A-HJ-NPR-Z0-9]{17}$/;
             const AMG_OK = new Set(['AMG','SI','NO','FALSO','FALSE','VERDADERO','TRUE','INTERIOR','0','1','']);
 
@@ -7479,7 +7481,11 @@
                 if (!r || r.length < 5) continue;
                 audit.total++;
 
-                let delito = g(r, 'Delito');
+                /* El delito operativo vive en Delito_EST, no en Delito: esa columna
+                   solo trae la familia genérica (Robo, Lesiones…) y agrupa 22,212
+                   eventos en una sola categoría. Delito_EST los desagrega en los diez
+                   tipos con los que trabaja el área. */
+                let delito = g(r, 'Delito_EST') || g(r, 'Delito');
                 if (!delito || NIV.test(delito)) { delito = 'Sin clasificar'; audit.delitoInvalido++; }
 
                 // Meses: la hoja mezcla MAYO y Mayo. Sin normalizar, un mismo mes
@@ -7500,10 +7506,29 @@
                 if (w) { x = parseFloat(w[1]); y = parseFloat(w[2]); }
                 if (x === null) audit.sinGeo++;
 
+                /* HORA_HECHO mezcla dos formatos: "07:30:00" y la fracción de día de
+                   Excel ("0.22916" = 05:30). Antes solo se leía el primero. */
                 const hora = g(r, 'HORA_HECHO');
-                const hh = hora ? parseInt(hora.split(':')[0], 10) : null;
-                const franja = hh === null || isNaN(hh) ? '' :
+                let hh = null;
+                if (/^\d{1,2}:\d{2}/.test(hora)) hh = parseInt(hora.split(':')[0], 10);
+                else if (/^0?\.\d+$/.test(hora)) hh = Math.floor(parseFloat(hora) * 24);
+                const franja = (hh === null || isNaN(hh)) ? '' :
                     (hh < 6 ? 'Madrugada' : hh < 12 ? 'Mañana' : hh < 19 ? 'Tarde' : 'Noche');
+
+                /* El día NO puede salir de DIA_SEM: esa columna trae códigos de
+                   clasificación ("4.5.1 ROBO A PERSONA VIA PUBLICA"), no días.
+                   Por eso los cruces día × franja salían completamente vacíos.
+                   Se deriva de FECHA_DE_H, que sí es una fecha válida. */
+                let dia = '';
+                const f = g(r, 'FECHA_DE_H').match(/^(\d{4})-(\d{2})-(\d{2})/) ||
+                          g(r, 'FECHA_DE_H').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+                if (f) {
+                    const d = f[0].indexOf('-') === 4
+                        ? new Date(+f[1], +f[2] - 1, +f[3])
+                        : new Date(+f[3], +f[2] - 1, +f[1]);
+                    if (!isNaN(d)) dia = FIS_DIAS[(d.getDay() + 6) % 7];   // getDay: 0 = domingo
+                    else audit.sinFecha++;
+                } else audit.sinFecha++;
 
                 registros.push({
                     delito, modalidad: g(r,'Modalidad'), violencia: dsNorm(g(r,'Violencia')),
@@ -7515,7 +7540,7 @@
                     marca: g(r,'Marca') || 'Sin dato', submarca: g(r,'Submarca') || 'Sin dato',
                     monto: fisNum(g(r,'MONTO')), objeto: g(r,'OBJETOS_RO'), giro: g(r,'GIR_COMER'),
                     transporte: g(r,'TIP_TRANSP'), situacion: g(r,'SituaciOn'),
-                    dia: dsNorm(g(r,'DIA_SEM')), franja, amg,
+                    dia, franja, amg,
                     exigido: fisNum(g(r,'CANT_EXIG')), pagado: fisNum(g(r,'CANT_PAG')),
                     recuperado: fisNum(g(r,'CANT_RECU')),
                     victimas: fisNum(g(r,'TotalVicti')), x, y
@@ -7523,9 +7548,25 @@
             }
 
             const uniq = k => Array.from(new Set(registros.map(r => r[k]).filter(Boolean))).sort();
+
+            /* Orden del selector: primero los robos (el universo del registro), y al
+               final homicidio doloso y lesiones dolosas, que son una MUESTRA y no el
+               total de esos delitos en el estado. Mezclarlos alfabéticamente sugeriría
+               que son comparables en cobertura, y no lo son. */
+            const ordenDelitos = lista => {
+                const alFinal = ['HOMICIDIO DOLOSO', 'LESIONES DOLOSAS', 'SIN CLASIFICAR'];
+                const peso = d => {
+                    const i = alFinal.indexOf(dsNorm(d));
+                    return i === -1 ? 0 : i + 1;
+                };
+                const conteo = {};
+                registros.forEach(r => { conteo[r.delito] = (conteo[r.delito] || 0) + 1; });
+                return lista.slice().sort((x, y) =>
+                    peso(x) - peso(y) || (conteo[y] || 0) - (conteo[x] || 0));
+            };
             return {
                 registros, audit,
-                delitos: uniq('delito'), anios: uniq('anio'),
+                delitos: ordenDelitos(uniq('delito')), anios: uniq('anio'),
                 municipios: uniq('municipio'),
                 meses: FIS_MESES.filter(m => registros.some(r => r.mes === m))
             };
@@ -7691,8 +7732,17 @@
                 fisLienzo('fisG3', '3 · Modus operandi') +
                 fisLienzo('fisG4', '4 · Municipios del AMG frente al interior') +
                 '</div>' +
-                fisLienzo('fisG5', '5 · Comparativo mensual por municipio',
-                          'Barras apiladas: cada color es un municipio. Los de menor volumen se agrupan en «Otros».', true) +
+                `<div class="ds-chart">
+                    <div class="ds-chart-t">5 · Comparativo mensual por municipio</div>
+                    <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
+                    <div class="ds-chart-n">Barras apiladas: cada color es un municipio. Los de menor volumen se agrupan en «Otros».</div>
+                    <div class="chart-barra" style="margin-bottom:10px">
+                        <label class="info-estado" for="fisG5Anio">Año a visualizar</label>
+                        <select id="fisG5Anio"></select>
+                    </div>
+                    <div class="ds-chart-box ds-chart-box-alto"><canvas id="fisG5"></canvas></div>
+                    <div class="mun-lectura" id="fisG5-lec"></div>
+                </div>` +
                 fisLienzo('fisG6', '6 · Top municipios: eventos y tasa por 100 mil',
                           'Población del Censo 2020. La tasa permite comparar municipios de distinto tamaño.', true) +
                 fisLienzo('fisG7', '7 · Distribución por franja horaria') +
@@ -7737,10 +7787,19 @@
                         datasets: [{ data: [enAMG, regs.length - enAMG], backgroundColor: [t.brand, t.accent] }] }, options: opcDona });
             fisLectura('fisG4', `El AMG concentra ${B(pct(enAMG, regs.length))} de los eventos filtrados.`);
 
-            // 5 · Comparativo mensual por municipio
-            const topMun = fisTop(fisAgrupa(regs, 'municipio'), 8).map(x => x[0]);
-            const meses = fisData.meses;
-            const serieDe = mun => meses.map(m => regs.filter(r => r.mes === m &&
+            /* 5 · Comparativo mensual por municipio.
+               Lleva su PROPIO selector de año, con el más reciente por omisión: la hoja
+               mezcla 2025 y 2026, y sin separarlos los meses de agosto a diciembre
+               mostraban datos de 2025 junto a los de 2026 como si fueran del mismo ciclo. */
+            if (!fisEstado.anioG5 && fisData.anios.length) {
+                fisEstado.anioG5 = fisData.anios[fisData.anios.length - 1];
+            }
+            const regsG5 = fisEstado.anioG5 === '__TODOS__'
+                ? regs : regs.filter(r => r.anio === fisEstado.anioG5);
+
+            const topMun = fisTop(fisAgrupa(regsG5, 'municipio'), 8).map(x => x[0]);
+            const meses = FIS_MESES;
+            const serieDe = mun => meses.map(m => regsG5.filter(r => r.mes === m &&
                 (mun === '__OTROS__' ? topMun.indexOf(r.municipio) === -1 : r.municipio === mun)).length);
             fisCrear('fisG5', { type: 'bar',
                 data: { labels: meses, datasets: topMun.map((m, i) => ({
@@ -7753,7 +7812,19 @@
                                dsEtiquetas: { enabled: false }, dsTotalApilado: { enabled: true, paso: 1 } },
                     scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '8%' } } }
             });
-            fisLectura('fisG5', `Los ${B(topMun.length)} municipios con más eventos llevan color propio; el resto se agrupa en gris.`);
+            fisLectura('fisG5', `Año ${B(fisEstado.anioG5 === '__TODOS__' ? 'completo' : fisEstado.anioG5)}: ` +
+                `los ${B(topMun.length)} municipios con más eventos llevan color propio; el resto se agrupa en gris. ` +
+                `Total del periodo: ${B(nf(regsG5.length))} eventos.`);
+
+            // Selector propio de la gráfica 5
+            (function () {
+                const sel = document.getElementById('fisG5Anio');
+                if (!sel) return;
+                sel.innerHTML = fisData.anios.map(a =>
+                    `<option value="${esc(a)}"${a === fisEstado.anioG5 ? ' selected' : ''}>${esc(a)}</option>`).join('') +
+                    '<option value="__TODOS__"' + (fisEstado.anioG5 === '__TODOS__' ? ' selected' : '') + '>Todos los años</option>';
+                sel.addEventListener('change', e => { fisEstado.anioG5 = e.target.value; fisRenderGraficas(); });
+            })();
 
             // 6 · Top municipios con tasa
             const porMun = fisTop(fisAgrupa(regs, 'municipio'), 10);
@@ -7820,7 +7891,7 @@
                     <div class="ds-chart-t">${titulo}</div>
                     <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
                     <div class="table-wrapper"><table class="data-table"><thead><tr>
-                        <th></th>${FIS_DIAS.map(d => `<th class="mun-num">${d.slice(0, 3)}</th>`).join('')}
+                        <th></th>${FIS_DIAS_CORTO.map(d => `<th class="mun-num">${d}</th>`).join('')}
                         <th class="mun-num">Total</th></tr></thead><tbody>
                         ${FIS_FRANJAS.map(f => `<tr>
                             <td><b>${f}</b></td>
@@ -7861,10 +7932,14 @@
             };
 
             cont.innerHTML =
+                '<div class="ds-chart-row">' +
                 cruce(r => r.violencia === 'SI', 'Eventos con violencia · día y franja horaria') +
                 cruce(r => r.violencia === 'NO', 'Eventos sin violencia · día y franja horaria') +
+                '</div>' +
+                '<div class="ds-chart-row">' +
                 ranking('colonia', 'Ranking de colonias', true) +
-                ranking('sector', 'Ranking de sectores', false);
+                ranking('sector', 'Ranking de sectores', false) +
+                '</div>';
 
             observarTodos('#fisTablasContent .ds-chart');
         }
