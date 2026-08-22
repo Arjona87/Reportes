@@ -1359,6 +1359,7 @@
             <button class="btn-nav" id="navSemanalBtn">Reporte Semanal</button>
             <button class="btn-nav btn-nav-off" id="navDesapBtn">Personas desaparecidas</button>
             <button class="btn-nav btn-nav-off" id="navMunBtn">Incidencia Municipal</button>
+            <button class="btn-nav btn-nav-off" id="navFisBtn">Fiscalía 2026</button>
         </nav>
     </header>
 
@@ -1772,6 +1773,121 @@
 
       </div><!-- /vistaMunicipal -->
 
+      <!-- ===================== VISTA: FISCALÍA ===================== -->
+      <div id="vistaFiscalia" style="display:none">
+
+        <div class="cinta" id="fisCinta">
+            <span class="cinta-i"><b>Fuente:</b> Fiscalía General del Estado de Jalisco · C5 Zapopan</span>
+            <span class="cinta-i"><b>Registros:</b> <span id="fisNReg">—</span></span>
+            <span class="cinta-i"><b>Periodo:</b> <span id="fisPeriodo">—</span></span>
+            <span class="cinta-i">Cifras preliminares · sujetas a validación</span>
+        </div>
+
+        <div class="mun-barra-fija" id="fisBarraFija">
+            <label class="info-estado" for="fisDelito">Delito</label>
+            <select id="fisDelito"><option value="__TODOS__">Todos los delitos</option></select>
+            <label class="info-estado" for="fisAnio">Año</label>
+            <select id="fisAnio"><option value="__TODOS__">Todos</option></select>
+            <label class="info-estado" for="fisMes">Mes</label>
+            <select id="fisMes"><option value="__TODOS__">Todos</option></select>
+            <label class="info-estado" for="fisMuni">Municipio</label>
+            <select id="fisMuni"><option value="__TODOS__">Todos</option></select>
+            <div class="conmutador" id="fisViolBtns" role="group" aria-label="Violencia">
+                <button data-viol="__TODAS__" class="on">Todos</button>
+                <button data-viol="SI">Con violencia</button>
+                <button data-viol="NO">Sin violencia</button>
+            </div>
+            <button type="button" class="mun-vertodos" id="fisLimpiar">Limpiar filtros</button>
+            <button type="button" class="mun-invertir" id="fisReporteBtn">
+                <span class="mun-invertir-ico" aria-hidden="true">↓</span><span>Generar reporte</span></button>
+            <span id="fisConteo" class="info-estado"></span>
+        </div>
+
+        <section id="fisAviso">
+            <div class="mun-nota mun-nota-fuerte" id="fisCalidad">Auditando la fuente…</div>
+        </section>
+
+        <section id="fisKpis">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Indicadores clave</h2>
+                <span class="panel-nota">Cifras bajo el filtro seleccionado</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">PANORAMA GENERAL</span>
+                    <p>Eventos registrados por la Fiscalía. Todo el tablero responde a la barra de filtros superior.</p>
+                </div>
+                <div class="summary-cards" id="fisKpiCards">
+                    <div class="sk sk-card"></div><div class="sk sk-card"></div>
+                    <div class="sk sk-card"></div><div class="sk sk-card"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="fisAlertas">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Alertas de zonas atípicas</h2>
+                <span class="panel-nota">Control estadístico de procesos</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">GESTIÓN POR EXCEPCIÓN</span>
+                    <p>Municipios cuyo valor del último mes se desvía más de ±1.5 desviaciones estándar de su propio
+                       promedio histórico mensual.</p>
+                </div>
+                <div id="fisAlertasContent"></div>
+            </div>
+        </section>
+
+        <section id="fisGraficas">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Análisis del registro</h2>
+                <span class="panel-nota">Delito, territorio, modalidad y objeto</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div id="fisGraficasContent"></div>
+            </div>
+        </section>
+
+        <section id="fisTablas">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Concentración temporal y territorial</h2>
+                <span class="panel-nota">Franja horaria, colonias y sectores</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo"><div id="fisTablasContent"></div></div>
+        </section>
+
+        <section id="fisMapaSec">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Mapa dinámico</h2>
+                <span class="panel-nota">Reproyección UTM 13N → WGS84</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">GEORREFERENCIA</span>
+                    <p>Ubicaciones obtenidas de <code>wkt_geom</code>. Solo se muestran metadatos no sensibles.
+                       Los filtros superiores también controlan qué puntos aparecen.</p>
+                </div>
+                <div class="chart-barra">
+                    <div class="conmutador" id="fisMapaBtns" role="group" aria-label="Vista del mapa">
+                        <button data-mapa="calor" class="on">Mapa de calor</button>
+                        <button data-mapa="clusters">Clusters</button>
+                        <button data-mapa="puntos">Puntos</button>
+                    </div>
+                    <span id="fisMapaInfo" class="info-estado"></span>
+                </div>
+                <div id="fisMapa" style="height:520px;border-radius:var(--r-md);overflow:hidden"></div>
+            </div>
+        </section>
+
+      </div><!-- /vistaFiscalia -->
+
+
     </main>
 
     <footer>
@@ -1798,7 +1914,8 @@
         const SHEETS = {
             SEMANAL:       { nombre: 'SEMANAL', gid: '0' },
             DESAPARECIDOS: { nombre: 'DESAPARECIDOS', gid: '1865808402' },
-            MUNICIPAL:     { nombre: 'Municipal',     gid: '1364159247' }
+            MUNICIPAL:     { nombre: 'Municipal',     gid: '1364159247' },
+            FISCALIA:      { nombre: 'Fiscalía',      gid: '1080129787' }
         };
 
         const HOJA_ACTIVA = SHEETS.SEMANAL;
@@ -5749,7 +5866,8 @@
         const VISTAS = [
             { id: 'semanal',             div: 'vistaSemanal',        btn: 'navSemanalBtn', hash: 'semanal' },
             { id: 'desaparecidos',       div: 'vistaDesaparecidos',  btn: 'navDesapBtn',   hash: 'desaparecidos' },
-            { id: 'incidenciamunicipal', div: 'vistaMunicipal',      btn: 'navMunBtn',     hash: 'IncidenciaMunicipal' }
+            { id: 'incidenciamunicipal', div: 'vistaMunicipal',      btn: 'navMunBtn',     hash: 'IncidenciaMunicipal' },
+            { id: 'fiscalia',            div: 'vistaFiscalia',       btn: 'navFisBtn',     hash: 'Fiscalia' }
         ];
 
         function dsMostrarVista(cual, desdeHash) {
@@ -5792,6 +5910,7 @@
             const h = (window.location.hash || '').toLowerCase().replace('#', '');
             if (h === 'desaparecidos' || h === 'desaparecidas') return 'desaparecidos';
             if (h === 'incidenciamunicipal' || h === 'municipal') return 'incidenciamunicipal';
+            if (h === 'fiscalia' || h === 'fiscalía') return 'fiscalia';
             return 'semanal';
         }
 
@@ -7222,6 +7341,661 @@
 
         // El módulo municipal ya está definido: se inscribe para la carga diferida.
         registrarCargador('incidenciamunicipal', munCargar);
+
+
+        /* ==================================================================
+           ==================  MÓDULO: FISCALÍA  ============================
+           Fuente: Fiscalía General del Estado de Jalisco y C5 Zapopan,
+           pestaña "Fiscalía" del libro (gid 1080129787).
+
+           Las librerías pesadas (Leaflet, proj4, pptxgenjs, html2canvas) NO se
+           cargan con la página: se piden solo al abrir esta pestaña. Así las
+           otras tres no pagan ~2 MB de descarga que nunca usan.
+           ================================================================== */
+
+        let fisData = null;
+        let fisCharts = [];
+        let fisMapa = null, fisCapa = null;
+        const fisEstado = { delito: '__TODOS__', anio: '__TODOS__', mes: '__TODOS__',
+                            municipio: '__TODOS__', violencia: '__TODAS__', mapa: 'calor' };
+
+        const FIS_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                           'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        const FIS_DIAS = ['LUNES','MARTES','MIÉRCOLES','JUEVES','VIERNES','SÁBADO','DOMINGO'];
+        const FIS_FRANJAS = ['Madrugada','Mañana','Tarde','Noche'];
+
+        /* Gobernanza de datos: columnas que NUNCA se leen ni se muestran, aunque
+           vengan en la hoja. Contienen datos personales o identificadores directos. */
+        const FIS_SENSIBLES = ['NUC','NUMnuC','Usu_CREO_E','UsuarioGeo','Serie','Placa',
+                               'CALLE','NUM_INTE','NUM_EXT','ENTRE_1','ENTRE_2','LUGAR_REFE',
+                               'Observac','OBS_EST','EMPRESA','CalleGeo','CruceGeo'];
+
+        // ---------- Carga diferida de librerías ----------
+        const FIS_LIBS = [
+            { tipo: 'css', url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css' },
+            { tipo: 'css', url: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css' },
+            { tipo: 'css', url: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css' },
+            { tipo: 'js',  url: 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', test: () => window.L },
+            { tipo: 'js',  url: 'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
+              test: () => window.L && window.L.markerClusterGroup },
+            { tipo: 'js',  url: 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js',
+              test: () => window.L && window.L.heatLayer },
+            { tipo: 'js',  url: 'https://cdn.jsdelivr.net/npm/proj4@2.9.2/dist/proj4.js', test: () => window.proj4 },
+            { tipo: 'js',  url: 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
+              test: () => window.html2canvas },
+            { tipo: 'js',  url: 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js',
+              test: () => window.PptxGenJS }
+        ];
+
+        let fisLibsPromesa = null;
+        function fisCargarLibs() {
+            if (fisLibsPromesa) return fisLibsPromesa;
+            fisLibsPromesa = FIS_LIBS.reduce((cadena, lib) => cadena.then(() => new Promise(res => {
+                if (lib.test && lib.test()) return res();
+                const el = lib.tipo === 'css' ? document.createElement('link') : document.createElement('script');
+                if (lib.tipo === 'css') { el.rel = 'stylesheet'; el.href = lib.url; }
+                else { el.src = lib.url; }
+                // Si una librería no carga, el resto del tablero debe seguir vivo.
+                el.onload = () => res();
+                el.onerror = () => { console.warn('No se pudo cargar', lib.url); res(); };
+                document.head.appendChild(el);
+            })), Promise.resolve());
+            return fisLibsPromesa;
+        }
+
+        // ---------- Descarga y parseo ----------
+        function fisFetch() {
+            const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.FISCALIA.gid}`;
+            return fetch(url).then(r => {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.text();
+            });
+        }
+
+        const fisNum = v => {
+            const n = parseFloat(String(v == null ? '' : v).replace(/[^0-9.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        };
+
+        function fisParse(csvText) {
+            const filas = parseCSV(csvText);
+            if (filas.length < 2) throw new Error('La pestaña Fiscalía llegó vacía.');
+
+            const cab = filas[0].map(c => (c || '').trim());
+            const col = n => cab.indexOf(n);
+            const C = {};
+            ['wkt_geom','Delito','Modalidad','Violencia','Modus_oper','MES','AÑO','MUNICIPIO','MunicipioG',
+             'COLONIA','ColoniaGeo','ZonaGeo','Marca','Submarca','MONTO','OBJETOS_RO','GIR_COMER','TIP_TRANSP',
+             'SituaciOn','HORA_HECHO','DIA_SEM','AMG','TIPO_ASENT','CANT_EXIG','CANT_PAG','CANT_RECU',
+             'TotalVicti','LATITUD','LONGITUD','DISTRITO'].forEach(k => { C[k] = col(k); });
+
+            const g = (r, k) => (C[k] >= 0 && r[C[k]] != null) ? String(r[C[k]]).trim() : '';
+
+            // Auditoría en vivo: los problemas se cuentan y se muestran, no se ocultan.
+            const audit = { total: 0, delitoInvalido: 0, latTexto: 0, amgIntruso: 0, sinGeo: 0, mesRaro: 0 };
+            const NIV = /^[A-HJ-NPR-Z0-9]{17}$/;
+            const AMG_OK = new Set(['AMG','SI','NO','FALSO','FALSE','VERDADERO','TRUE','INTERIOR','0','1','']);
+
+            const registros = [];
+            for (let i = 1; i < filas.length; i++) {
+                const r = filas[i];
+                if (!r || r.length < 5) continue;
+                audit.total++;
+
+                let delito = g(r, 'Delito');
+                if (!delito || NIV.test(delito)) { delito = 'Sin clasificar'; audit.delitoInvalido++; }
+
+                // Meses: la hoja mezcla MAYO y Mayo. Sin normalizar, un mismo mes
+                // aparecería dos veces en toda gráfica temporal.
+                let mes = dsNorm(g(r, 'MES'));
+                if (mes && FIS_MESES.indexOf(mes) === -1) { mes = ''; audit.mesRaro++; }
+
+                let amg = dsNorm(g(r, 'AMG'));
+                if (!AMG_OK.has(amg)) { amg = 'SIN CLASIFICAR'; audit.amgIntruso++; }
+
+                const lat = fisNum(g(r, 'LATITUD'));
+                if (g(r, 'LATITUD') && lat === null) audit.latTexto++;
+
+                // Geometría: wkt_geom está completa; LATITUD viene contaminada en
+                // ~116 filas, así que la fuente de verdad es el WKT en UTM 13N.
+                let x = null, y = null;
+                const w = g(r, 'wkt_geom').match(/Point\s*\(\s*([-\d.]+)\s+([-\d.]+)/i);
+                if (w) { x = parseFloat(w[1]); y = parseFloat(w[2]); }
+                if (x === null) audit.sinGeo++;
+
+                const hora = g(r, 'HORA_HECHO');
+                const hh = hora ? parseInt(hora.split(':')[0], 10) : null;
+                const franja = hh === null || isNaN(hh) ? '' :
+                    (hh < 6 ? 'Madrugada' : hh < 12 ? 'Mañana' : hh < 19 ? 'Tarde' : 'Noche');
+
+                registros.push({
+                    delito, modalidad: g(r,'Modalidad'), violencia: dsNorm(g(r,'Violencia')),
+                    modus: g(r,'Modus_oper') || 'No especificado',
+                    mes, anio: (fisNum(g(r,'AÑO')) || '') && String(Math.round(fisNum(g(r,'AÑO')))),
+                    municipio: g(r,'MunicipioG') || g(r,'MUNICIPIO') || 'No especificado',
+                    colonia: g(r,'ColoniaGeo') || g(r,'COLONIA') || 'No especificada',
+                    sector: g(r,'ZonaGeo') || 'Sin sector',
+                    marca: g(r,'Marca') || 'Sin dato', submarca: g(r,'Submarca') || 'Sin dato',
+                    monto: fisNum(g(r,'MONTO')), objeto: g(r,'OBJETOS_RO'), giro: g(r,'GIR_COMER'),
+                    transporte: g(r,'TIP_TRANSP'), situacion: g(r,'SituaciOn'),
+                    dia: dsNorm(g(r,'DIA_SEM')), franja, amg,
+                    exigido: fisNum(g(r,'CANT_EXIG')), pagado: fisNum(g(r,'CANT_PAG')),
+                    recuperado: fisNum(g(r,'CANT_RECU')),
+                    victimas: fisNum(g(r,'TotalVicti')), x, y
+                });
+            }
+
+            const uniq = k => Array.from(new Set(registros.map(r => r[k]).filter(Boolean))).sort();
+            return {
+                registros, audit,
+                delitos: uniq('delito'), anios: uniq('anio'),
+                municipios: uniq('municipio'),
+                meses: FIS_MESES.filter(m => registros.some(r => r.mes === m))
+            };
+        }
+
+        // ---------- Filtro global ----------
+        function fisFiltra() {
+            const e = fisEstado;
+            return fisData.registros.filter(r =>
+                (e.delito === '__TODOS__' || r.delito === e.delito) &&
+                (e.anio === '__TODOS__' || r.anio === e.anio) &&
+                (e.mes === '__TODOS__' || r.mes === e.mes) &&
+                (e.municipio === '__TODOS__' || r.municipio === e.municipio) &&
+                (e.violencia === '__TODAS__' || r.violencia === e.violencia));
+        }
+
+        const fisAgrupa = (regs, campo) => {
+            const m = {};
+            regs.forEach(r => { const k = r[campo] || 'Sin dato'; m[k] = (m[k] || 0) + 1; });
+            return m;
+        };
+        const fisTop = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n || 9999);
+
+        // ---------- KPIs y aviso de calidad ----------
+        function fisRenderKpis() {
+            const regs = fisFiltra();
+            const cv = regs.filter(r => r.violencia === 'SI').length;
+            const sv = regs.filter(r => r.violencia === 'NO').length;
+            const pct = regs.length ? (cv / regs.length * 100) : 0;
+
+            const tarjeta = (t, v, s) => `<div class="kpi"><div class="kpi-t">${t}</div>
+                <div class="kpi-v">${v}</div><div class="kpi-sub">${s}</div></div>`;
+
+            const cont = document.getElementById('fisKpiCards');
+            if (cont) cont.innerHTML =
+                tarjeta('Eventos registrados', nf(regs.length),
+                        fisEstado.delito === '__TODOS__' ? 'Todos los delitos' : esc(fisEstado.delito)) +
+                tarjeta('Con violencia', nf(cv), pct.toFixed(1) + ' % del total filtrado') +
+                tarjeta('Sin violencia', nf(sv), (100 - pct).toFixed(1) + ' % del total filtrado') +
+                tarjeta('Municipios con registro', nf(new Set(regs.map(r => r.municipio)).size),
+                        'Bajo el filtro actual');
+
+            const chip = document.getElementById('fisConteo');
+            if (chip) chip.textContent = `${nf(regs.length)} de ${nf(fisData.registros.length)} registros`;
+        }
+
+        function fisRenderCalidad() {
+            const a = fisData.audit;
+            const el = document.getElementById('fisCalidad');
+            if (!el) return;
+
+            const hallazgos = [];
+            if (a.delitoInvalido) hallazgos.push(`${nf(a.delitoInvalido)} con un identificador de vehículo en la columna <code>Delito</code>`);
+            if (a.latTexto) hallazgos.push(`${nf(a.latTexto)} con texto en <code>LATITUD</code>`);
+            if (a.amgIntruso) hallazgos.push(`${nf(a.amgIntruso)} con valores de otra columna en <code>AMG</code>`);
+            if (a.mesRaro) hallazgos.push(`${nf(a.mesRaro)} con un mes no reconocido`);
+            if (a.sinGeo) hallazgos.push(`${nf(a.sinGeo)} sin geometría utilizable`);
+
+            el.innerHTML = hallazgos.length
+                ? `<b>Auditoría de la fuente.</b> De ${nf(a.total)} registros se detectaron filas con
+                   desplazamiento de columnas: ${hallazgos.join('; ')}. Esas filas <b>no se eliminan</b>:
+                   se reclasifican como «Sin clasificar» y siguen contando en los totales. La georreferencia
+                   se toma de <code>wkt_geom</code>, que está completa, y no de <code>LATITUD</code>.
+                   Los meses se normalizan a mayúsculas, porque la hoja mezcla «MAYO» y «Mayo» como si fueran meses distintos.`
+                : `<b>Auditoría de la fuente.</b> ${nf(a.total)} registros sin incidencias detectadas.`;
+        }
+
+        // ---------- Alertas de zonas atípicas ----------
+        function fisRenderAlertas() {
+            const cont = document.getElementById('fisAlertasContent');
+            if (!cont) return;
+            const regs = fisFiltra();
+
+            // Serie mensual por municipio, sobre el histórico completo del filtro.
+            const serie = {};
+            regs.forEach(r => {
+                if (!r.mes || !r.anio) return;
+                const k = r.municipio, per = r.anio + '-' + r.mes;
+                serie[k] = serie[k] || {};
+                serie[k][per] = (serie[k][per] || 0) + 1;
+            });
+
+            const periodos = Array.from(new Set(regs.filter(r => r.mes && r.anio)
+                .map(r => r.anio + '-' + r.mes)))
+                .sort((a, b) => {
+                    const [ay, am] = a.split('-'), [by, bm] = b.split('-');
+                    return ay === by ? FIS_MESES.indexOf(am) - FIS_MESES.indexOf(bm) : ay - by;
+                });
+            const ultimo = periodos[periodos.length - 1];
+            if (!ultimo) { cont.innerHTML = '<p class="an-empty">Sin periodos suficientes para evaluar.</p>'; return; }
+
+            const alertas = [];
+            Object.keys(serie).forEach(mun => {
+                const vals = periodos.slice(0, -1).map(p => serie[mun][p] || 0);
+                if (vals.length < 4) return;
+                const media = vals.reduce((a, b) => a + b, 0) / vals.length;
+                const de = Math.sqrt(vals.reduce((a, b) => a + Math.pow(b - media, 2), 0) / vals.length);
+                if (de === 0) return;
+                const act = serie[mun][ultimo] || 0;
+                const z = (act - media) / de;
+                if (Math.abs(z) >= 1.5) alertas.push({ mun, act, media, z });
+            });
+            alertas.sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+
+            cont.innerHTML = `
+                <div class="mun-nota">Periodo de referencia: <b>${esc(ultimo.replace('-', ' '))}</b>.
+                    Umbral: ±1.5 desviaciones estándar sobre el historial propio de cada municipio.</div>
+                ${alertas.length ? alertas.slice(0, 8).map(a => {
+                    const col = a.z > 0 ? 'an-up' : 'an-down';
+                    const fl = a.z > 0 ? '▲' : '▼';
+                    const pct = a.media > 0 ? ((a.act - a.media) / a.media * 100) : 0;
+                    return `<div class="ds-li" style="grid-template-columns:1fr auto auto">
+                        <span><b>${esc(a.mun)}</b>: ${nf(a.act)} eventos</span>
+                        <b class="${col}">${fl} ${pct >= 0 ? '+' : ''}${pct.toFixed(0)} %</b>
+                        <i class="${col}">z ${a.z.toFixed(2)}</i></div>`;
+                }).join('')
+                : '<p class="an-empty">Ningún municipio se desvía más de 1.5 desviaciones estándar en el periodo.</p>'}`;
+        }
+
+        // ---------- Gráficas ----------
+        function fisCrear(id, cfg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            cfg.options = cfg.options || {};
+            cfg.options.interaction = cfg.options.interaction || interaccionEje(cfg);
+            const tipo = cfg.type;
+            if (tipo === 'doughnut' || tipo === 'pie') cfg.plugins = [dsDonaPlugin];
+            else if (tipo !== 'scatter') cfg.plugins = [dsEtiquetasPlugin, dsTotalApiladoPlugin];
+            const ch = new Chart(el, cfg);
+            fisCharts.push(ch);
+            registrarGrafica(id, ch);
+        }
+
+        const fisLienzo = (id, titulo, nota, alto) => `
+            <div class="ds-chart">
+                <div class="ds-chart-t">${titulo}</div>
+                <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
+                ${nota ? `<div class="ds-chart-n">${nota}</div>` : ''}
+                <div class="ds-chart-box${alto ? ' ds-chart-box-alto' : ''}"><canvas id="${id}"></canvas></div>
+                <div class="mun-lectura" id="${id}-lec"></div>
+            </div>`;
+
+        const fisLectura = (id, html) => {
+            const el = document.getElementById(id + '-lec');
+            if (el) el.innerHTML = html;
+        };
+
+        function fisRenderGraficas() {
+            const cont = document.getElementById('fisGraficasContent');
+            if (!cont) return;
+            const t = tokens();
+            fisCharts.forEach(c => { try { c.destroy(); } catch (e) {} });
+            fisCharts = [];
+
+            const regs = fisFiltra();
+            const B = x => '<b>' + esc(String(x)) + '</b>';
+            const pct = (v, tt) => tt ? (v / tt * 100).toFixed(1) + ' %' : '—';
+
+            cont.innerHTML =
+                fisLienzo('fisG1', '1 · Eventos por tipo de delito', 'Ordenados por volumen bajo el filtro actual.') +
+                '<div class="ds-chart-row ds-chart-row-3">' +
+                fisLienzo('fisG2', '2 · Con violencia frente a sin violencia') +
+                fisLienzo('fisG3', '3 · Modus operandi') +
+                fisLienzo('fisG4', '4 · Municipios del AMG frente al interior') +
+                '</div>' +
+                fisLienzo('fisG5', '5 · Comparativo mensual por municipio',
+                          'Barras apiladas: cada color es un municipio. Los de menor volumen se agrupan en «Otros».', true) +
+                fisLienzo('fisG6', '6 · Top municipios: eventos y tasa por 100 mil',
+                          'Población del Censo 2020. La tasa permite comparar municipios de distinto tamaño.', true) +
+                fisLienzo('fisG7', '7 · Distribución por franja horaria') +
+                fisLienzo('fisG8', '8 · Marcas más afectadas', 'Solo aplica a delitos con objeto vehicular.') +
+                fisLienzo('fisG9', '9 · Submarcas más afectadas') +
+                fisLienzo('fisG10', '10 · Giro comercial más afectado', 'Aplica a robo a negocio.');
+
+            const barras = (id, etq, datos, color, horiz) => fisCrear(id, {
+                type: 'bar',
+                data: { labels: etq, datasets: [{ label: 'Eventos', data: datos, backgroundColor: color || t.brand }] },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: horiz ? 'y' : 'x',
+                    plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+            });
+            const opcDona = { responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } };
+
+            // 1 · Tipo de delito
+            const porDelito = fisTop(fisAgrupa(regs, 'delito'), 12);
+            barras('fisG1', porDelito.map(x => x[0]), porDelito.map(x => x[1]), t.brand, true);
+            if (porDelito.length) fisLectura('fisG1',
+                `${B(porDelito[0][0])} concentra ${B(nf(porDelito[0][1]))} eventos, ${pct(porDelito[0][1], regs.length)} del filtro actual.`);
+
+            // 2 · Violencia
+            const cv = regs.filter(r => r.violencia === 'SI').length;
+            const sv = regs.filter(r => r.violencia === 'NO').length;
+            fisCrear('fisG2', { type: 'doughnut',
+                data: { labels: ['Con violencia', 'Sin violencia'],
+                        datasets: [{ data: [cv, sv], backgroundColor: [t.risk, t.brand] }] }, options: opcDona });
+            fisLectura('fisG2', `Del total filtrado, ${B(pct(cv, cv + sv))} ocurrió con violencia.`);
+
+            // 3 · Modus operandi
+            const mo = fisTop(fisAgrupa(regs, 'modus'), 8);
+            fisCrear('fisG3', { type: 'doughnut',
+                data: { labels: mo.map(x => x[0]), datasets: [{ data: mo.map(x => x[1]),
+                        backgroundColor: mo.map((x, i) => PALETA[i % PALETA.length]) }] }, options: opcDona });
+            if (mo.length) fisLectura('fisG3', `${B(mo[0][0])} es el más recurrente, con ${B(nf(mo[0][1]))} eventos (${pct(mo[0][1], regs.length)}).`);
+
+            // 4 · AMG frente al interior
+            const enAMG = regs.filter(r => MUN_AMG.some(m => dsNorm(m) === dsNorm(r.municipio))).length;
+            fisCrear('fisG4', { type: 'doughnut',
+                data: { labels: ['AMG', 'Fuera del AMG'],
+                        datasets: [{ data: [enAMG, regs.length - enAMG], backgroundColor: [t.brand, t.accent] }] }, options: opcDona });
+            fisLectura('fisG4', `El AMG concentra ${B(pct(enAMG, regs.length))} de los eventos filtrados.`);
+
+            // 5 · Comparativo mensual por municipio
+            const topMun = fisTop(fisAgrupa(regs, 'municipio'), 8).map(x => x[0]);
+            const meses = fisData.meses;
+            const serieDe = mun => meses.map(m => regs.filter(r => r.mes === m &&
+                (mun === '__OTROS__' ? topMun.indexOf(r.municipio) === -1 : r.municipio === mun)).length);
+            fisCrear('fisG5', { type: 'bar',
+                data: { labels: meses, datasets: topMun.map((m, i) => ({
+                        label: m, data: serieDe(m), backgroundColor: PALETA[i % PALETA.length], stack: 'z' }))
+                        .concat([{ label: 'Otros municipios', data: serieDe('__OTROS__'),
+                                   backgroundColor: '#9AA7B4', stack: 'z' }]) },
+                options: { responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 10 } } },
+                               tooltip: TOOLTIP_CON_TOTAL,
+                               dsEtiquetas: { enabled: false }, dsTotalApilado: { enabled: true, paso: 1 } },
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, grace: '8%' } } }
+            });
+            fisLectura('fisG5', `Los ${B(topMun.length)} municipios con más eventos llevan color propio; el resto se agrupa en gris.`);
+
+            // 6 · Top municipios con tasa
+            const porMun = fisTop(fisAgrupa(regs, 'municipio'), 10);
+            const conPob = porMun.map(([m, v]) => {
+                const clave = Object.keys(MUN_POBLACION).find(k => dsNorm(k) === dsNorm(m));
+                const pob = clave ? MUN_POBLACION[clave] : null;
+                return { m, v, tasa: pob ? +(v / pob * 100000).toFixed(1) : 0 };
+            });
+            fisCrear('fisG6', { type: 'bar',
+                data: { labels: conPob.map(x => x.m), datasets: [
+                    { label: 'Eventos', data: conPob.map(x => x.v), backgroundColor: t.brand, xAxisID: 'x' },
+                    { label: 'Tasa por 100 mil', data: conPob.map(x => x.tasa), backgroundColor: t.accent, xAxisID: 'x2' }] },
+                options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+                    plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } }, tooltip: OPC_TOOLTIP },
+                    scales: { x: { position: 'bottom', beginAtZero: true,
+                                   title: { display: true, text: 'Eventos', color: t.brand, font: { size: 10 } } },
+                              x2: { position: 'top', beginAtZero: true, grid: { drawOnChartArea: false },
+                                    title: { display: true, text: 'Tasa por 100 mil', color: t.accent, font: { size: 10 } } },
+                              y: { ticks: { font: { size: 10 } } } } }
+            });
+            const masTasa = conPob.slice().sort((a, b) => b.tasa - a.tasa)[0];
+            if (masTasa) fisLectura('fisG6',
+                `${B(porMun[0][0])} lidera en volumen con ${B(nf(porMun[0][1]))} eventos, pero la tasa más alta es la de ` +
+                `${B(masTasa.m)}: ${B(masTasa.tasa)} por cada 100 mil habitantes.`);
+
+            // 7 · Franja horaria
+            const fr = FIS_FRANJAS.map(f => regs.filter(r => r.franja === f).length);
+            barras('fisG7', FIS_FRANJAS, fr, t.brand, false);
+            const iMax = fr.indexOf(Math.max(...fr));
+            if (fr[iMax]) fisLectura('fisG7', `La franja de mayor incidencia es ${B(FIS_FRANJAS[iMax])}, con ${B(nf(fr[iMax]))} eventos (${pct(fr[iMax], regs.length)}).`);
+
+            // 8, 9 · Marcas y submarcas
+            const marcas = fisTop(fisAgrupa(regs.filter(r => r.marca !== 'Sin dato'), 'marca'), 8);
+            barras('fisG8', marcas.map(x => x[0]), marcas.map(x => x[1]), t.accent, true);
+            if (marcas.length) fisLectura('fisG8', `${B(marcas[0][0])} encabeza con ${B(nf(marcas[0][1]))} eventos.`);
+            else fisLectura('fisG8', 'El filtro actual no incluye eventos con marca de vehículo registrada.');
+
+            const subs = fisTop(fisAgrupa(regs.filter(r => r.submarca !== 'Sin dato'), 'submarca'), 8);
+            barras('fisG9', subs.map(x => x[0]), subs.map(x => x[1]), t.accent, true);
+            if (subs.length) fisLectura('fisG9', `${B(subs[0][0])} es la submarca más afectada.`);
+
+            // 10 · Giro comercial
+            const giros = fisTop(fisAgrupa(regs.filter(r => r.giro), 'giro'), 10);
+            barras('fisG10', giros.map(x => x[0]), giros.map(x => x[1]), t.risk, true);
+            if (giros.length) fisLectura('fisG10', `${B(giros[0][0])} es el giro más afectado, con ${B(nf(giros[0][1]))} eventos.`);
+            else fisLectura('fisG10', 'El filtro actual no incluye eventos con giro comercial registrado.');
+
+            observarTodos('#fisGraficasContent .ds-chart');
+        }
+
+        // ---------- Tablas: franja horaria, colonias y sectores ----------
+        function fisRenderTablas() {
+            const cont = document.getElementById('fisTablasContent');
+            if (!cont) return;
+            const regs = fisFiltra();
+
+            const cruce = (filtro, titulo) => {
+                const sub = regs.filter(filtro);
+                const celda = (f, d) => sub.filter(r => r.franja === f && r.dia === d).length;
+                const totDia = d => sub.filter(r => r.dia === d).length;
+                const totFr = f => sub.filter(r => r.franja === f).length;
+                return `
+                <div class="ds-chart">
+                    <div class="ds-chart-t">${titulo}</div>
+                    <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
+                    <div class="table-wrapper"><table class="data-table"><thead><tr>
+                        <th></th>${FIS_DIAS.map(d => `<th class="mun-num">${d.slice(0, 3)}</th>`).join('')}
+                        <th class="mun-num">Total</th></tr></thead><tbody>
+                        ${FIS_FRANJAS.map(f => `<tr>
+                            <td><b>${f}</b></td>
+                            ${FIS_DIAS.map(d => `<td class="mun-num">${celda(f, d) || '<span class="mun-cero">—</span>'}</td>`).join('')}
+                            <td class="mun-num"><b>${nf(totFr(f))}</b></td></tr>`).join('')}
+                        <tr class="mun-fila-total"><td><b>Total</b></td>
+                            ${FIS_DIAS.map(d => `<td class="mun-num"><b>${nf(totDia(d))}</b></td>`).join('')}
+                            <td class="mun-num"><b>${nf(sub.length)}</b></td></tr>
+                    </tbody></table></div>
+                </div>`;
+            };
+
+            const ranking = (campo, titulo, conMun) => {
+                const m = {};
+                regs.forEach(r => {
+                    const k = conMun ? (r.municipio + '||' + r[campo]) : r[campo];
+                    if (!k) return;
+                    m[k] = (m[k] || 0) + 1;
+                });
+                const top = fisTop(m, 15);
+                return `
+                <div class="ds-chart">
+                    <div class="ds-chart-t">${titulo}</div>
+                    <div class="ds-chart-f">Fuente: Fiscalía del Estado · C5 Zapopan</div>
+                    <div class="table-wrapper"><table class="data-table"><thead><tr>
+                        ${conMun ? '<th>Municipio</th>' : ''}<th>${conMun ? 'Colonia' : 'Sector'}</th>
+                        <th class="mun-num">Eventos</th><th class="mun-num">%</th>
+                    </tr></thead><tbody>
+                        ${top.map(([k, v]) => {
+                            const p = regs.length ? (v / regs.length * 100).toFixed(1) : '0.0';
+                            const partes = k.split('||');
+                            return `<tr>${conMun ? `<td>${esc(partes[0])}</td>` : ''}
+                                <td>${esc(conMun ? partes[1] : k)}</td>
+                                <td class="mun-num">${nf(v)}</td><td class="mun-num">${p} %</td></tr>`;
+                        }).join('')}
+                    </tbody></table></div>
+                </div>`;
+            };
+
+            cont.innerHTML =
+                cruce(r => r.violencia === 'SI', 'Eventos con violencia · día y franja horaria') +
+                cruce(r => r.violencia === 'NO', 'Eventos sin violencia · día y franja horaria') +
+                ranking('colonia', 'Ranking de colonias', true) +
+                ranking('sector', 'Ranking de sectores', false);
+
+            observarTodos('#fisTablasContent .ds-chart');
+        }
+
+        // ---------- Mapa ----------
+        function fisRenderMapa() {
+            const cajaInfo = document.getElementById('fisMapaInfo');
+            if (typeof L === 'undefined' || typeof proj4 === 'undefined') {
+                if (cajaInfo) cajaInfo.textContent = 'No se pudieron cargar las librerías del mapa.';
+                return;
+            }
+            // UTM zona 13N (EPSG:32613) → WGS84. La hoja guarda la geometría proyectada.
+            proj4.defs('EPSG:32613', '+proj=utm +zone=13 +datum=WGS84 +units=m +no_defs');
+
+            const regs = fisFiltra().filter(r => r.x !== null && r.y !== null);
+            const puntos = [];
+            regs.forEach(r => {
+                try {
+                    const [lon, lat] = proj4('EPSG:32613', 'EPSG:4326', [r.x, r.y]);
+                    if (lat > 18 && lat < 23 && lon > -106 && lon < -101) puntos.push({ lat, lon, r });
+                } catch (e) {}
+            });
+
+            if (cajaInfo) cajaInfo.textContent =
+                `${nf(puntos.length)} de ${nf(fisFiltra().length)} eventos georreferenciados`;
+
+            if (!fisMapa) {
+                fisMapa = L.map('fisMapa').setView([20.67, -103.35], 11);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap', maxZoom: 18
+                }).addTo(fisMapa);
+            }
+            if (fisCapa) { fisMapa.removeLayer(fisCapa); fisCapa = null; }
+            if (!puntos.length) return;
+
+            if (fisEstado.mapa === 'calor' && L.heatLayer) {
+                fisCapa = L.heatLayer(puntos.map(p => [p.lat, p.lon, 0.35]),
+                    { radius: 14, blur: 10, minOpacity: 0.2 });
+            } else if (fisEstado.mapa === 'clusters' && L.markerClusterGroup) {
+                fisCapa = L.markerClusterGroup();
+                puntos.forEach(p => fisCapa.addLayer(
+                    // Solo metadatos NO sensibles: nunca calle, número ni identificadores.
+                    L.marker([p.lat, p.lon]).bindPopup(
+                        `<b>${esc(p.r.delito)}</b><br>${esc(p.r.municipio)}<br>${esc(p.r.colonia)}<br>` +
+                        `${esc(p.r.mes)} ${esc(p.r.anio)} · ${p.r.violencia === 'SI' ? 'con' : 'sin'} violencia`)));
+            } else {
+                fisCapa = L.layerGroup();
+                puntos.slice(0, 4000).forEach(p => fisCapa.addLayer(
+                    L.circleMarker([p.lat, p.lon], {
+                        radius: 3, weight: 0,
+                        fillColor: p.r.violencia === 'SI' ? '#C0392B' : '#18345D', fillOpacity: .6
+                    })));
+            }
+            fisCapa.addTo(fisMapa);
+            setTimeout(() => fisMapa.invalidateSize(), 60);
+        }
+
+        // ---------- Reporte en PowerPoint ----------
+        async function fisGenerarReporte() {
+            const btn = document.getElementById('fisReporteBtn');
+            if (btn) { btn.disabled = true; btn.querySelector('span:last-child').textContent = 'Generando…'; }
+            try {
+                await fisCargarLibs();
+                if (typeof PptxGenJS === 'undefined') throw new Error('No se pudo cargar la librería de presentaciones.');
+
+                const pptx = new PptxGenJS();
+                pptx.layout = 'LAYOUT_16x9';
+                const regs = fisFiltra();
+
+                const portada = pptx.addSlide();
+                portada.background = { color: '18345D' };
+                portada.addText('Incidencia Delictiva — Fiscalía del Estado', {
+                    x: 0.6, y: 2.0, w: 9, h: 0.9, fontSize: 30, bold: true, color: 'FFFFFF' });
+                portada.addText(`${nf(regs.length)} eventos bajo el filtro seleccionado`, {
+                    x: 0.6, y: 3.0, w: 9, h: 0.5, fontSize: 16, color: 'F08013' });
+                portada.addText('CGES / DGAPP / AA · Cifras preliminares', {
+                    x: 0.6, y: 4.6, w: 9, h: 0.4, fontSize: 12, color: 'C9D6E8' });
+
+                // Cada gráfica se lleva como imagen del lienzo, que ya está renderizado.
+                for (const ch of fisCharts) {
+                    const s = pptx.addSlide();
+                    const titulo = ch.canvas.closest('.ds-chart').querySelector('.ds-chart-t').textContent;
+                    s.addText(titulo, { x: 0.4, y: 0.3, w: 9.2, h: 0.5, fontSize: 16, bold: true, color: '18345D' });
+                    s.addImage({ data: ch.toBase64Image(), x: 0.4, y: 0.95, w: 9.2, h: 4.4 });
+                    s.addText('Fuente: Fiscalía del Estado de Jalisco · C5 Zapopan · Elaborado por CGES/DGAPP/AA',
+                        { x: 0.4, y: 5.5, w: 9.2, h: 0.3, fontSize: 9, color: '6B7785' });
+                }
+                await pptx.writeFile({ fileName: 'Reporte_Fiscalia_' + new Date().toISOString().slice(0, 10) + '.pptx' });
+            } catch (e) {
+                console.error(e);
+                alert('No se pudo generar el reporte: ' + e.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.querySelector('span:last-child').textContent = 'Generar reporte'; }
+            }
+        }
+
+        // ---------- Orquestación ----------
+        function fisLlenarFiltros() {
+            const set = (id, valores, etq) => {
+                const sel = document.getElementById(id);
+                if (!sel) return;
+                const actual = sel.value;
+                sel.innerHTML = `<option value="__TODOS__">${etq}</option>` +
+                    valores.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
+                if (actual && sel.querySelector(`option[value="${CSS.escape(actual)}"]`)) sel.value = actual;
+            };
+            set('fisDelito', fisData.delitos, 'Todos los delitos');
+            set('fisAnio', fisData.anios, 'Todos');
+            set('fisMes', fisData.meses, 'Todos');
+            set('fisMuni', fisData.municipios, 'Todos');
+
+            const c = document.getElementById('fisNReg');
+            if (c) c.textContent = nf(fisData.registros.length);
+            const p = document.getElementById('fisPeriodo');
+            if (p) p.textContent = fisData.anios.length ? fisData.anios[0] + ' – ' + fisData.anios[fisData.anios.length - 1] : '—';
+        }
+
+        function fisRefrescar() {
+            fisRenderKpis();
+            fisRenderAlertas();
+            fisRenderGraficas();
+            fisRenderTablas();
+            fisRenderMapa();
+        }
+
+        async function fisCargar() {
+            const cont = document.getElementById('fisGraficasContent');
+            try {
+                if (cont) cont.innerHTML = '<div class="sk sk-card" style="height:220px"></div>';
+                // Las librerías pesadas se piden en paralelo con los datos.
+                const [csv] = await Promise.all([fisFetch(), fisCargarLibs()]);
+                fisData = fisParse(csv);
+                fisLlenarFiltros();
+                fisRenderCalidad();
+                fisRefrescar();
+                observeReveal(document.getElementById('fisKpis'));
+                observeReveal(document.getElementById('fisAlertas'));
+            } catch (e) {
+                console.error('❌ Fiscalía:', e);
+                if (cont) cont.innerHTML = '<p class="an-empty">No se pudieron cargar los datos de Fiscalía: ' + esc(e.message) + '</p>';
+            }
+        }
+
+        [['fisDelito','delito'],['fisAnio','anio'],['fisMes','mes'],['fisMuni','municipio']].forEach(([id, campo]) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', e => { fisEstado[campo] = e.target.value; fisRefrescar(); });
+        });
+
+        conmutar('fisViolBtns', 'viol', v => { fisEstado.violencia = v; fisRefrescar(); });
+        conmutar('fisMapaBtns', 'mapa', v => { fisEstado.mapa = v; fisRenderMapa(); });
+
+        (function () {
+            const b = document.getElementById('fisLimpiar');
+            if (b) b.addEventListener('click', () => {
+                Object.assign(fisEstado, { delito: '__TODOS__', anio: '__TODOS__', mes: '__TODOS__',
+                                           municipio: '__TODOS__', violencia: '__TODAS__' });
+                ['fisDelito','fisAnio','fisMes','fisMuni'].forEach(id => {
+                    const s = document.getElementById(id); if (s) s.value = '__TODOS__';
+                });
+                const g = document.getElementById('fisViolBtns');
+                if (g) g.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.viol === '__TODAS__'));
+                fisRefrescar();
+            });
+            const r = document.getElementById('fisReporteBtn');
+            if (r) r.addEventListener('click', fisGenerarReporte);
+        })();
+
+        registrarCargador('fiscalia', fisCargar);
 
     </script>
 </body>
