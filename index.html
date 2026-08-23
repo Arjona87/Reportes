@@ -3183,6 +3183,31 @@
         /* =====================================================================
            CHISPOGRAMA (sparkline en SVG)
            ===================================================================== */
+        /* Tarjeta de panorama, componente único para todo el tablero.
+           Antes cada módulo traía su propia versión: el Reporte Semanal usaba `.card`
+           —caja, borde, acento lateral y jerarquía tipográfica— mientras Municipal y
+           Fiscalía repetían una plantilla plana sin caja ni acento, de modo que el
+           mismo bloque se leía distinto en cada vista.
+
+           Acento alterno azul / naranja por posición. En el Semanal el color codifica
+           la DIRECCIÓN de la variación; aquí no hay periodo anterior contra el que
+           comparar, así que el color no pretende significar nada: solo separa
+           visualmente las tarjetas. Cuando exista la comparación mensual, el acento
+           podrá pasar a ser semántico como en el Semanal.
+
+           `chico` baja la cifra a 26 px para los valores de TEXTO (un nombre de
+           municipio desborda a 34 px). Es el mismo recurso que ya usa la tarjeta
+           «Delito en foco». */
+        const KPI_ACENTOS = ['var(--brand-head)', 'var(--accent)'];
+        function tarjetaKPI(titulo, valor, sub, idx, chico) {
+            const acento = KPI_ACENTOS[(idx || 0) % KPI_ACENTOS.length];
+            return `<div class="card" style="--card-acento:${acento}">
+                <h3>${titulo}</h3>
+                <div class="value"${chico ? ' style="font-size:26px;line-height:1.2"' : ''}>${valor}</div>
+                ${sub ? `<div class="kpi-sub">${sub}</div>` : ''}
+            </div>`;
+        }
+
         function chispograma(serie, color) {
             const v = (serie || []).filter(Number.isFinite);
             if (v.length < 3) return '';
@@ -6378,18 +6403,15 @@
             const activos = meses.filter(v => v > 0).length;
             const tasaEstatal = MUN_POB_TOTAL ? (total / MUN_POB_TOTAL * 100000) : 0;
 
-            const tarjeta = (t, v, s) => `<div class="kpi"><div class="kpi-t">${t}</div>
-                <div class="kpi-v">${v}</div><div class="kpi-sub">${s}</div></div>`;
-
             cont.innerHTML =
-                tarjeta('Carpetas acumuladas', nf(total),
-                        `${activos} mes${activos === 1 ? '' : 'es'} con información`) +
-                tarjeta('Concentración metropolitana', pf(total ? amg / total * 100 : 0, 1).replace('+', ''),
-                        `${nf(amg)} carpetas en los 9 municipios del AMG`) +
-                tarjeta('Municipio con más carpetas', top ? esc(top[0]) : '—',
-                        top ? `${nf(top[1])} carpetas · ${(top[1] / total * 100).toFixed(1)} % del estado` : '') +
-                tarjeta('Tasa estatal', tasaEstatal.toFixed(1),
-                        'Por cada 100 mil habitantes · Censo 2020');
+                tarjetaKPI('Carpetas acumuladas', nf(total),
+                        `${activos} mes${activos === 1 ? '' : 'es'} con información`, 0) +
+                tarjetaKPI('Concentración metropolitana', pf(total ? amg / total * 100 : 0, 1).replace('+', ''),
+                        `${nf(amg)} carpetas en los 9 municipios del AMG`, 1) +
+                tarjetaKPI('Municipio con más carpetas', top ? esc(top[0]) : '—',
+                        top ? `${nf(top[1])} carpetas · ${(top[1] / total * 100).toFixed(1)} % del estado` : '', 2, true) +
+                tarjetaKPI('Tasa estatal', tasaEstatal.toFixed(1),
+                        'Por cada 100 mil habitantes · Censo 2020', 3);
 
             const nota = document.getElementById('munKpiNota');
             if (nota) nota.textContent = munEstado.delito === '__TODOS__'
@@ -7725,17 +7747,14 @@
             const sv = regs.filter(r => r.violencia === 'NO').length;
             const pct = regs.length ? (cv / regs.length * 100) : 0;
 
-            const tarjeta = (t, v, s) => `<div class="kpi"><div class="kpi-t">${t}</div>
-                <div class="kpi-v">${v}</div><div class="kpi-sub">${s}</div></div>`;
-
             const cont = document.getElementById('fisKpiCards');
             if (cont) cont.innerHTML =
-                tarjeta('Eventos registrados', nf(regs.length),
-                        fisEstado.delito === '__TODOS__' ? 'Todos los delitos' : esc(fisEstado.delito)) +
-                tarjeta('Con violencia', nf(cv), pct.toFixed(1) + ' % del total filtrado') +
-                tarjeta('Sin violencia', nf(sv), (100 - pct).toFixed(1) + ' % del total filtrado') +
-                tarjeta('Municipios con registro', nf(new Set(regs.map(r => r.municipio)).size),
-                        'Bajo el filtro actual');
+                tarjetaKPI('Eventos registrados', nf(regs.length),
+                        fisEstado.delito === '__TODOS__' ? 'Todos los delitos' : esc(fisEstado.delito), 0) +
+                tarjetaKPI('Con violencia', nf(cv), pct.toFixed(1) + ' % del total filtrado', 1) +
+                tarjetaKPI('Sin violencia', nf(sv), (100 - pct).toFixed(1) + ' % del total filtrado', 2) +
+                tarjetaKPI('Municipios con registro', nf(new Set(regs.map(r => r.municipio)).size),
+                        'Bajo el filtro actual', 3);
 
             const chip = document.getElementById('fisConteo');
             if (chip) chip.textContent = `${nf(regs.length)} de ${nf(fisData.registros.length)} registros`;
