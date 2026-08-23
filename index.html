@@ -1756,6 +1756,24 @@
             </div>
         </section>
 
+        <section id="munIncrementos">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span>
+                <h2>Top de delitos con incrementos</h2>
+                <span class="panel-nota">Último mes contra el anterior · orden por incremento absoluto</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div id="munIncContent" class="top-inc">
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                </div>
+            </div>
+        </section>
+
         <section id="munGraficas">
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span>
@@ -1858,6 +1876,30 @@
                 <div class="summary-cards" id="fisKpiCards">
                     <div class="sk sk-card"></div><div class="sk sk-card"></div>
                     <div class="sk sk-card"></div><div class="sk sk-card"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="fisIncrementos">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Top de delitos con incrementos</h2>
+                <span class="panel-nota">Último mes contra el anterior · orden por incremento absoluto</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div id="fisIncContent" class="top-inc">
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                    <div class="sk sk-card" style="height:96px"></div>
+                </div>
+                <div class="mun-nota mun-nota-fuerte" style="margin-top:14px">
+                    <b>Estas cifras son una muestra, no el total estatal.</b> El registro de la Fiscalía y el
+                    C5 Zapopan no cubre todo el estado: homicidio doloso y lesiones dolosas aparecen aquí
+                    en una fracción de su volumen real. Esta franja indica qué creció dentro del registro
+                    disponible; no debe leerse como el incremento del delito en Jalisco. Para la cifra
+                    estatal, la fuente es Incidencia Municipal (SESNSP).
                 </div>
             </div>
         </section>
@@ -3198,13 +3240,114 @@
            `chico` baja la cifra a 26 px para los valores de TEXTO (un nombre de
            municipio desborda a 34 px). Es el mismo recurso que ya usa la tarjeta
            «Delito en foco». */
+        /* =====================================================================
+           PANORAMA MENSUAL — utilidades compartidas por Municipal y Fiscalía
+           =====================================================================
+           El Reporte Semanal compara semana contra semana anterior. Municipal y
+           Fiscalía no tienen serie semanal: su unidad natural es el MES. Estas
+           utilidades producen la variación y el ranking de incrementos sobre esa
+           base, y toda la interfaz que las usa lo dice de forma explícita para que
+           nadie confunda una variación mensual con una semanal.
+
+           Umbral de base baja: 10 casos, no 5. Al pasar de semana a mes el
+           denominador crece y un umbral de 5 dejaría de filtrar el ruido: 3 → 8 en
+           un mes es +166 % y no describe ninguna tendencia. */
+        const PM_BASE_BAJA = 10;
+
+        /* Último índice con dato. Los meses posteriores llegan en CERO, no vacíos:
+           tomarlos como caída real sería un error de lectura ya documentado. */
+        function pmUltimoIndice(serie) {
+            let u = -1;
+            for (let i = 0; i < serie.length; i++) if ((serie[i] || 0) > 0) u = i;
+            return u;
+        }
+
+        /* Variación del último mes con dato contra el inmediato anterior.
+           Devuelve null cuando no hay dos meses comparables: sin eso, el primer mes
+           del año mostraría un +100 % inventado contra un cero que solo significa
+           «todavía no hay captura». */
+        function pmVariacion(serie) {
+            const u = pmUltimoIndice(serie);
+            if (u < 1) return null;
+            const act = serie[u] || 0, ant = serie[u - 1] || 0;
+            if (ant <= 0) return null;
+            return { idx: u, act, ant, dif: act - ant, pct: (act - ant) / ant * 100 };
+        }
+
+        /* Ranking de incrementos mes contra mes.
+           `mapa` es { etiqueta: serie de 12 meses }.
+
+           A diferencia del Semanal, aquí NO se pondera por gravedad ICRD: esos pesos
+           están definidos sobre la nomenclatura de la hoja SEMANAL y no corresponden
+           ni al catálogo SESNSP de Municipal ni a Delito_EST de Fiscalía. Emparejarlos
+           a ojo produciría un orden con apariencia de rigor y sin respaldo. El orden
+           es por incremento absoluto, y la cabecera de cada franja lo declara. */
+        function pmTopIncrementos(mapa, cuantos) {
+            return Object.entries(mapa).map(([nombre, serie]) => {
+                const u = pmUltimoIndice(serie);
+                if (u < 1) return null;
+                const act = serie[u] || 0, ant = serie[u - 1] || 0;
+                const dif = act - ant;
+                if (dif <= 0) return null;              // solo incrementos
+                return {
+                    nombre, idx: u, ant, act, dif,
+                    pct: ant > 0 ? (dif / ant * 100) : null,
+                    baseBaja: ant < PM_BASE_BAJA
+                };
+            }).filter(Boolean)
+              .sort((a, b) => b.dif - a.dif)
+              .slice(0, cuantos || 5);
+        }
+
+        /* Franja de incrementos. Sin `data-alerta`: el filtro cruzado por foco es
+           una función del Reporte Semanal y no existe en estos dos módulos. */
+        function pmPintaIncrementos(idCont, lista, etqMeses, vacio) {
+            const cont = document.getElementById(idCont);
+            if (!cont) return;
+            if (!lista.length) { cont.innerHTML = `<div class="alerta-vacia">${vacio}</div>`; return; }
+
+            cont.innerHTML = lista.map((d, i) => `
+                <div class="ti-c" style="--ti-color:var(--risk)">
+                    <span class="ti-pos">${i + 1}</span>
+                    <span class="ti-cat">${esc(etqMeses[d.idx - 1] || '')} → ${esc(etqMeses[d.idx] || '')}</span>
+                    <div class="ti-n">${esc(d.nombre)}</div>
+                    <div class="ti-v">${nf(d.ant)} → <b>${nf(d.act)}</b></div>
+                    <div class="ti-d">▲ +${nf(d.dif)}${d.pct !== null ? ` · +${d.pct.toFixed(1)}%` : ''}${
+                        d.baseBaja ? ` <em title="Menos de ${PM_BASE_BAJA} casos en el mes anterior: la variación porcentual no es interpretable">base baja</em>` : ''}</div>
+                </div>`).join('');
+        }
+
+        /* `op.varia` activa el acento SEMÁNTICO: rojo si sube, verde si baja, gris
+           si no cambia, igual que en el Semanal. Sin variación, el acento cae al
+           alterno azul / naranja por posición, que no significa nada y solo separa
+           las tarjetas: sin periodo anterior no hay dirección que codificar y un
+           color semántico ahí sería una afirmación sin respaldo.
+           `op.serie` añade el chispograma, teñido del mismo acento. */
         const KPI_ACENTOS = ['var(--brand-head)', 'var(--accent)'];
-        function tarjetaKPI(titulo, valor, sub, idx, chico) {
-            const acento = KPI_ACENTOS[(idx || 0) % KPI_ACENTOS.length];
+        function tarjetaKPI(titulo, valor, sub, idx, chico, op) {
+            const o = op || {};
+            const t = tokens();
+            let acento = KPI_ACENTOS[(idx || 0) % KPI_ACENTOS.length];
+            let bloqueVar = '';
+
+            if (o.varia) {
+                const v = o.varia;
+                const sube = v.dif > 0, baja = v.dif < 0;
+                acento = sube ? t.risk : (baja ? t.down : t.muted);
+                const clase = sube ? 'positive' : (baja ? 'negative' : 'neutral');
+                const flecha = sube ? '▲' : (baja ? '▼' : '=');
+                bloqueVar = `<div class="variation ${clase}">${flecha} ${pf(v.pct)} ${esc(o.etqPeriodo || 'vs. mes anterior')}</div>`;
+            }
+
+            const spark = (o.serie && o.serie.length >= 3)
+                ? chispograma(o.serie, o.varia ? acento : t.brand) : '';
+
             return `<div class="card" style="--card-acento:${acento}">
                 <h3>${titulo}</h3>
                 <div class="value"${chico ? ' style="font-size:26px;line-height:1.2"' : ''}>${valor}</div>
+                ${bloqueVar}
                 ${sub ? `<div class="kpi-sub">${sub}</div>` : ''}
+                ${spark}
             </div>`;
         }
 
@@ -6403,9 +6546,17 @@
             const activos = meses.filter(v => v > 0).length;
             const tasaEstatal = MUN_POB_TOTAL ? (total / MUN_POB_TOTAL * 100000) : 0;
 
+            /* 4-B · Serie mensual del filtro activo: alimenta el chispograma y la
+               variación del último mes con dato contra el anterior. */
+            const serieMes = munPorMes(regs);
+            const variaMes = pmVariacion(serieMes);
+            const uMes = pmUltimoIndice(serieMes);
+
             cont.innerHTML =
                 tarjetaKPI('Carpetas acumuladas', nf(total),
-                        `${activos} mes${activos === 1 ? '' : 'es'} con información`, 0) +
+                        `${activos} mes${activos === 1 ? '' : 'es'} con información`, 0, false,
+                        { serie: serieMes, varia: variaMes,
+                          etqPeriodo: uMes > 0 ? `${MUN_MESES[uMes]} vs. ${MUN_MESES[uMes - 1]}` : 'vs. mes anterior' }) +
                 tarjetaKPI('Concentración metropolitana', pf(total ? amg / total * 100 : 0, 1).replace('+', ''),
                         `${nf(amg)} carpetas en los 9 municipios del AMG`, 1) +
                 tarjetaKPI('Municipio con más carpetas', top ? esc(top[0]) : '—',
@@ -6413,10 +6564,35 @@
                 tarjetaKPI('Tasa estatal', tasaEstatal.toFixed(1),
                         'Por cada 100 mil habitantes · Censo 2020', 3);
 
+            munRenderIncrementos();
+
             const nota = document.getElementById('munKpiNota');
             if (nota) nota.textContent = munEstado.delito === '__TODOS__'
                 ? 'Todos los delitos del catálogo SESNSP'
                 : munEstado.delito;
+        }
+
+        /* 4-C · Top de incrementos de Municipal.
+           El ranking recorre TODO el catálogo, no el delito seleccionado: si se
+           respetara ese filtro la franja mostraría una sola tarjeta y perdería su
+           función, que es avisar de qué subió sin que haya que buscarlo.
+           Sí respeta año y violencia, porque definen el universo comparable. */
+        function munRenderIncrementos() {
+            let base = munPorAnio();
+            if (munEstado.violencia !== '__TODAS__' && munEsRobo()) {
+                base = base.filter(r => r.modalidad === munEstado.violencia);
+            }
+
+            const series = {};
+            base.forEach(r => {
+                const k = r.subtipo || r.tipo;
+                if (!k) return;
+                if (!series[k]) series[k] = new Array(12).fill(0);
+                r.meses.forEach((v, i) => series[k][i] += (v || 0));
+            });
+
+            pmPintaIncrementos('munIncContent', pmTopIncrementos(series, 5), MUN_MESES,
+                'Ningún delito del catálogo aumentó respecto del mes anterior.');
         }
 
         // ---------- Gráficas ----------
@@ -7299,6 +7475,7 @@
                 munRenderCinta();
                 munRefrescar();
                 observeReveal(document.getElementById('munKpis'));
+                observeReveal(document.getElementById('munIncrementos'));
                 observeReveal(document.getElementById('munTabla'));
             } catch (e) {
                 console.error('❌ Incidencia municipal:', e);
@@ -7747,17 +7924,64 @@
             const sv = regs.filter(r => r.violencia === 'NO').length;
             const pct = regs.length ? (cv / regs.length * 100) : 0;
 
+            /* 4-B · Serie mensual. Fiscalía no guarda la serie precalculada, así que
+               se arma en una sola pasada sobre los registros ya filtrados.
+               El año se fija al MÁS RECIENTE presente en el filtro: la hoja mezcla
+               2025 y 2026, y sumar ambos en un mismo eje de doce meses compararía
+               agosto de 2025 con agosto de 2026 como si fueran el mismo ciclo. */
+            const anioSerie = regs.reduce((a, r) => (r.anio && r.anio > a) ? r.anio : a, '');
+            const serieMes = new Array(12).fill(0);
+            regs.forEach(r => {
+                if (!r.mes || (anioSerie && r.anio !== anioSerie)) return;
+                const i = FIS_MESES.indexOf(r.mes);
+                if (i >= 0) serieMes[i]++;
+            });
+            const variaMes = pmVariacion(serieMes);
+            const uMes = pmUltimoIndice(serieMes);
+            const capital = m => m ? m.charAt(0) + m.slice(1).toLowerCase() : '';
+
             const cont = document.getElementById('fisKpiCards');
             if (cont) cont.innerHTML =
                 tarjetaKPI('Eventos registrados', nf(regs.length),
-                        fisEstado.delito === '__TODOS__' ? 'Todos los delitos' : esc(fisEstado.delito), 0) +
+                        fisEstado.delito === '__TODOS__' ? 'Todos los delitos' : esc(fisEstado.delito), 0, false,
+                        { serie: serieMes, varia: variaMes,
+                          etqPeriodo: uMes > 0
+                            ? `${capital(FIS_MESES[uMes])} vs. ${capital(FIS_MESES[uMes - 1])}${anioSerie ? ' ' + anioSerie : ''}`
+                            : 'vs. mes anterior' }) +
                 tarjetaKPI('Con violencia', nf(cv), pct.toFixed(1) + ' % del total filtrado', 1) +
                 tarjetaKPI('Sin violencia', nf(sv), (100 - pct).toFixed(1) + ' % del total filtrado', 2) +
                 tarjetaKPI('Municipios con registro', nf(new Set(regs.map(r => r.municipio)).size),
                         'Bajo el filtro actual', 3);
 
+            fisRenderIncrementos(anioSerie);
+
             const chip = document.getElementById('fisConteo');
             if (chip) chip.textContent = `${nf(regs.length)} de ${nf(fisData.registros.length)} registros`;
+        }
+
+        /* 4-C · Top de incrementos de Fiscalía.
+           Recorre TODO el catálogo de delitos, no el seleccionado, por la misma
+           razón que en Municipal. Sí respeta año, mes, municipio y violencia. */
+        function fisRenderIncrementos(anioSerie) {
+            const e = fisEstado;
+            const base = fisData.registros.filter(r =>
+                (e.anio === '__TODOS__' || r.anio === e.anio) &&
+                (e.municipio === '__TODOS__' || r.municipio === e.municipio) &&
+                (e.violencia === '__TODAS__' || r.violencia === e.violencia) &&
+                (!anioSerie || r.anio === anioSerie));
+
+            const series = {};
+            base.forEach(r => {
+                if (!r.delito || !r.mes) return;
+                const i = FIS_MESES.indexOf(r.mes);
+                if (i < 0) return;
+                if (!series[r.delito]) series[r.delito] = new Array(12).fill(0);
+                series[r.delito][i]++;
+            });
+
+            const etq = FIS_MESES.map(m => m.charAt(0) + m.slice(1).toLowerCase());
+            pmPintaIncrementos('fisIncContent', pmTopIncrementos(series, 5), etq,
+                'Ningún delito aumentó respecto del mes anterior.');
         }
 
         function fisRenderCalidad() {
@@ -8292,6 +8516,7 @@
                 fisRenderCalidad();
                 fisRefrescar();
                 observeReveal(document.getElementById('fisKpis'));
+                observeReveal(document.getElementById('fisIncrementos'));
                 observeReveal(document.getElementById('fisAlertas'));
             } catch (e) {
                 console.error('❌ Fiscalía:', e);
