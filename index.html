@@ -5186,6 +5186,18 @@
            si la red bloqueara ese recurso, las gráficas quedarían sin etiquetas.
            IMPORTANTE: se pasa por gráfica (plugins: [...]), NO se registra en
            Chart.register, para no afectar a las gráficas del Reporte Semanal. */
+        /* Valor a rotular. Por omisión es el valor dibujado, pero un dataset puede
+           declarar `valoresReales[i]` cuando la barra se dibuja recortada a propósito:
+           así la barra deja de aplastar la escala y la cifra sigue siendo la verdadera.
+           Propiedad estrictamente opt-in: ningún dataset que no la declare cambia de
+           comportamiento. Se usa hoy en las gráficas de Fiscalía.
+           Declaración `function` (no `const`) para que quede izada por encima del
+           plugin que la invoca y no repetir el problema de TDZ ya documentado. */
+        function dsValorReal(ds, i, dibujado) {
+            return (ds && ds.valoresReales && ds.valoresReales[i] != null)
+                ? ds.valoresReales[i] : dibujado;
+        }
+
         const dsEtiquetasPlugin = {
             id: 'dsEtiquetas',
             afterDatasetsDraw(chart) {
@@ -5220,7 +5232,7 @@
                         if (v === null || v === undefined) return;
                         if (i !== ultimoIdx && i % paso !== 0) return;
 
-                        const txt = Number(v).toLocaleString('es-MX');
+                        const txt = Number(dsValorReal(ds, i, v)).toLocaleString('es-MX');
                         const color = (i === ultimoIdx) ? '#C0392B'
                                     : (ds.borderColor && typeof ds.borderColor === 'string' ? ds.borderColor : '#18345D');
 
@@ -7553,14 +7565,21 @@
                    clasificación ("4.5.1 ROBO A PERSONA VIA PUBLICA"), no días.
                    Por eso los cruces día × franja salían completamente vacíos.
                    Se deriva de FECHA_DE_H, que sí es una fecha válida. */
-                let dia = '';
+                let dia = '', fechaTxt = '';
                 const f = g(r, 'FECHA_DE_H').match(/^(\d{4})-(\d{2})-(\d{2})/) ||
                           g(r, 'FECHA_DE_H').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
                 if (f) {
                     const d = f[0].indexOf('-') === 4
                         ? new Date(+f[1], +f[2] - 1, +f[3])
                         : new Date(+f[3], +f[2] - 1, +f[1]);
-                    if (!isNaN(d)) dia = FIS_DIAS[(d.getDay() + 6) % 7];   // getDay: 0 = domingo
+                    if (!isNaN(d)) {
+                        dia = FIS_DIAS[(d.getDay() + 6) % 7];   // getDay: 0 = domingo
+                        /* La fecha completa se guarda SOLO para el popup del mapa.
+                           Se formatea aquí, con la fecha ya validada, para no repetir
+                           el parseo en cada clic. */
+                        fechaTxt = d.toLocaleDateString('es-MX',
+                            { day: 'numeric', month: 'long', year: 'numeric' });
+                    }
                     else audit.sinFecha++;
                 } else audit.sinFecha++;
 
@@ -7574,7 +7593,7 @@
                     marca: g(r,'Marca') || 'Sin dato', submarca: g(r,'Submarca') || 'Sin dato',
                     monto: fisNum(g(r,'MONTO')), objeto: g(r,'OBJETOS_RO'), giro: g(r,'GIR_COMER'),
                     transporte: g(r,'TIP_TRANSP'), situacion: g(r,'SituaciOn'),
-                    dia, franja, amg,
+                    dia, franja, amg, fecha: fechaTxt,
                     exigido: fisNum(g(r,'CANT_EXIG')), pagado: fisNum(g(r,'CANT_PAG')),
                     recuperado: fisNum(g(r,'CANT_RECU')),
                     victimas: fisNum(g(r,'TotalVicti')), x, y
@@ -7623,6 +7642,81 @@
             return m;
         };
         const fisTop = (obj, n) => Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, n || 9999);
+
+        /* ---------- Categorías no identificadas ---------------------------------
+           La captura de la Fiscalía mezcla marcas reales con valores que no
+           identifican nada: "OTRO", "Sin dato", "No especificado" y variantes. Al
+           ser el grupo más numeroso encabezan el ranking y aplastan la escala: en
+           la gráfica de submarcas, la primera marca real quedaba al 40 % del ancho.
+
+           Tratamiento acordado:
+             1. Todos esos valores se agrupan en UNA barra, "Sin Identificar".
+             2. Si esa barra queda en PRIMER lugar, se dibuja a la longitud de la
+                siguiente categoría × 1.05, conservando la cifra real en la etiqueta
+                y en el tooltip.
+             3. Se pinta en gris para leerse como dato no informativo.
+
+           El truncado solo aplica a gráficas de barras. En las de dona el ángulo es
+           proporcional al valor y recortarlo falsearía el total del anillo: ahí se
+           agrupa, pero no se recorta. */
+        const FIS_GEN_EXACTAS = new Set(['', '-', '--', 'N/A', 'NA', 'S/D', 'SD', 'ND',
+            'OTRO', 'OTRA', 'OTROS', 'OTRAS', 'OTRO OTRO', 'NINGUNO', 'NINGUNA', 'SIN DATO']);
+        const FIS_GEN_PATRONES = [
+            /^OTR[OA]S?\b/, /\bSIN\s+DATOS?\b/, /\bSIN\s+RESPUESTA\b/, /\bSIN\s+ESPECIFIC/,
+            /\bNO\s+ESPECIFIC/, /\bSIN\s+IDENTIFIC/, /\bNO\s+IDENTIFIC/, /\bDESCONOCID/,
+            /\bSIN\s+INFORMACI/, /\bSIN\s+CLASIFIC/, /\bNO\s+DISPONIBLE\b/, /\bNO\s+APLICA\b/,
+            /\bSE\s+IGNORA\b/, /\bIGNORAD[OA]\b/, /\bSIN\s+MARCA\b/, /\bSIN\s+SUBMARCA\b/
+        ];
+        const FIS_ETQ_GENERICA = 'Sin Identificar';
+
+        function fisEsGenerica(etq) {
+            const n = dsNorm(etq);
+            if (FIS_GEN_EXACTAS.has(n)) return true;
+            return FIS_GEN_PATRONES.some(rx => rx.test(n));
+        }
+
+        /* Colapsa las entradas genéricas en una sola y devuelve el ranking ordenado.
+           `n` es el número de categorías REALES a conservar: la barra agrupada se
+           añade además, nunca a costa de una marca legítima.
+           Devuelve también el detalle de lo agrupado para la auditoría en consola. */
+        function fisAgrupaGenericas(obj, n) {
+            const reales = {}, detalle = {};
+            let sumaGen = 0;
+            Object.entries(obj).forEach(([k, v]) => {
+                if (fisEsGenerica(k)) { sumaGen += v; detalle[k] = v; }
+                else reales[k] = v;
+            });
+            const top = fisTop(reales, n);
+            const filas = sumaGen > 0 ? top.concat([[FIS_ETQ_GENERICA, sumaGen]]) : top.slice();
+            filas.sort((a, b) => b[1] - a[1]);
+            return { filas, top, sumaGen, detalle };
+        }
+
+        /* Aplica el recorte SOLO si la barra agrupada quedó en primer lugar.
+           Devuelve los datos a dibujar, los valores reales y el color por barra. */
+        function fisRecorta(filas, color) {
+            const etqs = filas.map(x => x[0]);
+            const datos = filas.map(x => x[1]);
+            const reales = filas.map(() => null);
+            const colores = etqs.map(e => e === FIS_ETQ_GENERICA ? '#98A6B8' : color);
+
+            if (etqs[0] === FIS_ETQ_GENERICA && filas.length > 1) {
+                const ref = datos[1];
+                if (ref > 0 && datos[0] > ref) {
+                    reales[0] = datos[0];
+                    datos[0] = Math.round(ref * 1.05);
+                }
+            }
+            return { etqs, datos, reales, colores };
+        }
+
+        /* Auditoría: los descuadres se muestran, no se corrigen en silencio. */
+        function fisAuditaGenericas(nombre, detalle, suma, total) {
+            if (!suma) return;
+            const pctv = total ? (suma / total * 100).toFixed(1) : '0.0';
+            console.info(`[Fiscalía · ${nombre}] "${FIS_ETQ_GENERICA}" agrupa ${nf(suma)} eventos (${pctv} % del filtro).`,
+                Object.entries(detalle).sort((a, b) => b[1] - a[1]));
+        }
 
         // ---------- KPIs y aviso de calidad ----------
         function fisRenderKpis() {
@@ -7781,16 +7875,29 @@
                           'Población del Censo 2020. La tasa permite comparar municipios de distinto tamaño.', true) +
                 fisLienzo('fisG7', '7 · Distribución por franja horaria') +
                 '<div class="ds-chart-row">' +
-                fisLienzo('fisG8', '8 · Marcas más afectadas', 'Solo aplica a delitos con objeto vehicular.') +
-                fisLienzo('fisG9', '9 · Submarcas más afectadas') +
+                fisLienzo('fisG8', '8 · Marcas más afectadas', 'Solo aplica a delitos con objeto vehicular. «Sin Identificar» agrupa los registros sin marca; si encabeza, su barra se recorta y la cifra rotulada es la real.') +
+                fisLienzo('fisG9', '9 · Submarcas más afectadas', '«Sin Identificar» agrupa los registros sin submarca; si encabeza, su barra se recorta y la cifra rotulada es la real.') +
                 '</div>' +
                 fisLienzo('fisG10', '10 · Giro comercial más afectado', 'Aplica a robo a negocio.');
 
-            const barras = (id, etq, datos, color, horiz) => fisCrear(id, {
+            /* `reales` es opcional: cuando llega, la barra se dibujó recortada y
+               tanto la etiqueta como el tooltip deben mostrar la cifra verdadera.
+               OPC_TOOLTIP es un objeto COMPARTIDO: se clona, nunca se muta. */
+            const barras = (id, etq, datos, color, horiz, reales) => fisCrear(id, {
                 type: 'bar',
-                data: { labels: etq, datasets: [{ label: 'Eventos', data: datos, backgroundColor: color || t.brand }] },
+                data: { labels: etq, datasets: [{
+                    label: 'Eventos', data: datos, backgroundColor: color || t.brand,
+                    valoresReales: reales || null
+                }] },
                 options: { responsive: true, maintainAspectRatio: false, indexAxis: horiz ? 'y' : 'x',
-                    plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP }, scales: ejes(t) }
+                    plugins: { legend: { display: false }, tooltip: reales
+                        ? Object.assign({}, OPC_TOOLTIP, { callbacks: { label: c => {
+                            const v = dsValorReal(c.dataset, c.dataIndex,
+                                        (c.parsed && c.parsed.x !== undefined) ? c.parsed.x : c.parsed.y);
+                            const recortada = c.dataset.valoresReales && c.dataset.valoresReales[c.dataIndex] != null;
+                            return ' Eventos: ' + nf(v) + (recortada ? '  (barra recortada)' : '');
+                        } } })
+                        : OPC_TOOLTIP }, scales: ejes(t) }
             });
             const opcDona = { responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } }, tooltip: OPC_TOOLTIP } };
@@ -7809,12 +7916,17 @@
                         datasets: [{ data: [cv, sv], backgroundColor: [t.risk, t.brand] }] }, options: opcDona });
             fisLectura('fisG2', `Del total filtrado, ${B(pct(cv, cv + sv))} ocurrió con violencia.`);
 
-            // 3 · Modus operandi
-            const mo = fisTop(fisAgrupa(regs, 'modus'), 8);
+            /* 3 · Modus operandi. Es una DONA: el ángulo es proporcional al valor y
+               recortarlo falsearía el total del anillo. Aquí solo se agrupa. */
+            const gModus = fisAgrupaGenericas(fisAgrupa(regs, 'modus'), 8);
+            fisAuditaGenericas('Modus operandi', gModus.detalle, gModus.sumaGen, regs.length);
             fisCrear('fisG3', { type: 'doughnut',
-                data: { labels: mo.map(x => x[0]), datasets: [{ data: mo.map(x => x[1]),
-                        backgroundColor: mo.map((x, i) => PALETA[i % PALETA.length]) }] }, options: opcDona });
-            if (mo.length) fisLectura('fisG3', `${B(mo[0][0])} es el más recurrente, con ${B(nf(mo[0][1]))} eventos (${pct(mo[0][1], regs.length)}).`);
+                data: { labels: gModus.filas.map(x => x[0]), datasets: [{ data: gModus.filas.map(x => x[1]),
+                        backgroundColor: gModus.filas.map((x, i) =>
+                            x[0] === FIS_ETQ_GENERICA ? '#98A6B8' : PALETA[i % PALETA.length]) }] }, options: opcDona });
+            if (gModus.top.length) fisLectura('fisG3',
+                `${B(gModus.top[0][0])} es el más recurrente, con ${B(nf(gModus.top[0][1]))} eventos (${pct(gModus.top[0][1], regs.length)}).`);
+            else fisLectura('fisG3', 'El filtro actual no incluye eventos con modus operandi especificado.');
 
             // 4 · AMG frente al interior
             const enAMG = regs.filter(r => MUN_AMG.some(m => dsNorm(m) === dsNorm(r.municipio))).length;
@@ -7892,21 +8004,41 @@
             const iMax = fr.indexOf(Math.max(...fr));
             if (fr[iMax]) fisLectura('fisG7', `La franja de mayor incidencia es ${B(FIS_FRANJAS[iMax])}, con ${B(nf(fr[iMax]))} eventos (${pct(fr[iMax], regs.length)}).`);
 
-            // 8, 9 · Marcas y submarcas
-            const marcas = fisTop(fisAgrupa(regs.filter(r => r.marca !== 'Sin dato'), 'marca'), 8);
-            barras('fisG8', marcas.map(x => x[0]), marcas.map(x => x[1]), t.accent, true);
-            if (marcas.length) fisLectura('fisG8', `${B(marcas[0][0])} encabeza con ${B(nf(marcas[0][1]))} eventos.`);
-            else fisLectura('fisG8', 'El filtro actual no incluye eventos con marca de vehículo registrada.');
+            /* 8, 9 · Marcas y submarcas.
+               Antes se excluía "Sin dato" por completo, así que el 51 % del universo
+               quedaba fuera de la gráfica sin dejar rastro. Ahora entra agrupado en
+               "Sin Identificar", que es honesto con el volumen real de captura sin
+               información de vehículo. La lectura cita siempre las tres primeras
+               marcas REALES, para que el mensaje no lo encabece un no-dato. */
+            const lecturaTop3 = (id, ranking, sustantivo, sinDatos) => {
+                if (!ranking.length) { fisLectura(id, sinDatos); return; }
+                const tres = ranking.slice(0, 3);
+                const txt = tres.map(x => `${B(x[0])} (${nf(x[1])})`).join(', ')
+                    .replace(/, ([^,]*)$/, ' y $1');
+                fisLectura(id, `${sustantivo}: ${txt}.`);
+            };
 
-            const subs = fisTop(fisAgrupa(regs.filter(r => r.submarca !== 'Sin dato'), 'submarca'), 8);
-            barras('fisG9', subs.map(x => x[0]), subs.map(x => x[1]), t.accent, true);
-            if (subs.length) fisLectura('fisG9', `${B(subs[0][0])} es la submarca más afectada.`);
+            const gMarcas = fisAgrupaGenericas(fisAgrupa(regs, 'marca'), 8);
+            fisAuditaGenericas('Marcas', gMarcas.detalle, gMarcas.sumaGen, regs.length);
+            const rMarcas = fisRecorta(gMarcas.filas, t.accent);
+            barras('fisG8', rMarcas.etqs, rMarcas.datos, rMarcas.colores, true, rMarcas.reales);
+            lecturaTop3('fisG8', gMarcas.top, 'Marcas más afectadas',
+                'El filtro actual no incluye eventos con marca de vehículo registrada.');
+
+            const gSubs = fisAgrupaGenericas(fisAgrupa(regs, 'submarca'), 8);
+            fisAuditaGenericas('Submarcas', gSubs.detalle, gSubs.sumaGen, regs.length);
+            const rSubs = fisRecorta(gSubs.filas, t.accent);
+            barras('fisG9', rSubs.etqs, rSubs.datos, rSubs.colores, true, rSubs.reales);
+            lecturaTop3('fisG9', gSubs.top, 'Submarcas más afectadas',
+                'El filtro actual no incluye eventos con submarca de vehículo registrada.');
 
             // 10 · Giro comercial
-            const giros = fisTop(fisAgrupa(regs.filter(r => r.giro), 'giro'), 10);
-            barras('fisG10', giros.map(x => x[0]), giros.map(x => x[1]), t.risk, true);
-            if (giros.length) fisLectura('fisG10', `${B(giros[0][0])} es el giro más afectado, con ${B(nf(giros[0][1]))} eventos.`);
-            else fisLectura('fisG10', 'El filtro actual no incluye eventos con giro comercial registrado.');
+            const gGiros = fisAgrupaGenericas(fisAgrupa(regs.filter(r => r.giro), 'giro'), 10);
+            fisAuditaGenericas('Giro comercial', gGiros.detalle, gGiros.sumaGen, regs.length);
+            const rGiros = fisRecorta(gGiros.filas, t.risk);
+            barras('fisG10', rGiros.etqs, rGiros.datos, rGiros.colores, true, rGiros.reales);
+            lecturaTop3('fisG10', gGiros.top, 'Giros más afectados',
+                'El filtro actual no incluye eventos con giro comercial registrado.');
 
             observarTodos('#fisGraficasContent .ds-chart');
         }
@@ -8015,23 +8147,44 @@
             if (fisCapa) { fisMapa.removeLayer(fisCapa); fisCapa = null; }
             if (!puntos.length) return;
 
+            /* Contenido del popup, común a Clusters y a Puntos.
+               Solo metadatos NO sensibles: nunca calle, número ni identificadores.
+               Las filas sin valor se omiten en lugar de mostrarse vacías. */
+            const popup = r => {
+                const veh = [r.marca, r.submarca].filter(v => v && !fisEsGenerica(v)).join(' ');
+                const filas = [
+                    ['Municipio', r.municipio],
+                    ['Colonia', r.colonia],
+                    ['Sector', r.sector],
+                    ['Modalidad', r.modalidad],
+                    ['Violencia', r.violencia === 'SI' ? 'Sí' : 'No'],
+                    ['Vehículo', veh]
+                ].filter(([, v]) => v && String(v).trim());
+                return `<div style="font-family:Inter,Arial,sans-serif;font-size:12px;line-height:1.5">
+                    <b style="color:#18345D;font-size:13px">${esc(r.delito)}</b>
+                    ${r.fecha ? `<div style="color:#6B7785;margin-bottom:5px">${esc(r.fecha)}</div>`
+                              : `<div style="color:#6B7785;margin-bottom:5px">${esc(r.mes)} ${esc(r.anio)}</div>`}
+                    ${filas.map(([k, v]) =>
+                        `<div><b style="color:#18345D">${k}:</b> ${esc(v)}</div>`).join('')}
+                </div>`;
+            };
+
             if (fisEstado.mapa === 'calor' && L.heatLayer) {
                 fisCapa = L.heatLayer(puntos.map(p => [p.lat, p.lon, 0.35]),
                     { radius: 14, blur: 10, minOpacity: 0.2 });
             } else if (fisEstado.mapa === 'clusters' && L.markerClusterGroup) {
                 fisCapa = L.markerClusterGroup();
                 puntos.forEach(p => fisCapa.addLayer(
-                    // Solo metadatos NO sensibles: nunca calle, número ni identificadores.
-                    L.marker([p.lat, p.lon]).bindPopup(
-                        `<b>${esc(p.r.delito)}</b><br>${esc(p.r.municipio)}<br>${esc(p.r.colonia)}<br>` +
-                        `${esc(p.r.mes)} ${esc(p.r.anio)} · ${p.r.violencia === 'SI' ? 'con' : 'sin'} violencia`)));
+                    L.marker([p.lat, p.lon]).bindPopup(popup(p.r))));
             } else {
+                /* El popup faltaba en esta rama: circleMarker se creaba sin bindPopup,
+                   así que en el modo Puntos el clic no hacía nada. */
                 fisCapa = L.layerGroup();
                 puntos.slice(0, 4000).forEach(p => fisCapa.addLayer(
                     L.circleMarker([p.lat, p.lon], {
                         radius: 3, weight: 0,
                         fillColor: p.r.violencia === 'SI' ? '#C0392B' : '#18345D', fillOpacity: .6
-                    })));
+                    }).bindPopup(popup(p.r))));
             }
             fisCapa.addTo(fisMapa);
             setTimeout(() => fisMapa.invalidateSize(), 60);
