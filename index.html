@@ -8889,10 +8889,15 @@
                 console.info('[Homicidios · Jalisco]', hdEstado.geo.audit);
 
                 /* Rango inicial del filtro: toda la serie disponible. */
+                /* El rango arranca en el AÑO MÁS RECIENTE, no en toda la serie:
+                   abrir con 2017-2026 mezcla diez años en el mapa y en la
+                   analítica, y lo que se consulta a diario es el año en curso.
+                   El histórico completo sigue a un clic en «Limpiar filtros». */
                 const ga = hdEstado.geo.anios;
                 if (hdEstado.filtro.anioIni === null && ga.length) {
-                    hdEstado.filtro.anioIni = ga[0]; hdEstado.filtro.mesIni = 0;
-                    hdEstado.filtro.anioFin = ga[ga.length - 1]; hdEstado.filtro.mesFin = 11;
+                    const ult = ga[ga.length - 1];
+                    hdEstado.filtro.anioIni = ult; hdEstado.filtro.mesIni = 0;
+                    hdEstado.filtro.anioFin = ult; hdEstado.filtro.mesFin = 11;
                 }
 
                 hdRenderNacional();
@@ -8939,6 +8944,13 @@
             cfg.options = cfg.options || {};
             cfg.options.responsive = true;
             cfg.options.maintainAspectRatio = false;
+            /* El eje de interacción se deduce de la propia configuración, igual
+               que en `dsCrear` y `munCrear`. `interaccionEje` espera el OBJETO
+               de configuración: llamarla con la cadena 'y' dejaba `cfg.options`
+               indefinido, devolvía `axis: 'x'` y en las gráficas horizontales el
+               tooltip respondía al movimiento horizontal del cursor, mostrando
+               la fila equivocada. */
+            cfg.options.interaction = cfg.options.interaction || interaccionEje(cfg);
             const tipo = cfg.type;
             cfg.plugins = (tipo === 'doughnut' || tipo === 'pie')
                 ? [dsDonaPlugin]
@@ -9383,20 +9395,22 @@
                     <span class="panel-nota" style="margin-left:auto">Solo los años presentes en la hoja de origen</span>
                 </div>
                 <div class="ds-chart">
-                    <div class="ds-chart-t">Comparativo mensual</div>
+                    <div class="ds-chart-t">Acumulado del año por entidad, desglosado por mes</div>
                     <div class="ds-chart-f">Fuente: SESNSP · reportes diarios</div>
-                    <div class="ds-chart-box"><canvas id="hdGFosas"></canvas></div>
+                    <div class="ds-chart-n">Cada barra es el acumulado anual de la entidad; los segmentos son sus meses, de enero (claro) a diciembre (oscuro). El total se rotula encima; al pasar el cursor se despliega el desglose mensual.</div>
+                    <div class="ds-chart-box" style="height:440px"><canvas id="hdGFosas"></canvas></div>
                     <div class="mun-lectura" id="hdLecFosas">—</div>
                 </div>
-                <div class="ds-chart-row">
-                    <div class="ds-chart">
+                <div class="mun-nota" id="hdAvisoSerie" style="display:none"></div>
+                <div class="ds-chart-row" id="hdFilaTablas">
+                    <div class="ds-chart" id="hdCajaCon">
                         <div class="ds-chart-t" id="hdTConFosas">Incluyendo víctimas de fosas</div>
                         <div class="ds-chart-f">Fuente: SESNSP</div>
                         <div class="table-wrapper" style="max-height:420px">
                             <table class="data-table data-table-compacta" id="hdTablaCon"><thead></thead><tbody></tbody></table>
                         </div>
                     </div>
-                    <div class="ds-chart">
+                    <div class="ds-chart" id="hdCajaSin">
                         <div class="ds-chart-t" id="hdTSinFosas">Solo reportes diarios</div>
                         <div class="ds-chart-f">Fuente: SESNSP</div>
                         <div class="table-wrapper" style="max-height:420px">
@@ -9470,8 +9484,7 @@
                 data: { labels: may.map(x => x[0]), datasets: [{
                     label: 'Víctimas', data: may.map(x => x[1]), backgroundColor: t.brand }] },
                 options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP },
-                           layout: { padding: { right: 46 } }, scales: ejes(t),
-                           interaction: interaccionEje('y') }
+                           layout: { padding: { right: 46 } }, scales: ejes(t) }
             });
             const tot = Object.values(acum).reduce((a, b) => a + b, 0);
             const l2 = document.getElementById('hdLecTop');
@@ -9507,48 +9520,130 @@
                  <td class="mun-num"><b>${hdNf(totMes.reduce((a, b) => a + b, 0))}</b></td></tr>`;
         }
 
+        /* Rampa de doce azules, de claro a oscuro, para los meses del apilado.
+           Ordenarlos por tono en vez de usar la paleta categórica hace que la
+           barra se lea como una progresión temporal: enero abajo y claro,
+           diciembre arriba y oscuro. */
+        const HD_RAMPA = ['#BBD3EC','#A8C6E4','#95B8DC','#82ABD4','#6F9DCC','#5C90C4',
+                          '#4A83BB','#3D74A8','#316596','#265683','#1B4771','#18345D'];
+
         function hdPintaFosas() {
             const t = tokens(), anio = hdEstado.fosasAnio;
             const con = hdEstado.nac.conFosas[anio] || null;
             const sin = hdEstado.nac.sinFosas[anio] || null;
-            const serieDe = b => b ? HD_MESES.map((_, i) =>
-                b.estados.reduce((a, e) => a + ((b.datos[e] || [])[i] || 0), 0) || null) : null;
-            const sCon = serieDe(con), sSin = serieDe(sin);
+            /* La gráfica usa la serie de reportes diarios, que es la que existe
+               para todos los años. */
+            const base = sin || con;
 
-            const ds = [];
-            if (sCon) ds.push({ label: 'Incluye víctimas de fosas', data: sCon, backgroundColor: t.risk });
-            if (sSin) ds.push({ label: 'Solo reportes diarios', data: sSin, backgroundColor: t.brand });
+            if (!base) {
+                hdPintar('hdGFosas', { type: 'bar', data: { labels: [], datasets: [] }, options: {} });
+                const l0 = document.getElementById('hdLecFosas');
+                if (l0) l0.textContent = `La hoja no trae bloques mensuales para ${anio}.`;
+                hdTablaMeses('hdTablaCon', con);
+                hdTablaMeses('hdTablaSin', sin);
+                hdAjustaTablasFosas(con, sin, anio);
+                return;
+            }
+
+            /* Doce series, una por mes, apiladas sobre cada entidad: la altura
+               total es el acumulado del año y cada segmento, su mes. Es la
+               lectura del tablero de origen. */
+            const filas = base.estados.map(e => ({
+                e, s: base.datos[e] || [],
+                tot: (base.datos[e] || []).reduce((a, v) => a + (v || 0), 0)
+            })).filter(f => f.tot > 0).sort((a, b) => b.tot - a.tot).slice(0, 12);
+
             hdPintar('hdGFosas', {
-                type: 'bar', data: { labels: HD_MESES, datasets: ds },
-                options: { layout: { padding: { top: 16 } },
-                           plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } },
-                                      tooltip: OPC_TOOLTIP, dsEtiquetas: { paso: 1 } },
-                           scales: ejes(t), interaction: { mode: 'index', intersect: false } }
+                type: 'bar',
+                data: {
+                    labels: filas.map(f => f.e),
+                    datasets: HD_MESES.map((m, i) => ({
+                        label: m,
+                        data: filas.map(f => f.s[i] || 0),
+                        backgroundColor: HD_RAMPA[i],
+                        borderWidth: 0
+                    }))
+                },
+                options: {
+                    layout: { padding: { top: 22 } },
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                        /* El tooltip compartido añade el renglón «Total» al pie,
+                           debajo del desglose mes a mes. */
+                        tooltip: TOOLTIP_CON_TOTAL,
+                        // La cifra de cada segmento no cabe: solo el total encima.
+                        dsEtiquetas: { enabled: false },
+                        dsTotalApilado: { enabled: true, paso: 1 }
+                    },
+                    scales: {
+                        x: { stacked: true, grid: { display: false },
+                             ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 30 } },
+                        y: { stacked: true, beginAtZero: true,
+                             grid: { color: t.grid }, ticks: { font: { size: 10 } } }
+                    }
+                }
             });
 
-            const suma = s => (s || []).reduce((a, v) => a + (v || 0), 0);
-            const tCon = suma(sCon), tSin = suma(sSin);
+            const totAnual = filas.reduce((a, f) => a + f.tot, 0);
+            const totBase = base.estados.reduce((a, e) =>
+                a + (base.datos[e] || []).reduce((x, v) => x + (v || 0), 0), 0);
+            const mesesConDato = HD_MESES.filter((_, i) =>
+                base.estados.some(e => (base.datos[e] || [])[i] > 0));
+
             const lec = document.getElementById('hdLecFosas');
             if (lec) {
-                /* Con una sola serie disponible se dice; dibujar la otra vacía
-                   parecería un cero real. */
-                if (sCon && sSin) {
-                    const dif = tCon - tSin;
-                    lec.innerHTML = `En <b>${anio}</b>, con víctimas de fosas el total es <b>${hdNf(tCon)}</b>; ` +
-                        `sin ellas, <b>${hdNf(tSin)}</b>. La diferencia es de <b>${hdNf(dif)}</b> víctimas, ` +
-                        `${hdPct(dif, tCon)} del total. Estas dos series <b>no deben sumarse</b>: son dos criterios sobre el mismo universo.`;
-                } else if (sCon || sSin) {
-                    lec.innerHTML = `Para <b>${anio}</b> la hoja solo trae la serie ` +
-                        `${sSin ? '<b>de reportes diarios</b>' : '<b>que incluye víctimas de fosas</b>'}, ` +
-                        `con <b>${hdNf(tSin || tCon)}</b> víctimas. El comparativo entre ambos criterios estará ` +
-                        `disponible cuando la otra serie se capture en el libro de origen.`;
-                } else lec.textContent = `La hoja no trae bloques mensuales para ${anio}.`;
+                let txt = `<b>${esc(filas[0].e)}</b> encabeza el acumulado de <b>${anio}</b> con ` +
+                    `<b>${hdNf(filas[0].tot)}</b> víctimas, ${hdPct(filas[0].tot, totBase)} del total nacional. ` +
+                    `Las doce entidades mostradas concentran ${hdPct(totAnual, totBase)} de las ` +
+                    `<b>${hdNf(totBase)}</b> del año. ` +
+                    `Con información hasta <b>${mesesConDato[mesesConDato.length - 1] || '—'}</b>.`;
+                if (con && sin) {
+                    const suma = b => b.estados.reduce((a, e) =>
+                        a + (b.datos[e] || []).reduce((x, v) => x + (v || 0), 0), 0);
+                    const tc = suma(con), ts = suma(sin), dif = tc - ts;
+                    txt += ` La hoja también trae la serie que incluye víctimas de fosas, con ` +
+                        `<b>${hdNf(tc)}</b>: <b>${hdNf(dif)}</b> más, ${hdPct(dif, tc)} del total. ` +
+                        `<b>Las dos series no deben sumarse</b>: son dos criterios sobre el mismo universo.`;
+                }
+                lec.innerHTML = txt;
             }
+
             hdTablaMeses('hdTablaCon', con);
             hdTablaMeses('hdTablaSin', sin);
+            hdAjustaTablasFosas(con, sin, anio);
+        }
+
+        /* Punto 2 · La caja de una serie ausente se OCULTA en lugar de mostrar
+           una tabla vacía, y la que queda pasa a ocupar todo el ancho. Una
+           tabla con un solo renglón de aviso junto a otra completa se leía como
+           un fallo de carga. */
+        function hdAjustaTablasFosas(con, sin, anio) {
+            const cajaCon = document.getElementById('hdCajaCon');
+            const cajaSin = document.getElementById('hdCajaSin');
+            const fila = document.getElementById('hdFilaTablas');
+            if (!cajaCon || !cajaSin || !fila) return;
+
+            const hayCon = !!(con && con.estados.length);
+            const haySin = !!(sin && sin.estados.length);
+            cajaCon.style.display = hayCon ? '' : 'none';
+            cajaSin.style.display = haySin ? '' : 'none';
+            // Con una sola tabla, la rejilla pasa a columna única.
+            fila.style.gridTemplateColumns = (hayCon && haySin) ? '' : '1fr';
+
             const e1 = document.getElementById('hdTConFosas'), e2 = document.getElementById('hdTSinFosas');
             if (e1) e1.textContent = `Incluyendo víctimas de fosas · ${anio}`;
             if (e2) e2.textContent = `Solo reportes diarios · ${anio}`;
+
+            const av = document.getElementById('hdAvisoSerie');
+            if (av) {
+                if (hayCon && haySin) { av.style.display = 'none'; av.textContent = ''; }
+                else {
+                    av.style.display = '';
+                    av.innerHTML = `Para <b>${anio}</b> la hoja de origen solo trae la serie ` +
+                        `<b>${haySin ? 'de reportes diarios' : 'que incluye víctimas de fosas'}</b>. ` +
+                        `La otra aparecerá aquí en cuanto se capture en el libro.`;
+                }
+            }
         }
 
         function hdPintaHistorico() {
@@ -10182,8 +10277,7 @@
                 type: 'bar', data: { labels: mun.map(x => x[0]), datasets: [{
                     label: 'Homicidios', data: mun.map(x => x[1]), backgroundColor: t.brand }] },
                 options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: OPC_TOOLTIP },
-                           layout: { padding: { right: 46 } }, scales: ejes(t),
-                           interaction: interaccionEje('y') }
+                           layout: { padding: { right: 46 } }, scales: ejes(t) }
             });
             const l1 = document.getElementById('hdLecMun');
             if (l1) l1.innerHTML = mun.length
@@ -10384,9 +10478,10 @@
             const btnLimpiar = document.getElementById('hdFLimpiar');
             if (btnLimpiar) btnLimpiar.addEventListener('click', () => {
                 const g = hdEstado.geo;
+                /* Volver al estado inicial: el año más reciente completo. */
+                const ult = g.anios[g.anios.length - 1];
                 hdEstado.filtro = { municipio: '', zona: '', colonia: '', franja: '',
-                                    anioIni: g.anios[0], mesIni: 0,
-                                    anioFin: g.anios[g.anios.length - 1], mesFin: 11 };
+                                    anioIni: ult, mesIni: 0, anioFin: ult, mesFin: 11 };
                 ['hdFMun','hdFZona','hdFCol','hdFFranja'].forEach(id => {
                     const e = document.getElementById(id); if (e) e.value = '';
                 });
