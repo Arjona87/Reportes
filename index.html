@@ -927,6 +927,57 @@
             #hdMapaLeaflet { height: 400px; }
         }
 
+        /* =====================================================================
+           SECCIÓN COMPARATIVO MENSUAL — CSS exclusivo
+           Reproduce el formato de las láminas institucionales «Gráficas
+           mensuales JALISCO». Todo va prefijado `munComp-` para que no pueda
+           colisionar con las cinco vistas; los colores de lámina son los del
+           documento original, distintos de los tokens del tablero.
+           ===================================================================== */
+        .munComp-lamina {
+            background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
+            padding: 18px 20px 12px; margin-top: 16px;
+        }
+        .munComp-cab { display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+        .munComp-tit {
+            font-family: Arial, Helvetica, sans-serif; font-size: 28px; font-weight: 800;
+            color: #111; line-height: 1.05; margin: 0;
+        }
+        .munComp-sub {
+            font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700;
+            color: #1F2C9B; margin: 2px 0 0;
+        }
+        .munComp-sub small { font-size: 12px; }
+        /* La confusión entre carpetas y víctimas es la más frecuente y la más
+           costosa en homicidio doloso: ahí el aviso se muestra destacado. */
+        .munComp-carp { font-family: Arial, sans-serif; font-size: 12px; color: #333; margin: 7px 0 0; line-height: 1.4; }
+        .munComp-carp b { color: #B00020; }
+        .munComp-carp.fuerte { font-size: 13.5px; font-weight: 700; }
+
+        .munComp-caja { margin-left: auto; min-width: 500px; }
+        .munComp-caja-t { font-family: Arial, sans-serif; font-size: 13px; font-weight: 700;
+            color: #111; text-align: center; margin-bottom: 5px; }
+        .munComp-acum { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
+        .munComp-acum th { background: #1F2C9B; color: #fff; font-size: 11px; font-weight: 700;
+            padding: 5px 4px; text-align: center; border: 1px solid #fff; }
+        .munComp-acum th.act { background: #43A047; }
+        .munComp-acum td { font-size: 15px; font-weight: 700; color: #111; text-align: center;
+            padding: 4px; font-variant-numeric: tabular-nums; }
+        .munComp-acum tr.pct td { font-size: 13px; font-weight: 700; padding-top: 0; }
+        .munComp-baja { color: #43A047; } .munComp-sube { color: #E53935; }
+        .munComp-prom { border: 2px solid #5B2C8D; border-radius: 3px; padding: 6px 12px;
+            font-family: Arial, sans-serif; font-size: 13px; color: #111; margin-top: 8px;
+            display: inline-block; line-height: 1.35; }
+        .munComp-prom-w { display: flex; justify-content: flex-end; }
+        .munComp-box { position: relative; height: 400px; margin-top: 14px; }
+        .munComp-box-2 { height: 330px; }
+        .munComp-pie { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px;
+            font-size: 10.5px; color: var(--muted); line-height: 1.5; }
+        [data-tema="oscuro"] .munComp-lamina { background: #F4F7FA; }
+        [data-tema="oscuro"] .munComp-pie { color: #55627A; }
+        #munCompLienzo { position: fixed; left: -9999px; top: 0; }
+        @media (max-width: 1080px) { .munComp-caja { min-width: 0; width: 100%; margin-left: 0; } }
+
         .variation-cell {
             display: inline-block;
             font-weight: 600;
@@ -1915,6 +1966,41 @@
                 </div>
             </div>
         </section>
+
+        <section id="munComparativo">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Comparativo Mensual</h2>
+                <span class="panel-nota">Filtro propio, independiente de la barra superior</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">Sección con filtrado independiente</span>
+                    <p>Los controles de abajo <b>no responden</b> a la barra de filtros superior de la vista, ni la
+                       afectan. Se muestra un solo delito a la vez sobre la serie completa de la hoja.</p>
+                </div>
+
+                <div class="mun-barra-filtros" id="munCompBarra">
+                    <label class="mun-et">Región</label>
+                    <div class="conmutador" id="munCompRegion">
+                        <button data-r="JAL" class="on">Jalisco</button>
+                        <button data-r="AMG">AMG</button>
+                    </div>
+                    <label class="mun-et" for="munCompDelito">Delito</label>
+                    <select id="munCompDelito"></select>
+                    <button class="btn-sec" id="munCompVerTodos">Ver todos los delitos</button>
+                    <label class="mun-et" for="munCompMes">Mes de corte</label>
+                    <select id="munCompMes"></select>
+                    <button class="btn-sec btn-acento" id="munCompPptx">Generar reporte</button>
+                    <span class="panel-nota" style="margin-left:auto" id="munCompResumen">—</span>
+                </div>
+
+                <div id="munCompCuerpo">
+                    <div class="sk sk-card" style="height:420px;margin-top:16px"></div>
+                </div>
+            </div>
+        </section>
+
 
       </div><!-- /vistaMunicipal -->
 
@@ -7848,8 +7934,603 @@
             }, { rootMargin: '-120px 0px 0px 0px', threshold: 0 }).observe(centinela);
         })();
 
+
+        /* =====================================================================
+           SECCIÓN · COMPARATIVO MENSUAL   (prefijo munComp*)
+           =====================================================================
+           Réplica de las láminas institucionales «Gráficas mensuales JALISCO».
+
+           FILTRO INDEPENDIENTE. El estado vive en `munCompEstado`, separado de
+           `munEstado`, y los datos se leen de `munData.registros` directamente:
+           NUNCA a través de `munPorAnio()` ni de `munFiltra()`, que aplican el
+           filtro superior de la vista. Cambiar uno no puede alterar al otro.
+           ===================================================================== */
+        const munCompEstado = {
+            region: 'JAL',            // JAL | AMG
+            delito: '__TODOS__',      // valor "nivel::nombre" del selector
+            nivel: 'tipo',
+            mes: 0,                   // índice del mes de corte
+            catalogoCompleto: false,
+            anios: [], anioActual: null, ultimoMes: 0
+        };
+        let munCompCh1 = null, munCompCh2 = null, munCompMontado = false;
+
+        const munCompAmgSet = new Set(MUN_AMG.map(dsNorm));
+        const munCompNf  = v => (Number.isFinite(+v) ? Math.round(+v) : 0).toLocaleString('es-MX');
+        const munCompNf1 = v => (Number.isFinite(+v) ? +v : 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+
+        /* Serie de doce meses de un año, ya filtrada por región y delito.
+           Se recorre el arreglo COMPLETO de registros, no el filtrado. */
+        function munCompSerie(anio) {
+            const out = new Array(12).fill(0);
+            if (!munData || !munData.registros) return out;
+            const campo = munCompEstado.nivel === 'sub' ? 'subtipo' : 'tipo';
+            const todos = munCompEstado.delito === '__TODOS__';
+            const amg = munCompEstado.region === 'AMG';
+            munData.registros.forEach(r => {
+                if (r.anio !== anio) return;
+                if (amg && !munCompAmgSet.has(dsNorm(r.municipio))) return;
+                if (!todos && r[campo] !== munCompEstado.delito) return;
+                r.meses.forEach((v, m) => { out[m] += (v || 0); });
+            });
+            return out;
+        }
+
+        /* Acumulado enero → mes de corte, para cada año disponible. */
+        function munCompAcumulados() {
+            return munCompEstado.anios.map(a =>
+                munCompSerie(a).slice(0, munCompEstado.mes + 1).reduce((x, y) => x + y, 0));
+        }
+        /* Serie continua: año anterior completo + año en curso hasta el corte. */
+        function munCompSerieMostrada() {
+            const act = munCompEstado.anioActual;
+            return munCompSerie(act - 1).concat(munCompSerie(act).slice(0, munCompEstado.mes + 1));
+        }
+        function munCompNombre() {
+            if (munCompEstado.delito === '__TODOS__') return 'Todos los delitos';
+            return munCompEstado.delito;
+        }
+
+        /* ---------------- plugins de la lámina ----------------
+           Son locales a esta sección: el rotulado en BLANCO DENTRO de la barra
+           y las líneas de promedio y tendencia no existen en el resto del
+           tablero, y `dsEtiquetasPlugin` rotula fuera de la barra. */
+        const munCompEtqDentro = { id: 'munCompEtqDentro', afterDatasetsDraw(ch) {
+            const ctx = ch.ctx, esc2 = ch.canvas.width > 1200 ? 1.5 : 1;
+            ch.data.datasets.forEach((ds, di) => {
+                const meta = ch.getDatasetMeta(di); if (meta.hidden) return;
+                ctx.save();
+                ctx.font = 'bold ' + (12.5 * esc2) + 'px Arial, sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                meta.data.forEach((pt, i) => {
+                    const v = ds.data[i]; if (v === null || v === undefined) return;
+                    const base = ch.scales.y.getPixelForValue(0), alto = base - pt.y;
+                    // Barra demasiado baja: la cifra no cabe dentro, va encima y en oscuro.
+                    if (alto < 26 * esc2) {
+                        ctx.fillStyle = '#111'; ctx.textBaseline = 'bottom';
+                        ctx.fillText(munCompNf(v), pt.x, pt.y - 4 * esc2);
+                        ctx.textBaseline = 'middle';
+                    } else {
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText(munCompNf(v), pt.x, base - 16 * esc2);
+                    }
+                });
+                ctx.restore();
+            });
+        }};
+        const munCompEtqEncima = { id: 'munCompEtqEncima', afterDatasetsDraw(ch) {
+            const ctx = ch.ctx, meta = ch.getDatasetMeta(0), esc2 = ch.canvas.width > 1200 ? 1.5 : 1;
+            ctx.save(); ctx.font = 'bold ' + (13.5 * esc2) + 'px Arial, sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillStyle = '#111';
+            meta.data.forEach((pt, i) => {
+                const v = ch.data.datasets[0].data[i];
+                if (v !== null && v !== undefined) ctx.fillText(munCompNf(v), pt.x, pt.y - 6 * esc2);
+            });
+            ctx.restore();
+        }};
+        const munCompLineaProm = { id: 'munCompLineaProm', afterDatasetsDraw(ch) {
+            const cfg = (ch.options.plugins || {}).munCompLineaProm;
+            if (!cfg || cfg.valor === null || cfg.valor === undefined) return;
+            const y = ch.scales.y.getPixelForValue(cfg.valor), a = ch.chartArea, ctx = ch.ctx;
+            ctx.save(); ctx.setLineDash([7, 5]); ctx.lineWidth = 1.8; ctx.strokeStyle = '#5B2C8D';
+            ctx.beginPath(); ctx.moveTo(a.left, y); ctx.lineTo(a.right, y); ctx.stroke(); ctx.restore();
+        }};
+        /* Tendencia por mínimos cuadrados. */
+        const munCompTendencia = { id: 'munCompTendencia', afterDatasetsDraw(ch) {
+            const cfg = (ch.options.plugins || {}).munCompTendencia;
+            if (!cfg || !cfg.enabled) return;
+            const ds = ch.data.datasets[0];
+            let sx = 0, sy = 0, sxy = 0, sxx = 0, k = 0;
+            ds.data.forEach((v, i) => { if (v === null || v === undefined) return;
+                sx += i; sy += v; sxy += i * v; sxx += i * i; k++; });
+            if (k < 3) return;
+            const m = (k * sxy - sx * sy) / (k * sxx - sx * sx), b = (sy - m * sx) / k;
+            const meta = ch.getDatasetMeta(0), ctx = ch.ctx;
+            ctx.save(); ctx.setLineDash([2, 4]); ctx.lineWidth = 2.6;
+            ctx.strokeStyle = '#1FA25C'; ctx.lineCap = 'round'; ctx.beginPath();
+            meta.data.forEach((pt, i) => {
+                const y = ch.scales.y.getPixelForValue(m * i + b);
+                i ? ctx.lineTo(pt.x, y) : ctx.moveTo(pt.x, y);
+            });
+            ctx.stroke(); ctx.restore();
+        }};
+
+        /* ---------------- configuraciones de gráfica ---------------- */
+        function munCompEtiquetas() {
+            const act = munCompEstado.anioActual, out = [];
+            for (let i = 0; i < 12; i++)
+                out.push(i === 0 ? ['ene', String(act - 1)] : [MUN_MESES[i].slice(0, 3).toLowerCase()]);
+            for (let i = 0; i <= munCompEstado.mes; i++) {
+                const t = MUN_MESES[i].slice(0, 3).toLowerCase() + (i === munCompEstado.mes ? '*' : '');
+                out.push(i === 0 ? [t, String(act)] : [t]);
+            }
+            return out;
+        }
+        /* Los meses del año en curso van en verde, el mismo de la tabla. */
+        function munCompColores() {
+            const c = [];
+            for (let i = 0; i < 12; i++) c.push('#1F2C9B');
+            for (let i = 0; i <= munCompEstado.mes; i++) c.push('#43A047');
+            return c;
+        }
+        function munCompCfg1() {
+            const s = munCompSerieMostrada();
+            const prom = s.length ? s.reduce((a, b) => a + b, 0) / s.length : 0;
+            return { type: 'bar',
+                data: { labels: munCompEtiquetas(), datasets: [{ data: s,
+                    backgroundColor: munCompColores(), borderWidth: 0,
+                    barPercentage: .86, categoryPercentage: .9 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 18 } },
+                    plugins: { legend: { display: false },
+                               munCompLineaProm: { valor: prom },
+                               munCompTendencia: { enabled: true } },
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 11.5 }, color: '#555' } },
+                              y: { display: false, beginAtZero: true, grace: '12%' } } },
+                plugins: [munCompEtqDentro, munCompLineaProm, munCompTendencia] };
+        }
+        function munCompCfg2() {
+            const a = munCompAcumulados();
+            const prom = a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+            const act = munCompEstado.anioActual;
+            return { type: 'bar',
+                data: { labels: munCompEstado.anios.map(String), datasets: [{ data: a,
+                    backgroundColor: munCompEstado.anios.map(y => y === act ? '#43A047' : '#1F2C9B'),
+                    borderWidth: 0, barPercentage: .7, categoryPercentage: .8 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 28 } },
+                    plugins: { legend: { display: false },
+                               munCompLineaProm: { valor: prom },
+                               munCompTendencia: { enabled: true } },
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 13, weight: 'bold' }, color: '#333' } },
+                              y: { display: false, beginAtZero: true, grace: '16%' } } },
+                plugins: [munCompEtqEncima, munCompLineaProm, munCompTendencia] };
+        }
+
+        /* ---------------- tabla de acumulados ---------------- */
+        function munCompTablaHTML() {
+            const a = munCompAcumulados(), act = a[a.length - 1];
+            const A = munCompEstado.anios;
+            let th = '<tr>', td = '<tr>', tp = '<tr class="pct">';
+            A.forEach((y, i) => {
+                th += `<th class="${y >= munCompEstado.anioActual - 1 ? 'act' : ''}">${y}</th>`;
+                td += `<td>${munCompNf(a[i])}</td>`;
+                if (i === A.length - 1) { tp += '<td></td>'; return; }
+                /* División entre cero: se declara «n/d», nunca «−100 %», que
+                   afirmaría una reducción sobre una base inexistente. */
+                if (!a[i]) { tp += '<td>n/d</td>'; return; }
+                const p = (act - a[i]) / a[i] * 100;
+                tp += `<td class="${p < 0 ? 'munComp-baja' : 'munComp-sube'}">${p > 0 ? '+' : ''}${p.toFixed(1)}%</td>`;
+            });
+            return th + '</tr>' + td + '</tr>' + tp + '</tr>';
+        }
+
+        /* ---------------- maquetado ---------------- */
+        function munCompMonta() {
+            const cont = document.getElementById('munCompCuerpo');
+            if (!cont) return;
+            cont.innerHTML = `
+                <div class="munComp-lamina">
+                    <div class="munComp-cab">
+                        <div>
+                            <h3 class="munComp-tit" id="munCompT1">—</h3>
+                            <p class="munComp-sub" id="munCompS1">—</p>
+                            <p class="munComp-carp" id="munCompC1"></p>
+                        </div>
+                        <div class="munComp-caja">
+                            <div class="munComp-caja-t" id="munCompCT1">—</div>
+                            <table class="munComp-acum" id="munCompTabla1"></table>
+                            <div class="munComp-prom-w"><div class="munComp-prom" id="munCompP1">—</div></div>
+                        </div>
+                    </div>
+                    <div class="munComp-box"><canvas id="munCompG1"></canvas></div>
+                    <div class="mun-lectura" id="munCompL1">—</div>
+                    <div class="munComp-pie" id="munCompPie1"></div>
+                </div>
+                <div class="munComp-lamina">
+                    <div class="munComp-cab">
+                        <div>
+                            <h3 class="munComp-tit" id="munCompT2">—</h3>
+                            <p class="munComp-sub" id="munCompS2">—</p>
+                            <p class="munComp-carp" id="munCompC2"></p>
+                        </div>
+                        <div class="munComp-caja">
+                            <div class="munComp-caja-t" id="munCompCT2">—</div>
+                            <table class="munComp-acum" id="munCompTabla2"></table>
+                            <div class="munComp-prom-w"><div class="munComp-prom" id="munCompP2">—</div></div>
+                        </div>
+                    </div>
+                    <div class="munComp-box munComp-box-2"><canvas id="munCompG2"></canvas></div>
+                    <div class="mun-lectura" id="munCompL2">—</div>
+                    <div class="munComp-pie" id="munCompPie2"></div>
+                </div>
+                <div id="munCompLienzo"><canvas id="munCompCx" width="1700" height="620"></canvas></div>`;
+            munCompMontado = true;
+        }
+
+        /* ---------------- render ---------------- */
+        function munCompRender() {
+            if (!munData || !munData.registros) return;
+            if (!munCompMontado) munCompMonta();
+
+            const E = munCompEstado, nombre = munCompNombre();
+            const mesTxt = MUN_MESES[E.mes], mesLow = mesTxt.toLowerCase();
+            const regionTxt = E.region === 'AMG' ? 'AMG · 9 MUNICIPIOS' : 'JALISCO';
+
+            ['munCompT1', 'munCompT2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.textContent = nombre;
+            });
+            const s1 = document.getElementById('munCompS1');
+            if (s1) s1.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1) + '</small>';
+            const s2 = document.getElementById('munCompS2');
+            if (s2) s2.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1) +
+                ' · ACUMULADO ENERO–' + mesTxt.toUpperCase() + '</small>';
+
+            const esHom = /HOMICIDIO/.test(dsNorm(nombre));
+            const txtCarp = esHom
+                ? 'Carpetas de investigación, <b>NO víctimas</b>. Una sola carpeta puede incluir a más de una víctima.'
+                : 'Cifras en carpetas de investigación, <b>no víctimas</b>.';
+            ['munCompC1', 'munCompC2'].forEach(id => {
+                const e = document.getElementById(id); if (!e) return;
+                e.innerHTML = txtCarp;
+                e.className = 'munComp-carp' + (esHom ? ' fuerte' : '');
+            });
+
+            const serie = munCompSerieMostrada();
+            const promMes = serie.length ? serie.reduce((a, b) => a + b, 0) / serie.length : 0;
+            const acum = munCompAcumulados();
+            const promAcum = acum.length ? acum.reduce((x, y) => x + y, 0) / acum.length : 0;
+            const tabla = munCompTablaHTML();
+
+            ['munCompTabla1', 'munCompTabla2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.innerHTML = tabla;
+            });
+            ['munCompCT1', 'munCompCT2'].forEach(id => {
+                const e = document.getElementById(id);
+                if (e) e.textContent = `Acumulado durante el periodo:  enero-${mesLow}`;
+            });
+            const p1 = document.getElementById('munCompP1');
+            if (p1) p1.innerHTML = `Promedio mensual (${E.anioActual - 1}-${E.anioActual})<br>= ${munCompNf1(promMes)}`;
+            const p2 = document.getElementById('munCompP2');
+            if (p2) p2.innerHTML = `Promedio del acumulado (${E.anios[0]}-${E.anioActual})<br>= ${munCompNf1(promAcum)}`;
+
+            if (munCompCh1) { try { munCompCh1.destroy(); } catch (e) {} }
+            const c1 = document.getElementById('munCompG1');
+            if (c1 && typeof Chart !== 'undefined') munCompCh1 = new Chart(c1, munCompCfg1());
+            if (munCompCh2) { try { munCompCh2.destroy(); } catch (e) {} }
+            const c2 = document.getElementById('munCompG2');
+            if (c2 && typeof Chart !== 'undefined') munCompCh2 = new Chart(c2, munCompCfg2());
+
+            // ---- lecturas ----
+            const act = acum[acum.length - 1], ref = acum[acum.length - 2];
+            const varPct = ref ? (act - ref) / ref * 100 : null;
+            const ceros = serie.filter(v => v === 0).length;
+            let l1 = `<b>${esc(nombre)}</b> · ${E.region === 'AMG' ? 'AMG' : 'Jalisco'}. ` +
+                `Promedio mensual del periodo mostrado: <b>${munCompNf1(promMes)}</b> carpetas. ` +
+                `Acumulado enero–${mesLow} de ${E.anioActual}: <b>${munCompNf(act)}</b>, ` +
+                (varPct === null ? `sin base comparable en ${E.anioActual - 1}.`
+                    : `${varPct < 0 ? 'una reducción' : 'un aumento'} de <b>${Math.abs(varPct).toFixed(1)} %</b> frente a ${E.anioActual - 1}.`);
+            /* El cálculo se hace siempre, incluso con un solo caso, pero se
+               declara cuando la base es tan pequeña que el porcentaje deja de
+               describir una tendencia. */
+            if (ref > 0 && ref < 10) l1 += ` <b>Base baja:</b> el acumulado de ${E.anioActual - 1} fue de ` +
+                `solo ${munCompNf(ref)} carpetas; el porcentaje se calcula y se muestra, pero con esa ` +
+                `magnitud no describe una tendencia.`;
+            if (ceros) l1 += ` ${ceros} mes${ceros === 1 ? '' : 'es'} del periodo registra${ceros === 1 ? '' : 'n'} cero carpetas.`;
+            const eL1 = document.getElementById('munCompL1'); if (eL1) eL1.innerHTML = l1;
+
+            const red = acum[0] ? (act - acum[0]) / acum[0] * 100 : null;
+            const eL2 = document.getElementById('munCompL2');
+            if (eL2) eL2.innerHTML =
+                (red === null ? `Sin base comparable en ${E.anios[0]}.`
+                 : `Frente a ${E.anios[0]}, el acumulado enero–${mesLow} ${red < 0 ? 'se redujo' : 'aumentó'} ` +
+                   `<b>${Math.abs(red).toFixed(1)} %</b>: de <b>${munCompNf(acum[0])}</b> a <b>${munCompNf(act)}</b> carpetas.`) +
+                ` Los años se comparan sobre el <b>mismo tramo del calendario</b>, nunca año completo contra año parcial.`;
+
+            const pie = 'Fuente: SESNSP · carpetas de investigación del catálogo municipal, ' +
+                'reportadas por la Fiscalía del Estado de Jalisco. ' +
+                '*Cifras preliminares: pueden variar por la hora de corte o por modificación en el registro.';
+            ['munCompPie1', 'munCompPie2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.textContent = pie;
+            });
+
+            const res = document.getElementById('munCompResumen');
+            if (res) res.textContent = `${nombre} · ` +
+                `${E.region === 'AMG' ? 'AMG (9 municipios)' : 'Jalisco (125 municipios)'} · ` +
+                `corte a ${mesTxt} ${E.anioActual}`;
+        }
+
+        /* ---------------- selector de delito ----------------
+           Reutiliza el mismo formato "nivel::nombre" y el mismo interruptor de
+           catálogo completo que la barra superior, pero con su propio estado. */
+        function munCompLlenaDelitos() {
+            const sel = document.getElementById('munCompDelito');
+            if (!sel || !munData) return;
+            const base = munData.registros;
+            const totalDe = (n, nivel) => {
+                const campo = nivel === 'sub' ? 'subtipo' : 'tipo';
+                return base.reduce((a, r) => a + (r[campo] === n ? r.total : 0), 0);
+            };
+            const opcion = (n, nivel, tot) =>
+                `<option value="${esc(nivel + '::' + n)}">${esc(n)}${tot !== undefined ? ` (${nf(tot)})` : ''}</option>`;
+
+            const destacados = MUN_DESTACADOS
+                .map(d => Object.assign({}, d, { total: totalDe(d.n, d.nivel) }))
+                .filter(d => d.total > 0);
+
+            let html = '<option value="__TODOS__">Todos los delitos</option>';
+            html += '<optgroup label="Delitos prioritarios">' +
+                destacados.map(d => opcion(d.n, d.nivel, d.total)).join('') + '</optgroup>';
+
+            if (munCompEstado.catalogoCompleto) {
+                const yaEstan = new Set(destacados.map(d => d.nivel + '::' + d.n));
+                const tipos = Array.from(new Set(base.map(r => r.tipo))).filter(Boolean).sort()
+                    .filter(t => !yaEstan.has('tipo::' + t) && totalDe(t, 'tipo') > 0);
+                const subs = Array.from(new Set(base.map(r => r.subtipo))).filter(Boolean).sort()
+                    .filter(t => !yaEstan.has('sub::' + t) && totalDe(t, 'sub') > 0);
+                html += '<optgroup label="Resto del catálogo — Tipo de delito">' +
+                    tipos.map(t => opcion(t, 'tipo')).join('') + '</optgroup>';
+                html += '<optgroup label="Resto del catálogo — Subtipo de delito">' +
+                    subs.map(t => opcion(t, 'sub')).join('') + '</optgroup>';
+            }
+            const previo = munCompEstado.delito === '__TODOS__'
+                ? '__TODOS__' : munCompEstado.nivel + '::' + munCompEstado.delito;
+            sel.innerHTML = html;
+            if (sel.querySelector(`option[value="${CSS.escape(previo)}"]`)) sel.value = previo;
+
+            const btn = document.getElementById('munCompVerTodos');
+            if (btn) btn.textContent = munCompEstado.catalogoCompleto
+                ? 'Ver solo delitos prioritarios' : 'Ver todos los delitos';
+        }
+
+        /* ---------------- arranque de la sección ---------------- */
+        function munCompInicia() {
+            if (!munData || !munData.registros) return;
+            const E = munCompEstado;
+            E.anios = Array.from(new Set(munData.registros.map(r => r.anio)))
+                           .filter(Boolean).sort((a, b) => a - b);
+            if (!E.anios.length) return;
+            E.anioActual = E.anios[E.anios.length - 1];
+
+            /* Último mes con captura del año en curso. Los meses posteriores
+               llegan en CERO, no vacíos: tomarlos como corte compararía un año
+               completo contra uno parcial. */
+            const sAct = new Array(12).fill(0);
+            munData.registros.forEach(r => {
+                if (r.anio !== E.anioActual) return;
+                r.meses.forEach((v, m) => { sAct[m] += (v || 0); });
+            });
+            let u = 11; while (u > 0 && sAct[u] === 0) u--;
+            E.ultimoMes = u;
+            E.mes = u;
+
+            const selMes = document.getElementById('munCompMes');
+            if (selMes) selMes.innerHTML = MUN_MESES.map((m, i) =>
+                `<option value="${i}"${i === E.mes ? ' selected' : ''}${i > E.ultimoMes ? ' disabled' : ''}>` +
+                `${m}${i > E.ultimoMes ? ' — sin captura' : ''}</option>`).join('');
+
+            /* Preselección: homicidio doloso si existe, que es el indicador
+               que se consulta primero en la práctica. */
+            const hayHom = munData.registros.some(r => dsNorm(r.subtipo) === dsNorm('Homicidio doloso'));
+            if (hayHom) { E.delito = 'Homicidio doloso'; E.nivel = 'sub'; }
+
+            munCompLlenaDelitos();
+            munCompRender();
+            observeReveal(document.getElementById('munComparativo'));
+        }
+
+        /* ---------------- reporte PPTX ---------------- */
+        function munCompImagen(cfg, alto) {
+            const cx = document.getElementById('munCompCx');
+            if (!cx) return null;
+            cx.width = 1700; cx.height = alto || 620;
+            const ctx = cx.getContext('2d');
+            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cx.width, cx.height);
+            const c = { type: cfg.type, data: cfg.data, plugins: cfg.plugins,
+                        options: Object.assign({}, cfg.options, { responsive: false, animation: false }) };
+            const ch = new Chart(cx, c);
+            ch.update('none');
+            const url = cx.toDataURL('image/png', 1);
+            ch.destroy();
+            return url;
+        }
+
+        async function munCompPptx() {
+            const btn = document.getElementById('munCompPptx');
+            const rotulo = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+            try {
+                /* pptxgenjs viaja en el MISMO cargador diferido que ya usa
+                   Fiscalía: si esa vista lo trajo antes, aquí no se descarga
+                   otra vez. */
+                await fisCargarLibs();
+                if (typeof PptxGenJS === 'undefined')
+                    throw new Error('no se pudo cargar la librería de PowerPoint');
+
+                const E = munCompEstado;
+                const mesTxt = MUN_MESES[E.mes], mesLow = mesTxt.toLowerCase();
+                const regionTxt = E.region === 'AMG' ? 'ÁREA METROPOLITANA DE GUADALAJARA' : 'JALISCO';
+                const nombre = munCompNombre();
+                const acum = munCompAcumulados(), act = acum[acum.length - 1];
+                const serie = munCompSerieMostrada();
+                const promMes = serie.length ? serie.reduce((a, b) => a + b, 0) / serie.length : 0;
+                const promAcum = acum.length ? acum.reduce((x, y) => x + y, 0) / acum.length : 0;
+
+                const img1 = munCompImagen(munCompCfg1(), 620);
+                const img2 = munCompImagen(munCompCfg2(), 520);
+
+                const pptx = new PptxGenJS();
+                pptx.layout = 'LAYOUT_16x9';
+                pptx.author = 'CGES / DGAPP / AA';
+                pptx.company = 'Coordinación General Estratégica de Seguridad · Gobierno de Jalisco';
+
+                const PIE = 'Fuente: SESNSP, carpetas de investigación del catálogo municipal reportadas por la ' +
+                    'Fiscalía del Estado de Jalisco. Cifras preliminares: pueden variar por la hora de corte ' +
+                    'o por modificación en el registro de la información.';
+                const barraPie = sl => {
+                    sl.addShape(pptx.ShapeType.rect, { x: 0, y: 5.32, w: '100%', h: 0.31, fill: { color: '5B6470' } });
+                    sl.addText(PIE, { x: 0.15, y: 5.35, w: 8.2, h: 0.26, fontSize: 7, color: 'FFFFFF', fontFace: 'Arial' });
+                    sl.addText('CGES/DGAPP/AA', { x: 8.35, y: 5.35, w: 1.5, h: 0.26, fontSize: 7,
+                        color: 'FFFFFF', align: 'right', fontFace: 'Arial' });
+                };
+                const avisoCarpetas = (sl, y) => sl.addText(
+                    [{ text: 'Carpetas de investigación, ', options: {} },
+                     { text: 'NO víctimas', options: { bold: true, color: 'B00020' } }],
+                    { x: 0.38, y: y, w: 5.4, h: 0.26, fontSize: 10, color: '333333', fontFace: 'Arial' });
+
+                const filas = [
+                    E.anios.map(y => ({ text: String(y), options: {
+                        fill: { color: y >= E.anioActual - 1 ? '43A047' : '1F2C9B' },
+                        color: 'FFFFFF', bold: true, align: 'center', fontSize: 11 } })),
+                    acum.map(v => ({ text: munCompNf(v), options: { align: 'center', bold: true, fontSize: 13 } })),
+                    E.anios.map((y, i) => {
+                        if (i === E.anios.length - 1) return { text: '', options: {} };
+                        if (!acum[i]) return { text: 'n/d', options: { align: 'center', fontSize: 11 } };
+                        const p = (act - acum[i]) / acum[i] * 100;
+                        return { text: (p > 0 ? '+' : '') + p.toFixed(1) + '%', options: {
+                            align: 'center', bold: true, fontSize: 11, color: p < 0 ? '43A047' : 'E53935' } };
+                    })
+                ];
+                const anchoTabla = 4.7, nCol = E.anios.length;
+                const opcTabla = { x: 5.0, y: 0.46, w: anchoTabla, colW: Array(nCol).fill(anchoTabla / nCol),
+                    border: { type: 'solid', color: 'FFFFFF', pt: 1 }, fontFace: 'Arial' };
+                const cabTabla = { x: 5.0, y: 0.2, w: anchoTabla, h: 0.24, fontSize: 11, bold: true,
+                    align: 'center', color: '111111', fontFace: 'Arial' };
+
+                // ---- portada ----
+                const p0 = pptx.addSlide();
+                p0.background = { color: 'EEF1F5' };
+                p0.addText('Coordinación de Seguridad', { x: 0.9, y: 1.9, w: 8.2, h: 0.8,
+                    fontSize: 34, bold: true, color: '1F2C9B', fontFace: 'Arial' });
+                p0.addText('GOBIERNO DE JALISCO', { x: 0.95, y: 2.66, w: 8, h: 0.4,
+                    fontSize: 14, bold: true, color: '1F2C9B', charSpacing: 2, fontFace: 'Arial' });
+                p0.addText([{ text: 'Gráficas mensuales\n', options: { fontSize: 26, bold: true } },
+                            { text: regionTxt + '\n', options: { fontSize: 22, bold: true } },
+                            { text: mesTxt + ' ' + E.anioActual, options: { fontSize: 18 } }],
+                    { x: 0.9, y: 3.5, w: 8.2, h: 1.6, color: '1F2C9B', fontFace: 'Arial' });
+                p0.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
+
+                // ---- lámina 1 · serie mensual ----
+                const s1 = pptx.addSlide();
+                s1.background = { color: 'FFFFFF' };
+                s1.addText(nombre, { x: 0.35, y: 0.16, w: 4.6, h: 0.6, fontSize: 24, bold: true,
+                    color: '111111', fontFace: 'Arial' });
+                s1.addText(E.region === 'AMG' ? 'AMG · 9 MUNICIPIOS' : 'JALISCO',
+                    { x: 0.38, y: 0.74, w: 4.5, h: 0.28, fontSize: 13, bold: true, color: '1F2C9B', fontFace: 'Arial' });
+                avisoCarpetas(s1, 1.02);
+                s1.addText('Acumulado durante el periodo:  enero-' + mesLow, cabTabla);
+                s1.addTable(filas, opcTabla);
+                s1.addText(`Promedio mensual (${E.anioActual - 1}-${E.anioActual}) = ${munCompNf1(promMes)}`,
+                    { x: 6.3, y: 1.30, w: 3.4, h: 0.32, fontSize: 10.5, align: 'center',
+                      color: '111111', fontFace: 'Arial', line: { color: '5B2C8D', width: 1.5 } });
+                if (img1) s1.addImage({ data: img1, x: 0.3, y: 1.76, w: 9.4, h: 3.42 });
+                barraPie(s1);
+
+                // ---- lámina 2 · acumulado anual ----
+                const s2 = pptx.addSlide();
+                s2.background = { color: 'FFFFFF' };
+                s2.addText(nombre, { x: 0.35, y: 0.16, w: 4.6, h: 0.6, fontSize: 24, bold: true,
+                    color: '111111', fontFace: 'Arial' });
+                s2.addText('ACUMULADO ENERO–' + mesTxt.toUpperCase() + ' · ' + E.anios[0] + '-' + E.anioActual,
+                    { x: 0.38, y: 0.74, w: 4.6, h: 0.28, fontSize: 12, bold: true, color: '1F2C9B', fontFace: 'Arial' });
+                avisoCarpetas(s2, 1.02);
+                s2.addText('Acumulado durante el periodo:  enero-' + mesLow, cabTabla);
+                s2.addTable(filas, opcTabla);
+                s2.addText(`Promedio del acumulado (${E.anios[0]}-${E.anioActual}) = ${munCompNf1(promAcum)}`,
+                    { x: 6.3, y: 1.30, w: 3.4, h: 0.32, fontSize: 10.5, align: 'center',
+                      color: '111111', fontFace: 'Arial', line: { color: '5B2C8D', width: 1.5 } });
+                if (img2) s2.addImage({ data: img2, x: 0.55, y: 1.80, w: 8.9, h: 3.35 });
+                barraPie(s2);
+
+                // ---- cierre ----
+                const pf = pptx.addSlide();
+                pf.background = { color: 'EEF1F5' };
+                pf.addText('Coordinación de Seguridad', { x: 1.0, y: 2.4, w: 8, h: 0.8,
+                    fontSize: 32, bold: true, color: '1F2C9B', align: 'center', fontFace: 'Arial' });
+                pf.addText('GOBIERNO DE JALISCO', { x: 1.0, y: 3.15, w: 8, h: 0.4,
+                    fontSize: 14, bold: true, color: '1F2C9B', align: 'center', charSpacing: 2, fontFace: 'Arial' });
+                pf.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
+
+                const limpio = dsNorm(nombre).replace(/[^A-Z0-9]+/g, '_');
+                await pptx.writeFile({ fileName:
+                    `Comparativo_${limpio}_${E.region === 'AMG' ? 'AMG' : 'JALISCO'}_${mesTxt.toUpperCase()}_${E.anioActual}.pptx` });
+            } catch (err) {
+                console.error('[Comparativo Mensual]', err);
+                alert('No se pudo generar el reporte: ' + (err.message || err));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = rotulo; }
+            }
+        }
+
+        /* ---------------- eventos ---------------- */
+        (function munCompEventos() {
+            const reg = document.getElementById('munCompRegion');
+            if (reg) reg.addEventListener('click', e => {
+                const b = e.target.closest('button[data-r]');
+                if (!b) return;
+                munCompEstado.region = b.dataset.r;
+                b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+                munCompRender();
+            });
+            const sel = document.getElementById('munCompDelito');
+            if (sel) sel.addEventListener('change', e => {
+                const v = e.target.value;
+                if (v === '__TODOS__') { munCompEstado.delito = '__TODOS__'; munCompEstado.nivel = 'tipo'; }
+                else {
+                    const p = v.split('::');
+                    /* Sin un nivel y un nombre válidos, el filtro no encontraría
+                       ningún registro y la sección se quedaría en ceros sin que
+                       nada avise. Se cae a «Todos los delitos», que sí informa. */
+                    if (p.length < 2 || !p[0] || !p[1]) {
+                        munCompEstado.delito = '__TODOS__'; munCompEstado.nivel = 'tipo';
+                        e.target.value = '__TODOS__';
+                    } else {
+                        munCompEstado.nivel = p[0];
+                        munCompEstado.delito = p.slice(1).join('::');
+                    }
+                }
+                munCompRender();
+            });
+            const btnTodos = document.getElementById('munCompVerTodos');
+            if (btnTodos) btnTodos.addEventListener('click', () => {
+                munCompEstado.catalogoCompleto = !munCompEstado.catalogoCompleto;
+                munCompLlenaDelitos();
+            });
+            const mes = document.getElementById('munCompMes');
+            if (mes) mes.addEventListener('change', e => {
+                munCompEstado.mes = +e.target.value;
+                munCompRender();
+            });
+            const pptx = document.getElementById('munCompPptx');
+            if (pptx) pptx.addEventListener('click', munCompPptx);
+        })();
+
         // El módulo municipal ya está definido: se inscribe para la carga diferida.
-        registrarCargador('incidenciamunicipal', munCargar);
+        registrarCargador('incidenciamunicipal', () => munCargar().then(() => {
+            /* La sección Comparativo Mensual arranca DESPUÉS de que la hoja
+               está en memoria, y con su propio estado: no toca `munEstado`. */
+            try { munCompInicia(); } catch (e) { console.error('[Comparativo Mensual]', e); }
+        }));
 
 
         /* ==================================================================
