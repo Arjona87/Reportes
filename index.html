@@ -1844,6 +1844,8 @@
                 El filtro de año ya está habilitado y se poblará automáticamente conforme se
                 carguen los ejercicios de 2018 a 2025 en la hoja.
             </div>
+            <div class="mun-nota" id="munNotaComparab" style="display:none"></div>
+            <div class="mun-nota mun-nota-fuerte" id="munNotaTotalAnual" style="display:none"></div>
             <div class="mun-nota mun-nota-fuerte">
                 <b>Carpetas de investigación abiertas.</b> Las cifras del SESNSP contabilizan
                 <em>carpetas de investigación</em>, no víctimas. Una sola carpeta puede incluir a más de
@@ -2320,7 +2322,11 @@
         const SHEETS = {
             SEMANAL:       { nombre: 'SEMANAL', gid: '0' },
             DESAPARECIDOS: { nombre: 'DESAPARECIDOS', gid: '1865808402' },
-            MUNICIPAL:     { nombre: 'Municipal',     gid: '1364159247' },
+            /* Pestaña homologada. Las columnas Tipo_H, Subtipo_H y Modalidad_H
+               traducen los seis años a una sola taxonomía. Sustituye a la anterior
+               (gid 1364159247), cuyo catálogo cambiaba entre 2025 y 2026 y partía
+               en dos la serie de cada delito renombrado. */
+            MUNICIPAL:     { nombre: 'Municipal_SESNSP', gid: '1983027362' },
             FISCALIA:      { nombre: 'Fiscalía',      gid: '1080129787' },
             /* Homicidios Dolosos. Los dos gid se declaran juntos y SIN asumir
                cuál es cuál: la vista identifica cada hoja leyendo su cabecera
@@ -6757,18 +6763,42 @@
             const col = nombre => cab.findIndex(c => dsNorm(c) === dsNorm(nombre));
 
             const iMuni = col('Municipio'), iBien = col('Bien jurídico afectado');
-            const iTipo = col('Tipo de delito'), iSub = col('Subtipo de delito'), iMod = col('Modalidad');
+            /* Se leen las columnas HOMOLOGADAS, no las originales del SESNSP.
+               El catálogo cambió entre 2025 y 2026: «Tipo de delito», «Subtipo de
+               delito» y «Modalidad» arrastran esa discontinuidad y un mismo delito
+               aparece con dos nombres, partiendo su serie por la mitad. Tipo_H,
+               Subtipo_H y Modalidad_H traducen los seis años a una sola taxonomía. */
+            const iTipo = col('Tipo_H'), iSub = col('Subtipo_H'), iMod = col('Modalidad_H');
+            const iEstado = col('Estado_H');
+            const iTotalAnual = col('Total anual');
             const iAnio = col('Año');
-            if (iMuni < 0 || iTipo < 0) throw new Error('La pestaña Municipal no tiene las columnas esperadas del SESNSP.');
+            if (iMuni < 0 || iTipo < 0)
+                throw new Error('La pestaña Municipal_SESNSP no trae las columnas homologadas '
+                    + '(Tipo_H, Subtipo_H, Modalidad_H). Verifica que el gid apunte a la hoja correcta.');
 
             const iMes = MUN_MESES.map(m => col(m));
 
             const registros = [];
+            const audit = { totalAnualDescuadre: 0, ejemplos: [] };
             for (let f = 1; f < filas.length; f++) {
                 const r = filas[f];
                 if (!r || !r[iMuni]) continue;
                 const meses = iMes.map(i => (i >= 0 ? dsNum(r[i]) : null));
                 const total = meses.reduce((a, v) => a + (v || 0), 0);
+                /* Control: la hoja trae su propia columna «Total anual». Debe
+                   coincidir con la suma de los doce meses. Si no, se cuenta y se
+                   reporta; el tablero sigue usando la suma de meses, que es la que
+                   alimenta las series mensuales. */
+                if (iTotalAnual >= 0) {
+                    const declarado = dsNum(r[iTotalAnual]);
+                    if (declarado !== null && Math.abs(declarado - total) > 1e-9) {
+                        audit.totalAnualDescuadre++;
+                        if (audit.ejemplos.length < 5) audit.ejemplos.push(
+                            `${(r[iMuni] || '').trim()} · ${(r[iTipo] || '').trim()} · `
+                            + `${iAnio >= 0 ? r[iAnio] : '?'}: los meses suman ${total}, `
+                            + `la columna declara ${declarado}`);
+                    }
+                }
                 registros.push({
                     anio: iAnio >= 0 ? dsNum(r[iAnio]) : null,
                     municipio: (r[iMuni] || '').trim(),
@@ -6776,6 +6806,7 @@
                     tipo: (r[iTipo] || '').trim(),
                     subtipo: iSub >= 0 ? (r[iSub] || '').trim() : '',
                     modalidad: iMod >= 0 ? (r[iMod] || '').trim() : '',
+                    estado: iEstado >= 0 ? (r[iEstado] || '').trim() : '',
                     meses, total
                 });
             }
@@ -6793,7 +6824,22 @@
             const tipos = Array.from(new Set(registros.map(r => r.tipo))).sort();
             const anios = Array.from(new Set(registros.map(r => r.anio).filter(Boolean))).sort();
 
-            return { registros, municipios, tipos, anios, ultimoMes,
+            /* Comparabilidad por delito. `Estado_H` viene por fila; aquí se resume
+               por delito para poder advertirlo en la interfaz. Un delito NO es
+               comparable entre años cuando nace en 2026 («Sin antecedente») o
+               cuando su desglose no existe antes («No desglosable»). */
+            const comparab = {};
+            registros.forEach(r => {
+                [['tipo', r.tipo], ['sub', r.subtipo]].forEach(par => {
+                    if (!par[1]) return;
+                    const k = par[0] + '::' + par[1];
+                    const e = (comparab[k] = comparab[k] || { anios: {}, estados: {} });
+                    if (r.anio) e.anios[r.anio] = true;
+                    if (r.estado) e.estados[r.estado] = true;
+                });
+            });
+
+            return { registros, municipios, tipos, anios, ultimoMes, audit, comparab,
                      total: registros.reduce((a, r) => a + r.total, 0) };
         }
 
@@ -6867,6 +6913,66 @@
         }
 
         // ---------- KPIs ----------
+        /* Aviso de comparabilidad entre años.
+           La homologación no puede inventar lo que no existe: hay delitos que
+           nacen en 2026 y otros cuyo desglose no existía antes. Compararlos con
+           años previos produce variaciones falsas, así que se declara en pantalla
+           en lugar de dejar que alguien lea un «+100 %» inexistente. */
+        function munAvisoComparabilidad() {
+            const aviso = document.getElementById('munNotaComparab');
+            if (aviso && munData && munData.comparab) {
+                const anios = (munData.anios || []).slice().sort();
+                const ultimo = anios[anios.length - 1];
+                const sinAnt = [], noDesg = [];
+                Object.keys(munData.comparab).forEach(k => {
+                    const nombre = k.slice(k.indexOf('::') + 2);
+                    const e = munData.comparab[k];
+                    const presentes = Object.keys(e.anios);
+                    /* Sin historia previa = solo aparece en el último ejercicio.
+                       Se deduce de los AÑOS en que hay registros, no del estado:
+                       un delito puede tener historia como tipo y no como subtipo,
+                       y mirar solo `Estado_H` lo clasificaría mal. */
+                    if (presentes.length === 1 && String(presentes[0]) === String(ultimo)) sinAnt.push(nombre);
+                    if (e.estados['No desglosable']) noDesg.push(nombre);
+                });
+                const uniq = a => Array.from(new Set(a)).sort();
+                /* Las listas se recortan: con veintitantos nombres el aviso deja de
+                   leerse y nadie lo mira. */
+                const lista = a => {
+                    const u = uniq(a);
+                    const vis = u.slice(0, 6).map(x => `<b>${esc(x)}</b>`).join(', ');
+                    return u.length > 6 ? `${vis} y ${u.length - 6} más` : vis;
+                };
+                const partes = [];
+                if (sinAnt.length) partes.push(
+                    `<b>Sin historia previa:</b> ${lista(sinAnt)}. Aparecen por primera vez en el ` +
+                    `catálogo vigente, así que <b>no tienen contra qué compararse</b> y cualquier ` +
+                    `variación frente a años anteriores sería falsa.`);
+                if (noDesg.length) partes.push(
+                    `<b>Sin desglose comparable:</b> ${lista(noDesg)}. En el catálogo nuevo se ` +
+                    `dividieron en varios subtipos que no existían antes: solo el <b>tipo</b> es ` +
+                    `comparable a lo largo de la serie, no el subtipo.`);
+                if (partes.length) {
+                    aviso.style.display = '';
+                    aviso.innerHTML = '<b>Comparabilidad entre años.</b> ' + partes.join(' ');
+                } else aviso.style.display = 'none';
+            }
+
+            /* Control del «Total anual» que trae la hoja contra la suma de meses. */
+            const ta = document.getElementById('munNotaTotalAnual');
+            if (ta && munData && munData.audit) {
+                const n = munData.audit.totalAnualDescuadre;
+                if (n > 0) {
+                    ta.style.display = '';
+                    ta.innerHTML = `<b>Descuadre en «Total anual».</b> ${nf(n)} fila` +
+                        `${n === 1 ? '' : 's'} de la hoja declaran un total que no coincide con la ` +
+                        `suma de sus doce meses. El tablero usa <b>la suma de meses</b>, que es la que ` +
+                        `alimenta las series. Ejemplos: ` +
+                        munData.audit.ejemplos.map(x => esc(x)).join(' · ') + '.';
+                } else ta.style.display = 'none';
+            }
+        }
+
         function munRenderKpis() {
             const cont = document.getElementById('munKpiCards');
             if (!cont || !munData) return;
@@ -7467,6 +7573,14 @@
             }
 
             const porMun = {};
+            /* La hoja homologada omite las filas en cero, así que un municipio sin
+               casos del delito elegido no traería ningún registro y desaparecería
+               de la tabla. Se siembran los 125 municipios del padrón para que
+               aparezcan en cero: una ausencia no es lo mismo que un municipio que
+               no existe, y quien lee la tabla debe poder distinguirlo. */
+            Object.keys(MUN_POBLACION).forEach(m => {
+                porMun[m] = { meses: new Array(12).fill(0), total: 0 };
+            });
             regs.forEach(r => {
                 if (dsNorm(r.municipio) === 'NO ESPECIFICADO') return;
                 if (!porMun[r.municipio]) porMun[r.municipio] = { meses: new Array(12).fill(0), total: 0 };
@@ -7721,6 +7835,7 @@
                 // Con un solo ejercicio cargado, se selecciona ese y no "Todos".
                 if (anios.length === 1) { selA.value = String(anios[0]); munEstado.anio = String(anios[0]); }
             }
+            munAvisoComparabilidad();
             const nota = document.getElementById('munNotaAnios');
             if (nota) {
                 const anios = munData.anios.slice().sort();
