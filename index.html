@@ -978,6 +978,15 @@
         #munCompLienzo { position: fixed; left: -9999px; top: 0; }
         @media (max-width: 1080px) { .munComp-caja { min-width: 0; width: 100%; margin-left: 0; } }
 
+        /* Gráficas Mensuales. La tabla de acumulados puede llegar a diez años,
+           frente a los seis de Comparativo Mensual: necesita más ancho y una
+           tipografía algo menor. Reglas ADITIVAS: no se toca `munComp-*`. */
+        .gm-caja { min-width: 610px; }
+        .gm-acum th { font-size: 10px; padding: 5px 2px; }
+        .gm-acum td { font-size: 13px; padding: 4px 2px; }
+        .gm-acum tr.pct td { font-size: 11.5px; }
+        @media (max-width: 1180px) { .gm-caja { min-width: 0; width: 100%; margin-left: 0; } }
+
         .variation-cell {
             display: inline-block;
             font-weight: 600;
@@ -1538,6 +1547,7 @@
             <button class="btn-nav btn-nav-off" id="navMunBtn">Incidencia Municipal</button>
             <button class="btn-nav btn-nav-off" id="navFisBtn">Fiscalía 2026</button>
             <button class="btn-nav btn-nav-off" id="navHdBtn">Homicidios D.</button>
+            <button class="btn-nav btn-nav-off" id="navGmBtn">Gráficas Mensuales</button>
         </nav>
     </header>
 
@@ -2295,6 +2305,46 @@
 
       </div><!-- /vistaHomicidios -->
 
+      <!-- =====================================================================
+           VISTA · GRÁFICAS MENSUALES
+           Fuente: pestaña «IIEG 2017-2026 TODOS MUN» en formato vertical.
+           Reutiliza el CSS de lámina de la sección Comparativo Mensual.
+           ===================================================================== -->
+      <div id="vistaGraficas" style="display:none">
+        <section id="gmSeccion">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Gráficas Mensuales</h2>
+                <span class="panel-nota">Fuente IIEG · un delito y una medida a la vez</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">Serie mensual y acumulados comparables</span>
+                    <p>Se grafica un solo delito por vez. Cuando el delito ofrece más de una forma de
+                       contarse —eventos, víctimas o desglose por arma— hay que elegir cuál:
+                       <b>no son sumables entre sí</b>.</p>
+                </div>
+                <div class="mun-barra-filtros">
+                    <label class="mun-et">Región</label>
+                    <div class="conmutador" id="gmRegion"></div>
+                    <label class="mun-et" for="gmDelito">Delito</label>
+                    <select id="gmDelito"></select>
+                    <span id="gmMedidaCaja" style="display:none">
+                        <label class="mun-et" for="gmMedida">Medida</label>
+                        <select id="gmMedida"></select>
+                    </span>
+                    <label class="mun-et" for="gmMes">Mes de corte</label>
+                    <select id="gmMes"></select>
+                    <button class="btn-sec btn-acento" id="gmPptx">Generar reporte</button>
+                    <span class="panel-nota" style="margin-left:auto" id="gmResumen">—</span>
+                </div>
+                <div id="gmCuerpo">
+                    <div class="sk sk-card" style="height:420px;margin-top:16px"></div>
+                </div>
+            </div>
+        </section>
+      </div><!-- /vistaGraficas -->
+
 
     </main>
 
@@ -2333,7 +2383,10 @@
                de columnas. Si mañana se intercambian en el libro, sigue
                cargando igual. */
             HD_A:          { nombre: 'Homicidios A',  gid: '1957142696' },
-            HD_B:          { nombre: 'Homicidios B',  gid: '46514323' }
+            HD_B:          { nombre: 'Homicidios B',  gid: '46514323' },
+            /* Gráficas Mensuales. Formato vertical: una fila por mes, ámbito,
+               delito, dimensión y categoría. */
+            GRAFICAS:      { nombre: 'IIEG 2017-2026 TODOS MUN', gid: '387467378' }
         };
 
         const HOJA_ACTIVA = SHEETS.SEMANAL;
@@ -6424,7 +6477,8 @@
             { id: 'desaparecidos',       div: 'vistaDesaparecidos',  btn: 'navDesapBtn',   hash: 'desaparecidos' },
             { id: 'incidenciamunicipal', div: 'vistaMunicipal',      btn: 'navMunBtn',     hash: 'IncidenciaMunicipal' },
             { id: 'fiscalia',            div: 'vistaFiscalia',       btn: 'navFisBtn',     hash: 'Fiscalia' },
-            { id: 'homicidios',          div: 'vistaHomicidios',     btn: 'navHdBtn',      hash: 'homicidios' }
+            { id: 'homicidios',          div: 'vistaHomicidios',     btn: 'navHdBtn',      hash: 'homicidios' },
+            { id: 'graficasmensuales',   div: 'vistaGraficas',       btn: 'navGmBtn',      hash: 'GraficasMensuales' }
         ];
 
         function dsMostrarVista(cual, desdeHash) {
@@ -11432,6 +11486,600 @@
                 tarjetaKPI('Coordenadas reescaladas', hdNf(a.coordReescalada), 'Corregidas automáticamente', 2) +
                 tarjetaKPI('Sin coordenada', hdNf(a.coordNA), 'Valor NA en el origen', 3);
         }
+
+
+        /* =====================================================================
+           VISTA · GRÁFICAS MENSUALES   (prefijo gm*)
+           =====================================================================
+           Fuente: pestaña «IIEG 2017-2026 TODOS MUN» (gid 387467378), en formato
+           vertical: una fila por mes, ámbito, delito, dimensión y categoría.
+
+           A diferencia de Incidencia Municipal, aquí un delito NO tiene una sola
+           cifra. Homicidio doloso trae cinco: eventos, víctimas y tres tipos de
+           arma. Son formas distintas de contar el mismo hecho, así que sumarlas
+           produciría un número que no existe. Por eso hay un selector de MEDIDA
+           que aparece solo cuando el delito ofrece más de una.
+
+           Reutiliza el CSS de `munComp-*` sin modificarlo: el formato de lámina
+           es el mismo y duplicar las reglas solo abriría dos sitios donde
+           corregir el día que cambie el diseño.
+           ===================================================================== */
+        const gmEstado = {
+            region: 'Jalisco',
+            delito: '',
+            medida: '',            // "Dimension::Categoria"
+            mes: 6,
+            anios: [], anioActual: null, ultimoMesConDato: -1
+        };
+        let gmData = null, gmCh1 = null, gmCh2 = null, gmMontado = false, gmEventos = false;
+
+        const GM_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                          'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        const GM_MES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+        const GM_REGIONES = ['Jalisco', 'AMG', 'Interior'];
+
+        const gmNf  = v => (Number.isFinite(+v) ? Math.round(+v) : 0).toLocaleString('es-MX');
+        const gmNf1 = v => (Number.isFinite(+v) ? +v : 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+        const gmPct = (a, b) => b ? (a / b * 100).toFixed(1) + ' %' : '0.0 %';
+
+        /* Fecha del primer día de cada mes. Se aceptan los tres formatos con que
+           Google puede exportar la columna. En «01/11/2017» el orden de día y mes
+           es ambiguo, pero aquí TODAS las fechas son día 1: el componente que
+           vale 1 es el día, y el otro es el mes. */
+        function gmFecha(v) {
+            if (v === null || v === undefined) return null;
+            const s = String(v).trim();
+            if (!s) return null;
+            let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (m) return { anio: +m[1], mes: +m[2] - 1 };
+            m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+            if (m) {
+                const a = +m[1], b = +m[2], y = +m[3];
+                const mes = (a === 1) ? b : (b === 1 ? a : b);   // el 1 es el día
+                return { anio: y, mes: mes - 1 };
+            }
+            const n = parseFloat(s);
+            if (Number.isFinite(n) && n > 20000 && n < 80000) {
+                const d = new Date(Date.UTC(1899, 11, 30) + n * 86400000);
+                return { anio: d.getUTCFullYear(), mes: d.getUTCMonth() };
+            }
+            return null;
+        }
+
+        /* --------------------- parser --------------------- */
+        function gmParse(csvText) {
+            const filas = parseCSV(csvText);
+            if (!filas.length) throw new Error('La pestaña de gráficas mensuales llegó vacía.');
+            const cab = filas[0].map(c => (c || '').trim());
+            const col = nombre => cab.findIndex(c => dsNorm(c) === dsNorm(nombre));
+            const iF = col('Fecha'), iA = col('Ambito'), iD = col('Delito'),
+                  iDim = col('Dimension'), iCat = col('Categoria'), iQ = col('Cantidad');
+            if (iF < 0 || iD < 0 || iQ < 0)
+                throw new Error('La pestaña no trae las columnas esperadas '
+                    + '(Fecha, Ambito, Delito, Dimension, Categoria, Cantidad).');
+
+            const registros = [];
+            const audit = { sinFecha: 0, sinCantidad: 0 };
+            for (let f = 1; f < filas.length; f++) {
+                const r = filas[f];
+                if (!r || !r[iD]) continue;
+                const fe = gmFecha(r[iF]);
+                if (!fe) { audit.sinFecha++; continue; }
+                const q = dsNum(r[iQ]);
+                if (q === null) { audit.sinCantidad++; continue; }
+                registros.push({
+                    anio: fe.anio, mes: fe.mes,
+                    ambito: (r[iA] || '').trim(),
+                    delito: (r[iD] || '').trim(),
+                    dimension: iDim >= 0 ? (r[iDim] || '').trim() : 'Total',
+                    categoria: iCat >= 0 ? (r[iCat] || '').trim() : 'Total',
+                    cantidad: q
+                });
+            }
+            if (!registros.length) throw new Error('La pestaña no contiene registros legibles.');
+
+            const anios = Array.from(new Set(registros.map(r => r.anio))).sort((a, b) => a - b);
+            const delitos = Array.from(new Set(registros.map(r => r.delito)))
+                                 .sort((a, b) => a.localeCompare(b, 'es'));
+            const ambitos = GM_REGIONES.filter(a =>
+                registros.some(r => dsNorm(r.ambito) === dsNorm(a)));
+
+            /* Medidas disponibles por delito. Se ordenan de modo que la más
+               representativa quede primero. */
+            const ORDEN = { 'Agregado': 0, 'Total': 1, 'Unidad': 2, 'Violencia': 3, 'Arma': 4, 'Fosas': 5 };
+            const medidas = {};
+            registros.forEach(r => {
+                const k = r.dimension + '::' + r.categoria;
+                (medidas[r.delito] = medidas[r.delito] || {})[k] = true;
+            });
+            Object.keys(medidas).forEach(d => {
+                medidas[d] = Object.keys(medidas[d]).sort((x, y) => {
+                    const dx = x.split('::')[0], dy = y.split('::')[0];
+                    return (ORDEN[dx] ?? 9) - (ORDEN[dy] ?? 9) || x.localeCompare(y, 'es');
+                });
+            });
+
+            /* Último mes con captura del año más reciente. No sirve para
+               deshabilitar meses —el corte se elige libremente— pero sí para
+               advertir que el acumulado del año en curso está incompleto. */
+            const ult = anios[anios.length - 1];
+            let ultimoMes = -1;
+            for (let m = 0; m < 12; m++) {
+                if (registros.some(r => r.anio === ult && r.mes === m)) ultimoMes = m;
+            }
+            return { registros, anios, delitos, ambitos, medidas, ultimoMes, audit };
+        }
+
+        /* --------------------- consultas --------------------- */
+        function gmEtiquetaMedida(k) {
+            const p = k.split('::');
+            const dim = p[0], cat = p[1] || '';
+            if (dim === 'Total' && cat === 'Total') return 'Total';
+            if (dim === 'Agregado') return cat === 'Incidencia total' ? 'Incidencia total' : cat + ' (agregado)';
+            if (dim === 'Unidad') return cat;
+            if (dim === 'Violencia') return cat;
+            if (dim === 'Arma') return cat;
+            if (dim === 'Fosas') return cat;
+            return cat || dim;
+        }
+        /* Medida por defecto. En homicidio y feminicidio se abre en VÍCTIMAS:
+           es la cifra que se reporta, y abrir en eventos invitaría a confundir
+           carpetas con personas. */
+        function gmMedidaPorDefecto(delito) {
+            const disp = (gmData.medidas[delito] || []);
+            const pref = ['Unidad::Víctimas', 'Agregado::Incidencia total',
+                          'Total::Total', 'Agregado::Total'];
+            for (const p of pref) if (disp.indexOf(p) >= 0) return p;
+            return disp[0] || '';
+        }
+        function gmSerie(anio) {
+            const out = new Array(12).fill(0);
+            if (!gmData) return out;
+            const p = gmEstado.medida.split('::');
+            const dim = p[0], cat = p[1] || '';
+            gmData.registros.forEach(r => {
+                if (r.anio !== anio) return;
+                if (dsNorm(r.ambito) !== dsNorm(gmEstado.region)) return;
+                if (r.delito !== gmEstado.delito) return;
+                if (r.dimension !== dim || r.categoria !== cat) return;
+                out[r.mes] += r.cantidad;
+            });
+            return out;
+        }
+        function gmAcumulados() {
+            return gmEstado.anios.map(a =>
+                gmSerie(a).slice(0, gmEstado.mes + 1).reduce((x, y) => x + y, 0));
+        }
+        function gmSerieMostrada() {
+            const act = gmEstado.anioActual;
+            return gmSerie(act - 1).concat(gmSerie(act).slice(0, gmEstado.mes + 1));
+        }
+
+        /* --------------------- configuración de gráficas ---------------------
+           Se reutilizan los plugins de lámina de la sección Comparativo Mensual:
+           cifra blanca dentro de la barra, promedio discontinuo y tendencia. */
+        function gmEtiquetas() {
+            const act = gmEstado.anioActual, out = [];
+            for (let i = 0; i < 12; i++)
+                out.push(i === 0 ? ['ene', String(act - 1)] : [GM_MES_C[i]]);
+            for (let i = 0; i <= gmEstado.mes; i++) {
+                const t = GM_MES_C[i] + (i === gmEstado.mes ? '*' : '');
+                out.push(i === 0 ? [t, String(act)] : [t]);
+            }
+            return out;
+        }
+        function gmColores() {
+            const c = [];
+            for (let i = 0; i < 12; i++) c.push('#1F2C9B');
+            for (let i = 0; i <= gmEstado.mes; i++) c.push('#43A047');
+            return c;
+        }
+        function gmCfg1() {
+            const s = gmSerieMostrada();
+            const prom = s.length ? s.reduce((a, b) => a + b, 0) / s.length : 0;
+            return { type: 'bar',
+                data: { labels: gmEtiquetas(), datasets: [{ data: s,
+                    backgroundColor: gmColores(), borderWidth: 0,
+                    barPercentage: .86, categoryPercentage: .9 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 18 } },
+                    plugins: { legend: { display: false },
+                               munCompLineaProm: { valor: prom },
+                               munCompTendencia: { enabled: true } },
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 11.5 }, color: '#555' } },
+                              y: { display: false, beginAtZero: true, grace: '12%' } } },
+                plugins: [munCompEtqDentro, munCompLineaProm, munCompTendencia] };
+        }
+        function gmCfg2() {
+            const a = gmAcumulados();
+            const prom = a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+            const act = gmEstado.anioActual;
+            return { type: 'bar',
+                data: { labels: gmEstado.anios.map(String), datasets: [{ data: a,
+                    backgroundColor: gmEstado.anios.map(y => y === act ? '#43A047' : '#1F2C9B'),
+                    borderWidth: 0, barPercentage: .7, categoryPercentage: .8 }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 28 } },
+                    plugins: { legend: { display: false },
+                               munCompLineaProm: { valor: prom },
+                               munCompTendencia: { enabled: true } },
+                    scales: { x: { grid: { display: false }, ticks: { font: { size: 12, weight: 'bold' }, color: '#333' } },
+                              y: { display: false, beginAtZero: true, grace: '16%' } } },
+                plugins: [munCompEtqEncima, munCompLineaProm, munCompTendencia] };
+        }
+
+        function gmTablaHTML() {
+            const a = gmAcumulados(), act = a[a.length - 1], A = gmEstado.anios;
+            let th = '<tr>', td = '<tr>', tp = '<tr class="pct">';
+            A.forEach((y, i) => {
+                th += `<th class="${y >= gmEstado.anioActual - 1 ? 'act' : ''}">${y}</th>`;
+                td += `<td>${gmNf(a[i])}</td>`;
+                if (i === A.length - 1) { tp += '<td></td>'; return; }
+                /* División entre cero: se declara «n/d», nunca «−100 %», que
+                   afirmaría una reducción sobre una base inexistente. */
+                if (!a[i]) { tp += '<td>n/d</td>'; return; }
+                const p = (act - a[i]) / a[i] * 100;
+                tp += `<td class="${p < 0 ? 'munComp-baja' : 'munComp-sube'}">${p > 0 ? '+' : ''}${p.toFixed(1)}%</td>`;
+            });
+            return th + '</tr>' + td + '</tr>' + tp + '</tr>';
+        }
+
+
+        /* --------------------- maquetado --------------------- */
+        function gmMonta() {
+            const cont = document.getElementById('gmCuerpo');
+            if (!cont) return;
+            cont.innerHTML = `
+                <div class="munComp-lamina">
+                    <div class="munComp-cab">
+                        <div>
+                            <h3 class="munComp-tit" id="gmT1">—</h3>
+                            <p class="munComp-sub" id="gmS1">—</p>
+                            <p class="munComp-carp" id="gmC1"></p>
+                        </div>
+                        <div class="munComp-caja gm-caja">
+                            <div class="munComp-caja-t" id="gmCT1">—</div>
+                            <table class="munComp-acum gm-acum" id="gmTabla1"></table>
+                            <div class="munComp-prom-w"><div class="munComp-prom" id="gmP1">—</div></div>
+                        </div>
+                    </div>
+                    <div class="munComp-box"><canvas id="gmG1"></canvas></div>
+                    <div class="mun-lectura" id="gmL1">—</div>
+                    <div class="munComp-pie" id="gmPie1"></div>
+                </div>
+                <div class="munComp-lamina">
+                    <div class="munComp-cab">
+                        <div>
+                            <h3 class="munComp-tit" id="gmT2">—</h3>
+                            <p class="munComp-sub" id="gmS2">—</p>
+                            <p class="munComp-carp" id="gmC2"></p>
+                        </div>
+                        <div class="munComp-caja gm-caja">
+                            <div class="munComp-caja-t" id="gmCT2">—</div>
+                            <table class="munComp-acum gm-acum" id="gmTabla2"></table>
+                            <div class="munComp-prom-w"><div class="munComp-prom" id="gmP2">—</div></div>
+                        </div>
+                    </div>
+                    <div class="munComp-box munComp-box-2"><canvas id="gmG2"></canvas></div>
+                    <div class="mun-lectura" id="gmL2">—</div>
+                    <div class="munComp-pie" id="gmPie2"></div>
+                </div>
+                <div id="gmLienzo" style="position:fixed;left:-9999px;top:0">
+                    <canvas id="gmCx" width="1700" height="620"></canvas>
+                </div>`;
+            gmMontado = true;
+        }
+
+        /* --------------------- render --------------------- */
+        function gmRender() {
+            if (!gmData) return;
+            if (!gmMontado) gmMonta();
+            const E = gmEstado;
+            const mesTxt = GM_MESES[E.mes], mesLow = mesTxt.toLowerCase();
+            const etqMedida = gmEtiquetaMedida(E.medida);
+            const regionTxt = E.region === 'AMG' ? 'AMG · ÁREA METROPOLITANA'
+                            : (E.region === 'Interior' ? 'INTERIOR DEL ESTADO' : 'JALISCO');
+
+            ['gmT1', 'gmT2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.textContent = E.delito;
+            });
+            const s1 = document.getElementById('gmS1');
+            if (s1) s1.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1)
+                + ' · ' + esc(etqMedida.toUpperCase()) + '</small>';
+            const s2 = document.getElementById('gmS2');
+            if (s2) s2.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1)
+                + ' · ACUMULADO ENERO–' + mesTxt.toUpperCase() + '</small>';
+
+            /* Aviso de unidad de medida. La fuente cuenta carpetas salvo cuando
+               la medida elegida son víctimas o eventos, que sí son personas o
+               hechos: decirlo evita la confusión más costosa del tablero. */
+            const p = E.medida.split('::');
+            const esPersona = p[0] === 'Unidad' || p[0] === 'Arma' || p[0] === 'Fosas';
+            const txtC = esPersona
+                ? (p[1] === 'Eventos'
+                    ? 'La medida seleccionada cuenta <b>eventos</b>, no personas.'
+                    : 'La medida seleccionada cuenta <b>víctimas</b>, es decir personas, no carpetas.')
+                : 'Cifras en carpetas de investigación, <b>no víctimas</b>.';
+            ['gmC1', 'gmC2'].forEach(id => {
+                const e = document.getElementById(id); if (!e) return;
+                e.innerHTML = txtC;
+                e.className = 'munComp-carp' + (esPersona ? ' fuerte' : '');
+            });
+
+            const serie = gmSerieMostrada();
+            const promMes = serie.length ? serie.reduce((a, b) => a + b, 0) / serie.length : 0;
+            const acum = gmAcumulados();
+            const promAcum = acum.length ? acum.reduce((x, y) => x + y, 0) / acum.length : 0;
+            const tabla = gmTablaHTML();
+
+            ['gmTabla1', 'gmTabla2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.innerHTML = tabla;
+            });
+            ['gmCT1', 'gmCT2'].forEach(id => {
+                const e = document.getElementById(id);
+                if (e) e.textContent = `Acumulado durante el periodo:  enero-${mesLow}`;
+            });
+            const e1 = document.getElementById('gmP1');
+            if (e1) e1.innerHTML = `Promedio mensual (${E.anioActual - 1}-${E.anioActual})<br>= ${gmNf1(promMes)}`;
+            const e2 = document.getElementById('gmP2');
+            if (e2) e2.innerHTML = `Promedio del acumulado (${E.anios[0]}-${E.anioActual})<br>= ${gmNf1(promAcum)}`;
+
+            if (gmCh1) { try { gmCh1.destroy(); } catch (e) {} }
+            const c1 = document.getElementById('gmG1');
+            if (c1 && typeof Chart !== 'undefined') gmCh1 = new Chart(c1, gmCfg1());
+            if (gmCh2) { try { gmCh2.destroy(); } catch (e) {} }
+            const c2 = document.getElementById('gmG2');
+            if (c2 && typeof Chart !== 'undefined') gmCh2 = new Chart(c2, gmCfg2());
+
+            // ---- lecturas ----
+            const act = acum[acum.length - 1], ref = acum[acum.length - 2];
+            const varPct = ref ? (act - ref) / ref * 100 : null;
+            let l1 = `<b>${esc(E.delito)}</b> · ${esc(E.region)} · ${esc(etqMedida)}. ` +
+                `Promedio mensual del periodo mostrado: <b>${gmNf1(promMes)}</b>. ` +
+                `Acumulado enero–${mesLow} de ${E.anioActual}: <b>${gmNf(act)}</b>, ` +
+                (varPct === null ? `sin base comparable en ${E.anioActual - 1}.`
+                    : `${varPct < 0 ? 'una reducción' : 'un aumento'} de <b>${Math.abs(varPct).toFixed(1)} %</b> frente a ${E.anioActual - 1}.`);
+            if (ref > 0 && ref < 10) l1 += ` <b>Base baja:</b> el acumulado de ${E.anioActual - 1} fue de ` +
+                `solo ${gmNf(ref)}; el porcentaje se calcula y se muestra, pero con esa magnitud ` +
+                `no describe una tendencia.`;
+            /* Aviso de periodo incompleto. Mientras falten meses del año en curso,
+               el acumulado compara un tramo corto contra tramos completos y la
+               reducción sale inflada. Desaparece solo al cargarse los datos. */
+            if (gmData.ultimoMes >= 0 && E.mes > gmData.ultimoMes) {
+                const faltan = E.mes - gmData.ultimoMes;
+                l1 += ` <b>Periodo incompleto:</b> ${E.anioActual} solo tiene captura hasta ` +
+                    `${GM_MESES[gmData.ultimoMes].toLowerCase()}. ` +
+                    (faltan === 1 ? 'El mes restante cuenta como cero'
+                                  : `Los ${faltan} meses restantes cuentan como cero`) +
+                    `, así que la comparación contra los años anteriores ` +
+                    `<b>exagera la reducción</b>.`;
+            }
+            const eL1 = document.getElementById('gmL1'); if (eL1) eL1.innerHTML = l1;
+
+            const red = acum[0] ? (act - acum[0]) / acum[0] * 100 : null;
+            const eL2 = document.getElementById('gmL2');
+            if (eL2) eL2.innerHTML =
+                (red === null ? `Sin base comparable en ${E.anios[0]}.`
+                 : `Frente a ${E.anios[0]}, el acumulado enero–${mesLow} ${red < 0 ? 'se redujo' : 'aumentó'} ` +
+                   `<b>${Math.abs(red).toFixed(1)} %</b>: de <b>${gmNf(acum[0])}</b> a <b>${gmNf(act)}</b>.`) +
+                ` Los años se comparan sobre el <b>mismo tramo del calendario</b>, nunca año completo contra año parcial.`;
+
+            const pie = 'Fuente: IIEG · Fiscalía del Estado de Jalisco. '
+                + '*Cifras preliminares: pueden variar por la hora de corte o por modificación en el registro.';
+            ['gmPie1', 'gmPie2'].forEach(id => {
+                const e = document.getElementById(id); if (e) e.textContent = pie;
+            });
+            const res = document.getElementById('gmResumen');
+            if (res) res.textContent = `${E.delito} · ${E.region} · ${etqMedida} · corte a ${mesTxt} ${E.anioActual}`;
+        }
+
+        /* --------------------- controles --------------------- */
+        function gmOpciones(id, lista, valor) {
+            const e = document.getElementById(id);
+            if (!e) return;
+            e.innerHTML = lista.map(x => {
+                const v = Array.isArray(x) ? x[0] : x;
+                const t = Array.isArray(x) ? x[1] : x;
+                return `<option value="${esc(v)}"${String(v) === String(valor) ? ' selected' : ''}>${esc(t)}</option>`;
+            }).join('');
+        }
+        /* El selector de medida solo aparece cuando el delito ofrece más de una.
+           Mostrarlo con una sola opción sería ruido; ocultarlo cuando hay varias
+           dejaría que la vista eligiera por su cuenta una cifra entre cinco. */
+        function gmLlenaMedidas() {
+            const disp = (gmData.medidas[gmEstado.delito] || []);
+            if (disp.indexOf(gmEstado.medida) < 0) gmEstado.medida = gmMedidaPorDefecto(gmEstado.delito);
+            gmOpciones('gmMedida', disp.map(k => [k, gmEtiquetaMedida(k)]), gmEstado.medida);
+            const caja = document.getElementById('gmMedidaCaja');
+            if (caja) caja.style.display = disp.length > 1 ? '' : 'none';
+        }
+
+        function gmConecta() {
+            if (gmEventos) return;
+            gmEventos = true;
+            const reg = document.getElementById('gmRegion');
+            if (reg) reg.addEventListener('click', e => {
+                const b = e.target.closest('button[data-r]');
+                if (!b) return;
+                gmEstado.region = b.dataset.r;
+                b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+                gmRender();
+            });
+            const sd = document.getElementById('gmDelito');
+            if (sd) sd.addEventListener('change', e => {
+                gmEstado.delito = e.target.value;
+                gmLlenaMedidas();
+                gmRender();
+            });
+            const sm = document.getElementById('gmMedida');
+            if (sm) sm.addEventListener('change', e => { gmEstado.medida = e.target.value; gmRender(); });
+            const mes = document.getElementById('gmMes');
+            if (mes) mes.addEventListener('change', e => { gmEstado.mes = +e.target.value; gmRender(); });
+            const btn = document.getElementById('gmPptx');
+            if (btn) btn.addEventListener('click', gmPptx);
+        }
+
+        /* --------------------- reporte PPTX --------------------- */
+        function gmImagen(cfg, alto) {
+            const cx = document.getElementById('gmCx');
+            if (!cx) return null;
+            cx.width = 1700; cx.height = alto || 620;
+            const ctx = cx.getContext('2d');
+            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cx.width, cx.height);
+            const c = { type: cfg.type, data: cfg.data, plugins: cfg.plugins,
+                        options: Object.assign({}, cfg.options, { responsive: false, animation: false }) };
+            const ch = new Chart(cx, c);
+            ch.update('none');
+            const url = cx.toDataURL('image/png', 1);
+            ch.destroy();
+            return url;
+        }
+        async function gmPptx() {
+            const btn = document.getElementById('gmPptx');
+            const rotulo = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
+            try {
+                await fisCargarLibs();
+                if (typeof PptxGenJS === 'undefined')
+                    throw new Error('no se pudo cargar la librería de PowerPoint');
+                const E = gmEstado;
+                const mesTxt = GM_MESES[E.mes], mesLow = mesTxt.toLowerCase();
+                const etqMedida = gmEtiquetaMedida(E.medida);
+                const acum = gmAcumulados(), act = acum[acum.length - 1];
+                const serie = gmSerieMostrada();
+                const promMes = serie.length ? serie.reduce((a, b) => a + b, 0) / serie.length : 0;
+                const promAcum = acum.length ? acum.reduce((x, y) => x + y, 0) / acum.length : 0;
+                const img1 = gmImagen(gmCfg1(), 620), img2 = gmImagen(gmCfg2(), 520);
+
+                const pptx = new PptxGenJS();
+                pptx.layout = 'LAYOUT_16x9';
+                pptx.author = 'CGES / DGAPP / AA';
+                pptx.company = 'Coordinación General Estratégica de Seguridad · Gobierno de Jalisco';
+                const PIE = 'Fuente: IIEG y Fiscalía del Estado de Jalisco. Cifras preliminares: pueden '
+                    + 'variar por la hora de corte o por modificación en el registro de la información.';
+                const barraPie = sl => {
+                    sl.addShape(pptx.ShapeType.rect, { x: 0, y: 5.32, w: '100%', h: 0.31, fill: { color: '5B6470' } });
+                    sl.addText(PIE, { x: 0.15, y: 5.35, w: 8.2, h: 0.26, fontSize: 7, color: 'FFFFFF', fontFace: 'Arial' });
+                    sl.addText('CGES/DGAPP/AA', { x: 8.35, y: 5.35, w: 1.5, h: 0.26, fontSize: 7,
+                        color: 'FFFFFF', align: 'right', fontFace: 'Arial' });
+                };
+                const nCol = E.anios.length, ancho = 5.6;
+                const filas = [
+                    E.anios.map(y => ({ text: String(y), options: {
+                        fill: { color: y >= E.anioActual - 1 ? '43A047' : '1F2C9B' },
+                        color: 'FFFFFF', bold: true, align: 'center', fontSize: 9 } })),
+                    acum.map(v => ({ text: gmNf(v), options: { align: 'center', bold: true, fontSize: 10 } })),
+                    E.anios.map((y, i) => {
+                        if (i === nCol - 1) return { text: '', options: {} };
+                        if (!acum[i]) return { text: 'n/d', options: { align: 'center', fontSize: 9 } };
+                        const p = (act - acum[i]) / acum[i] * 100;
+                        return { text: (p > 0 ? '+' : '') + p.toFixed(1) + '%', options: {
+                            align: 'center', bold: true, fontSize: 9, color: p < 0 ? '43A047' : 'E53935' } };
+                    })
+                ];
+                const opcTabla = { x: 4.1, y: 0.46, w: ancho, colW: Array(nCol).fill(ancho / nCol),
+                    border: { type: 'solid', color: 'FFFFFF', pt: 1 }, fontFace: 'Arial' };
+                const cabTabla = { x: 4.1, y: 0.2, w: ancho, h: 0.24, fontSize: 11, bold: true,
+                    align: 'center', color: '111111', fontFace: 'Arial' };
+
+                const p0 = pptx.addSlide();
+                p0.background = { color: 'EEF1F5' };
+                p0.addText('Coordinación de Seguridad', { x: 0.9, y: 1.9, w: 8.2, h: 0.8,
+                    fontSize: 34, bold: true, color: '1F2C9B', fontFace: 'Arial' });
+                p0.addText('GOBIERNO DE JALISCO', { x: 0.95, y: 2.66, w: 8, h: 0.4,
+                    fontSize: 14, bold: true, color: '1F2C9B', charSpacing: 2, fontFace: 'Arial' });
+                p0.addText([{ text: 'Gráficas mensuales\n', options: { fontSize: 26, bold: true } },
+                            { text: E.region.toUpperCase() + '\n', options: { fontSize: 22, bold: true } },
+                            { text: mesTxt + ' ' + E.anioActual, options: { fontSize: 18 } }],
+                    { x: 0.9, y: 3.5, w: 8.2, h: 1.6, color: '1F2C9B', fontFace: 'Arial' });
+                p0.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
+
+                const lamina = (titulo, sub, img, prom, etqProm, y, alto) => {
+                    const sl = pptx.addSlide();
+                    sl.background = { color: 'FFFFFF' };
+                    sl.addText(titulo, { x: 0.35, y: 0.16, w: 3.6, h: 0.6, fontSize: 21, bold: true,
+                        color: '111111', fontFace: 'Arial' });
+                    sl.addText(sub, { x: 0.38, y: 0.76, w: 3.6, h: 0.28, fontSize: 11, bold: true,
+                        color: '1F2C9B', fontFace: 'Arial' });
+                    sl.addText(etqMedida, { x: 0.38, y: 1.04, w: 3.6, h: 0.24, fontSize: 10,
+                        color: '333333', fontFace: 'Arial' });
+                    sl.addText('Acumulado durante el periodo:  enero-' + mesLow, cabTabla);
+                    sl.addTable(filas, opcTabla);
+                    sl.addText(etqProm + ' = ' + gmNf1(prom), { x: 6.3, y: 1.32, w: 3.4, h: 0.32,
+                        fontSize: 10.5, align: 'center', color: '111111', fontFace: 'Arial',
+                        line: { color: '5B2C8D', width: 1.5 } });
+                    if (img) sl.addImage({ data: img, x: 0.3, y: y, w: 9.4, h: alto });
+                    barraPie(sl);
+                };
+                lamina(E.delito, E.region.toUpperCase(), img1, promMes,
+                       `Promedio mensual (${E.anioActual - 1}-${E.anioActual})`, 1.76, 3.42);
+                lamina(E.delito, 'ACUMULADO ENERO–' + mesTxt.toUpperCase(), img2, promAcum,
+                       `Promedio del acumulado (${E.anios[0]}-${E.anioActual})`, 1.80, 3.35);
+
+                const pf = pptx.addSlide();
+                pf.background = { color: 'EEF1F5' };
+                pf.addText('Coordinación de Seguridad', { x: 1.0, y: 2.4, w: 8, h: 0.8,
+                    fontSize: 32, bold: true, color: '1F2C9B', align: 'center', fontFace: 'Arial' });
+                pf.addText('GOBIERNO DE JALISCO', { x: 1.0, y: 3.15, w: 8, h: 0.4,
+                    fontSize: 14, bold: true, color: '1F2C9B', align: 'center', charSpacing: 2, fontFace: 'Arial' });
+                pf.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
+
+                const limpio = dsNorm(E.delito).replace(/[^A-Z0-9]+/g, '_');
+                await pptx.writeFile({ fileName:
+                    `Graficas_Mensuales_${limpio}_${dsNorm(E.region)}_${mesTxt.toUpperCase()}_${E.anioActual}.pptx` });
+            } catch (err) {
+                console.error('[Gráficas Mensuales]', err);
+                alert('No se pudo generar el reporte: ' + (err.message || err));
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = rotulo; }
+            }
+        }
+
+        /* --------------------- carga --------------------- */
+        async function gmCargar() {
+            const cuerpo = document.getElementById('gmCuerpo');
+            try {
+                const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEETS.GRAFICAS.gid}`;
+                const r = await fetch(url, { cache: 'no-store' });
+                if (!r.ok) throw new Error('respuesta HTTP ' + r.status);
+                gmData = gmParse(await r.text());
+
+                const E = gmEstado;
+                E.anios = gmData.anios.slice();
+                E.anioActual = E.anios[E.anios.length - 1];
+                /* El mes de corte NO se limita a los meses con captura: se elige
+                   libremente y los que faltan cuentan como cero, con aviso. */
+                E.mes = gmData.ultimoMes >= 0 ? gmData.ultimoMes : 11;
+                if (!E.delito || gmData.delitos.indexOf(E.delito) < 0) {
+                    const pref = gmData.delitos.find(d => /HOMICIDIO DOLOSO/.test(dsNorm(d)));
+                    E.delito = pref || gmData.delitos[0];
+                }
+                E.medida = gmMedidaPorDefecto(E.delito);
+                if (gmData.ambitos.indexOf(E.region) < 0) E.region = gmData.ambitos[0];
+
+                gmOpciones('gmDelito', gmData.delitos, E.delito);
+                gmOpciones('gmMes', GM_MESES.map((m, i) => [i, m]), E.mes);
+                const reg = document.getElementById('gmRegion');
+                if (reg) {
+                    reg.innerHTML = gmData.ambitos.map(a =>
+                        `<button data-r="${esc(a)}" class="${a === E.region ? 'on' : ''}">${esc(a)}</button>`).join('');
+                }
+                gmLlenaMedidas();
+                gmConecta();
+                gmRender();
+                observeReveal(document.getElementById('gmSeccion'));
+            } catch (err) {
+                console.error('[Gráficas Mensuales]', err);
+                if (cuerpo) cuerpo.innerHTML = `<div class="mun-nota mun-nota-fuerte">
+                    <b>No se pudo leer la pestaña de gráficas mensuales.</b> ${esc(err.message || '')}.
+                    Verifica que el gid <code>${SHEETS.GRAFICAS.gid}</code> siga apuntando a la hoja correcta
+                    y que traiga las columnas Fecha, Ambito, Delito, Dimension, Categoria y Cantidad.</div>`;
+            }
+        }
+
+        /* Mismo aplazamiento que las demás vistas: las siete pestañas viven en el
+           MISMO documento y una petición pesada retrasa a las otras. */
+        registrarCargador('graficasmensuales', () => setTimeout(gmCargar, 400));
 
         /* Mismo aplazamiento que Fiscalía: las seis hojas viven en el MISMO
            documento y una petición pesada retrasa a las demás. */
