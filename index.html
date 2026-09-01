@@ -981,6 +981,9 @@
         /* Gráficas Mensuales. La tabla de acumulados puede llegar a diez años,
            frente a los seis de Comparativo Mensual: necesita más ancho y una
            tipografía algo menor. Reglas ADITIVAS: no se toca `munComp-*`. */
+        #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
+            z-index: 1; margin-top: 12px; }
+        @media (max-width: 768px) { #gmMapaBox { height: 400px; } }
         .gm-caja { min-width: 610px; }
         .gm-acum th { font-size: 10px; padding: 5px 2px; }
         .gm-acum td { font-size: 13px; padding: 4px 2px; }
@@ -2342,6 +2345,24 @@
                 <div id="gmCuerpo">
                     <div class="sk sk-card" style="height:420px;margin-top:16px"></div>
                 </div>
+            </div>
+        </section>
+
+        <section id="gmMapa">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Mapa mensual de incidencia</h2>
+                <span class="panel-nota" id="gmMapaInfo">Se carga al llegar aquí</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">Área Metropolitana de Guadalajara · solo 2026</span>
+                    <p>Muestra el <b>delito y el mes seleccionados arriba</b>, con los eventos que la
+                       Fiscalía tiene georreferenciados. El mapa es navegable.</p>
+                </div>
+                <div class="mun-nota" id="gmMapaNota">Cargando el registro georreferenciado…</div>
+                <div id="gmMapaBox"></div>
+                <div class="munComp-pie" id="gmMapaPie"></div>
             </div>
         </section>
       </div><!-- /vistaGraficas -->
@@ -11872,6 +11893,20 @@
             });
             const res = document.getElementById('gmResumen');
             if (res) res.textContent = `${E.delito} · ${E.region} · ${etqMedida} · corte a ${mesTxt} ${E.anioActual}`;
+
+            const pieM = document.getElementById('gmMapaPie');
+            if (pieM) pieM.textContent =
+                'Fuente: elaboración propia a partir de carpetas de investigación de la Fiscalía del Estado. '
+                + '*Cifras preliminares: pueden variar por modificación en el registro de la información. '
+                + 'El presente documento contiene información de carácter reservado, de conformidad con lo '
+                + 'establecido en el capítulo II, artículo 17, fracción I, incisos a), c), f) de la Ley de '
+                + 'Transparencia y Acceso a la Información Pública del Estado de Jalisco y sus Municipios. '
+                + 'Se transfiere dicha información para que la proteja de cualquier vulneración, evitando '
+                + 'así, alguna sanción que establece dicha Ley.';
+            /* El mapa se redibuja con cada cambio de filtro, pero solo si los
+               datos ya están: la descarga la dispara el observador. */
+            if (gmMapaData) gmMapaRender();
+            gmMapaObserva();
         }
 
         /* --------------------- controles --------------------- */
@@ -12104,6 +12139,236 @@
            delitos de Jalisco, para validar el formato sin esperar a las 42
            láminas. Basta ponerlo en false para producir el mazo completo.
            ===================================================================== */
+
+        /* =====================================================================
+           MAPA MENSUAL DE INCIDENCIA   (prefijo gmMapa*)
+           =====================================================================
+           Fuente: pestaña «Fiscalía» (gid 1080129787), la única con
+           georreferencia. NO es la misma que alimenta las gráficas de arriba,
+           que vienen de la hoja del IIEG y están agregadas por mes y ámbito.
+           Las dos cifras NO coinciden y la lámina lo declara: leer el conteo de
+           puntos como si fuera el desglose de la gráfica sería un error.
+
+           Solo 2026, solo el mes del filtro y solo el AMG. La descarga se
+           aplaza hasta que la sección entra en pantalla: son 2 MB que no tiene
+           sentido pagar si nadie baja hasta aquí.
+           ===================================================================== */
+        const GM_MAPA_ANIO = '2026';
+        /* Encuadre inicial del AMG. El mapa queda navegable: sin bloqueo de
+           desplazamiento ni de acercamiento. */
+        const GM_MAPA_CENTRO = [20.66, -103.36], GM_MAPA_ZOOM = 11;
+        const GM_MAPA_TOPE = 4000;
+
+        /* Correspondencia entre el catálogo de la vista y `Delito_EST` de
+           Fiscalía. Se empareja por PATRÓN sobre el texto normalizado, no por
+           igualdad: las dos hojas usan nomenclaturas distintas y una lista de
+           nombres exactos se rompería al primer cambio de redacción.
+           Los delitos sin patrón no tienen georreferencia y se declaran. */
+        const GM_MAPA_PATRON = {
+            'ROBO DE VEHÍCULO PARTICULAR':   /VEHICULO(S)? PARTICULAR/,
+            'ROBO DE MOTOCICLETA':           /MOTOCICLETA/,
+            'ROBO A PERSONA':                /\bPERSONA\b/,
+            'ROBO A NEGOCIO':                /\bNEGOCIO\b/,
+            'ROBO A CASA HABITACIÓN':        /CASA HABITACION/,
+            'ROBO DE VEHÍCULO CARGA PESADA': /\bCARGA\b/,
+            'ROBO A CUENTAHABIENTE':         /CUENTAHABIENTE/,
+            'ROBO A BANCOS':                 /BANCARIA|\bBANCO\b/,
+            'HOMICIDIO DOLOSO':              /HOMICIDIO DOLOSO/,
+            'LESIONES DOLOSAS':              /LESIONES DOLOSAS/
+        };
+        /* Delitos que el propio tablero ya declara como MUESTRA: el registro de
+           la Fiscalía y el C5 Zapopan no cubre el estado. Su mapa enseña una
+           fracción del total, y eso hay que decirlo donde se ve. */
+        const GM_MAPA_MUESTRA = ['HOMICIDIO DOLOSO', 'LESIONES DOLOSAS'];
+
+        let gmMapaData = null, gmMapa = null, gmMapaCapas = {},
+            gmMapaCargando = false, gmMapaObs = null;
+
+        /* Descarga acotada en el servidor. La columna R es «AÑO»: pedir solo
+           2026 baja de ~5 MB a ~2. Si el filtro no es válido se reintenta sin
+           él, y en último caso con la exportación completa; el año se vuelve a
+           filtrar en el navegador de todos modos. */
+        function gmMapaFetch() {
+            const sel = 'select ' + FIS_COLUMNAS;
+            const url = q => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+                `?tqx=out:csv&gid=${SHEETS.FISCALIA.gid}&tq=${encodeURIComponent(q)}`;
+            const util = txt => {
+                if (/^\s*</.test(txt) || txt.indexOf('wkt_geom') === -1)
+                    throw new Error('respuesta no utilizable');
+                return txt;
+            };
+            return fetch(url(sel + ' where R = ' + GM_MAPA_ANIO))
+                .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                .then(util)
+                .catch(() => fetch(url(sel))
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                    .then(util))
+                .catch(() => {
+                    console.warn('[Mapa mensual] gviz no disponible; se usa la exportación completa.');
+                    return fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}` +
+                                 `/export?format=csv&gid=${SHEETS.FISCALIA.gid}`)
+                        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+                });
+        }
+
+        /* Registros del delito y mes activos, ya acotados a 2026 y al AMG. */
+        function gmMapaFiltra() {
+            if (!gmMapaData) return { puntos: [], total: 0, sinCoord: 0, patron: null };
+            const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
+            if (!patron) return { puntos: [], total: 0, sinCoord: 0, patron: null };
+            const mesTxt = dsNorm(GM_MESES[gmEstado.mes]);
+            let total = 0, sinCoord = 0;
+            const puntos = [];
+            gmMapaData.registros.forEach(r => {
+                if (String(r.anio) !== GM_MAPA_ANIO) return;
+                if (dsNorm(r.mes) !== mesTxt) return;
+                if (!patron.test(dsNorm(r.delito))) return;
+                if (!r.amg) return;                       // el mapa es del AMG
+                total++;
+                if (r.y === null || r.x === null) { sinCoord++; return; }
+                puntos.push(r);
+            });
+            return { puntos, total, sinCoord, patron };
+        }
+
+        function gmMapaRender() {
+            const info = document.getElementById('gmMapaInfo');
+            const nota = document.getElementById('gmMapaNota');
+            if (!gmMapaData) return;
+
+            const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
+            const cont = document.getElementById('gmMapaBox');
+            if (!patron) {
+                /* Delito sin georreferencia. Se declara en lugar de dejar el
+                   mapa vacío, que parecería un fallo de carga. */
+                if (cont) cont.style.display = 'none';
+                if (info) info.textContent = '';
+                if (nota) nota.innerHTML = `<b>${esc(gmEstado.delito)} no tiene registro georreferenciado.</b> ` +
+                    `La base de la Fiscalía solo ubica robos, homicidio doloso y lesiones dolosas. ` +
+                    `El resto de los delitos de esta vista no puede mapearse.`;
+                return;
+            }
+            if (cont) cont.style.display = '';
+
+            if (typeof L === 'undefined') return;
+            if (!gmMapa) {
+                gmMapa = L.map('gmMapaBox', { preferCanvas: true })
+                          .setView(GM_MAPA_CENTRO, GM_MAPA_ZOOM);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(gmMapa);
+            }
+            ['calor', 'puntos', 'limites'].forEach(k => {
+                if (gmMapaCapas[k]) { gmMapa.removeLayer(gmMapaCapas[k]); gmMapaCapas[k] = null; }
+            });
+
+            const F = gmMapaFiltra();
+
+            // Límites de los nueve municipios metropolitanos.
+            const geo = hdGeoJalisco();
+            if (geo) {
+                const amg = new Set(MUN_AMG.map(dsNorm));
+                gmMapaCapas.limites = L.geoJSON(geo, {
+                    filter: ft => amg.has(dsNorm(ft.properties.nom)),
+                    style: { color: '#111111', weight: 1.6, fill: false, opacity: .85 }
+                }).addTo(gmMapa);
+            }
+
+            if (F.puntos.length && L.heatLayer) {
+                gmMapaCapas.calor = L.heatLayer(F.puntos.map(r => [r.y, r.x, .5]),
+                    { radius: 18, blur: 22, minOpacity: .18,
+                      gradient: { .3: '#f4cccc', .6: '#e06666', 1: '#990000' } }).addTo(gmMapa);
+            }
+            if (F.puntos.length) {
+                const capa = L.layerGroup();
+                F.puntos.slice(-GM_MAPA_TOPE).forEach(r => capa.addLayer(
+                    L.circleMarker([r.y, r.x], {
+                        radius: 3.4, weight: 0,
+                        fillColor: r.violencia === 'SI' ? '#C0392B' : '#2E7D32',
+                        fillOpacity: .75
+                    }).bindPopup(
+                        `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
+                            <b style="color:#18345D;font-size:13px">${esc(r.delito)}</b>
+                            <div style="color:#6B7785;margin-bottom:5px">${esc(r.fecha || (r.mes + ' ' + r.anio))}</div>
+                            <div><b style="color:#18345D">Municipio:</b> ${esc(r.municipio)}</div>
+                            <div><b style="color:#18345D">Colonia:</b> ${esc(r.colonia)}</div>
+                            <div><b style="color:#18345D">Violencia:</b> ${r.violencia === 'SI' ? 'Sí' : 'No'}</div>
+                         </div>`)));
+                gmMapaCapas.puntos = capa.addTo(gmMapa);
+            }
+
+            const esMuestra = GM_MAPA_MUESTRA.indexOf(gmEstado.delito) >= 0;
+            if (info) info.textContent =
+                `${gmNf(F.puntos.length)} de ${gmNf(F.total)} eventos ubicados` +
+                (F.puntos.length > GM_MAPA_TOPE ? ` · se dibujan los ${gmNf(GM_MAPA_TOPE)} más recientes` : '');
+
+            if (nota) {
+                let t = `<b>Fuente distinta a la de las gráficas.</b> El mapa procede del registro ` +
+                    `georreferenciado de la <b>Fiscalía del Estado</b>; las gráficas de arriba, de la ` +
+                    `base del <b>IIEG</b>. Son universos con criterios de captura propios: ` +
+                    `<b>sus cifras no coinciden</b> y no deben leerse como el desglose una de la otra. ` +
+                    `Solo se muestran eventos del <b>AMG</b> en <b>${esc(GM_MESES[gmEstado.mes])} ${GM_MAPA_ANIO}</b>.`;
+                if (F.sinCoord) t += ` <b>${gmNf(F.sinCoord)}</b> eventos del periodo no tienen coordenada ` +
+                    `utilizable y no aparecen en el mapa, aunque sí cuentan en el total.`;
+                if (esMuestra) t += ` <b>Atención:</b> ${esc(gmEstado.delito)} en esta base es una ` +
+                    `<b>muestra</b> de la Fiscalía y el C5 Zapopan, no el total estatal. El mapa enseña ` +
+                    `una fracción de lo que reporta la gráfica.`;
+                nota.className = 'mun-nota' + (esMuestra ? ' mun-nota-fuerte' : '');
+                nota.innerHTML = t;
+            }
+            setTimeout(() => { if (gmMapa) gmMapa.invalidateSize(); }, 80);
+        }
+
+        /* Carga diferida real: la descarga no arranca hasta que la sección entra
+           en pantalla. `forzar` la dispara antes de exportar, para que el mazo
+           no salga sin mapas si el usuario nunca bajó hasta aquí. */
+        async function gmMapaCargar(forzar) {
+            if (gmMapaData || gmMapaCargando) return;
+            gmMapaCargando = true;
+            const info = document.getElementById('gmMapaInfo');
+            if (info) info.textContent = 'Descargando el registro georreferenciado…';
+            try {
+                const [txt] = await Promise.all([gmMapaFetch(), fisCargarLibs()]);
+                gmMapaData = fisParse(txt);
+                const n = gmMapaData.registros.filter(r => String(r.anio) === GM_MAPA_ANIO).length;
+                console.info(`[Mapa mensual] ${nf(gmMapaData.registros.length)} registros leídos, ` +
+                             `${nf(n)} de ${GM_MAPA_ANIO}.`);
+                /* Auditoría del emparejamiento: se publica en consola qué valores
+                   de Delito_EST no corresponden a ningún delito de la vista, para
+                   corregir los patrones con datos y no con suposiciones. */
+                const sueltos = {};
+                gmMapaData.registros.forEach(r => {
+                    const d = dsNorm(r.delito);
+                    const hay = Object.keys(GM_MAPA_PATRON).some(k => GM_MAPA_PATRON[k].test(d));
+                    if (!hay) sueltos[r.delito] = (sueltos[r.delito] || 0) + 1;
+                });
+                if (Object.keys(sueltos).length)
+                    console.info('[Mapa mensual] valores de Delito_EST sin equivalencia en la vista:', sueltos);
+                gmMapaRender();
+            } catch (err) {
+                console.error('[Mapa mensual]', err);
+                const nota = document.getElementById('gmMapaNota');
+                if (nota) {
+                    nota.className = 'mun-nota mun-nota-fuerte';
+                    nota.innerHTML = `<b>No se pudo leer el registro georreferenciado.</b> ` +
+                        `${esc(err.message || '')}. Verifica que la pestaña de la Fiscalía siga publicada.`;
+                }
+                if (info) info.textContent = '';
+            } finally {
+                gmMapaCargando = false;
+                if (!forzar && gmMapaObs) { gmMapaObs.disconnect(); gmMapaObs = null; }
+            }
+        }
+
+        function gmMapaObserva() {
+            const sec = document.getElementById('gmMapa');
+            if (!sec || gmMapaObs || gmMapaData) return;
+            if (!('IntersectionObserver' in window)) { gmMapaCargar(); return; }
+            gmMapaObs = new IntersectionObserver(ents => {
+                if (ents.some(e => e.isIntersecting)) gmMapaCargar();
+            }, { rootMargin: '200px' });
+            gmMapaObs.observe(sec);
+        }
+
         /* Fondos oficiales de la plantilla institucional, extraídos del PPTX
            de referencia. Son imágenes de página completa que YA traen la barra
            gris del pie y el logotipo, así que sobre ellas solo se dibuja texto:
@@ -12118,6 +12383,10 @@
         /* Agregados: ya incluyen a los demás delitos, así que no llevan lámina
            propia. Se excluyen del mazo por decisión metodológica, no técnica. */
         const GM_AGREGADOS = ['INCIDENCIA TOTAL', 'TOTAL DE ROBOS (ALTO IMPACTO)'];
+        /* Sin lámina propia, pero por un motivo distinto al de los agregados:
+           «Víctimas localizadas en fosas» no es un delito sino un hallazgo, y su
+           serie tiene meses sin captura. Se mantiene en la vista, no en el mazo. */
+        const GM_SIN_LAMINA = ['VICTIMAS LOCALIZADAS EN FOSAS'];
         const GM_REGIONES_MAZO = ['Jalisco', 'AMG'];   // el interior no entra
 
         /* Colores tomados de la plantilla institucional. */
@@ -12126,7 +12395,8 @@
 
         function gmDelitosMazo() {
             if (!gmData) return [];
-            let ds = gmData.delitos.filter(d => GM_AGREGADOS.indexOf(d) < 0);
+            let ds = gmData.delitos.filter(d =>
+                GM_AGREGADOS.indexOf(d) < 0 && GM_SIN_LAMINA.indexOf(d) < 0);
             if (GM_PPTX_PRUEBA) ds = ds.filter(d => GM_PPTX_PRUEBA_DELITOS.indexOf(d) >= 0);
             return ds;
         }
@@ -12175,6 +12445,10 @@
                 await fisCargarLibs();
                 if (typeof PptxGenJS === 'undefined')
                     throw new Error('no se pudo cargar la librería de PowerPoint');
+                /* El mapa se carga solo al llegar a su sección. Si el usuario nunca
+                   bajó hasta ahí, el mazo saldría sin mapas: se fuerza la descarga. */
+                if (btn) btn.textContent = 'Cargando mapas…';
+                await gmMapaCargar(true);
                 const E = gmEstado;
                 const mes = E.mes, mesTxt = GM_MESES[mes], mesLow = mesTxt.toLowerCase();
                 const delitos = gmDelitosMazo();
