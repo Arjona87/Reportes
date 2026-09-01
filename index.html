@@ -981,6 +981,8 @@
         /* Gráficas Mensuales. La tabla de acumulados puede llegar a diez años,
            frente a los seis de Comparativo Mensual: necesita más ancho y una
            tipografía algo menor. Reglas ADITIVAS: no se toca `munComp-*`. */
+        .gm-mapa-icono { background: none; border: 0; }
+        .gm-mapa-icono svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
         #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
             z-index: 1; margin-top: 12px; }
         @media (max-width: 768px) { #gmMapaBox { height: 400px; } }
@@ -2358,10 +2360,17 @@
                 <div class="mun-intro">
                     <span class="mun-kicker">Área Metropolitana de Guadalajara · solo 2026</span>
                     <p>Muestra el <b>delito y el mes seleccionados arriba</b>, con los eventos que la
-                       Fiscalía tiene georreferenciados. El mapa es navegable.</p>
+                       Fiscalía tiene georreferenciados. El mapa es navegable y <b>siempre encuadra el
+                       AMG</b>: no responde al conmutador de región, porque el registro georreferenciado
+                       de la Fiscalía cubre la zona metropolitana.</p>
                 </div>
                 <div class="mun-nota" id="gmMapaNota">Cargando el registro georreferenciado…</div>
                 <div id="gmMapaBox"></div>
+                <details style="margin-top:12px">
+                    <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600">
+                        Detalle del filtro y valores de la hoja</summary>
+                    <div id="gmMapaDiag" style="margin-top:10px"></div>
+                </details>
                 <div class="munComp-pie" id="gmMapaPie"></div>
             </div>
         </section>
@@ -12211,24 +12220,129 @@
                 });
         }
 
+
+        /* Iconos por tipo de delito, en dos colores: rojo con violencia, verde
+           sin ella. Se dibujan como SVG dentro de un `divIcon`, no como imagen:
+           así heredan el color sin necesidad de un archivo por combinación. */
+        const GM_MAPA_GLIFO = {
+            auto:   'M4 14l1.5-4.5A2 2 0 017.4 8h5.2a2 2 0 011.9 1.5L16 14v4h-2v-1.5H6V18H4v-4zm2.6-4l-.8 2.5h8.4L13.4 10H6.6zM6.5 15.5a1 1 0 100-2 1 1 0 000 2zm7 0a1 1 0 100-2 1 1 0 000 2z',
+            moto:   'M5 17a3 3 0 110-6 3 3 0 010 6zm10 0a3 3 0 110-6 3 3 0 010 6zM5 15.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm10 0a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM12 8h3l1 3h-2l-.7-2H12V8zM6 11l3-3h3v2H9.8L8 12H6v-1z',
+            casa:   'M10 3l7 6v9H3V9l7-6zm0 2.6L5 9.9V16h10V9.9l-5-4.3zM8.5 12h3v4h-3v-4z',
+            negocio:'M3.5 5h13l1 4a2 2 0 01-2 2.3V17H4.5v-5.7A2 2 0 012.5 9l1-4zM6 12v3h8v-3H6z',
+            persona:'M10 3a2.3 2.3 0 110 4.6A2.3 2.3 0 0110 3zm-3 6h6a1 1 0 011 1v4h-2v3H8v-3H6v-4a1 1 0 011-1z',
+            carga:  'M2 7h9v7H2V7zm10 2h3.2l2.3 3v2H12V9zM5 17a1.6 1.6 0 110-3.2A1.6 1.6 0 015 17zm10 0a1.6 1.6 0 110-3.2A1.6 1.6 0 0115 17z',
+            dinero: 'M10 2.6c.5 0 .9.4.9.9v.8c1.4.2 2.4 1 2.6 2.2h-1.9c-.2-.5-.8-.8-1.6-.8-.9 0-1.5.4-1.5 1 0 .5.4.8 1.4 1l1 .2c1.9.4 2.7 1.2 2.7 2.6 0 1.4-1.1 2.4-2.7 2.6v.9a.9.9 0 11-1.8 0v-.9c-1.5-.2-2.6-1.1-2.7-2.4h1.9c.2.6.8.9 1.7.9 1 0 1.6-.4 1.6-1 0-.5-.4-.8-1.4-1l-1-.2C7.4 9 6.6 8.2 6.6 6.9c0-1.4 1-2.3 2.5-2.6v-.8c0-.5.4-.9.9-.9z',
+            banco:  'M10 3l8 4v1.6H2V7l8-4zM4 10h2v5H4v-5zm5 0h2v5H9v-5zm5 0h2v5h-2v-5zM2.5 16h15v1.8h-15V16z',
+            alerta: 'M10 2.6l8 14H2l8-14zm0 4.2l-4.6 8h9.2L10 6.8zM9.2 9h1.6v3.2H9.2V9zm0 4h1.6v1.6H9.2V13z',
+            punto:  'M10 3.4a4.6 4.6 0 014.6 4.6c0 3.4-4.6 8.6-4.6 8.6S5.4 11.4 5.4 8A4.6 4.6 0 0110 3.4zm0 2.9A1.7 1.7 0 1010 9.7a1.7 1.7 0 000-3.4z'
+        };
+        /* Qué glifo corresponde a cada delito de la vista. */
+        const GM_MAPA_ICONO = {
+            'ROBO DE VEHÍCULO PARTICULAR': 'auto',
+            'ROBO DE MOTOCICLETA': 'moto',
+            'ROBO A PERSONA': 'persona',
+            'ROBO A NEGOCIO': 'negocio',
+            'ROBO A CASA HABITACIÓN': 'casa',
+            'ROBO DE VEHÍCULO CARGA PESADA': 'carga',
+            'ROBO A CUENTAHABIENTE': 'dinero',
+            'ROBO A BANCOS': 'banco',
+            'HOMICIDIO DOLOSO': 'alerta',
+            'LESIONES DOLOSAS': 'alerta'
+        };
+        const GM_ROJO_V = '#B3261E', GM_VERDE_S = '#1B7F3B';
+
+        function gmMapaIcono(delito, conViolencia) {
+            const d = GM_MAPA_GLIFO[GM_MAPA_ICONO[delito] || 'punto'];
+            const c = conViolencia ? GM_ROJO_V : GM_VERDE_S;
+            return L.divIcon({
+                className: 'gm-mapa-icono', iconSize: [18, 18], iconAnchor: [9, 9], popupAnchor: [0, -8],
+                html: `<svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">` +
+                      `<path d="${d}" fill="${c}" stroke="#FFFFFF" stroke-width="0.6"/></svg>`
+            });
+        }
+
         /* Registros del delito y mes activos, ya acotados a 2026 y al AMG. */
+        const GM_AMG_SET = new Set(MUN_AMG.map(dsNorm));
+
+        /* Filtro con CONTEO POR ETAPA. Cuando el mapa sale vacío hay que poder
+           ver en qué paso se perdieron los registros, sin abrir la consola.
+
+           El AMG se decide por el MUNICIPIO contra `MUN_AMG`, no por la columna
+           `AMG` de la hoja: esa columna está contaminada —hay filas con valores
+           de `TIPO_ASENT`— y usarla descartaba o dejaba pasar registros sin
+           criterio. El municipio es un dato limpio y verificable.
+
+           El mapa NO responde al conmutador de región: siempre muestra el AMG,
+           que es el encuadre de la lámina institucional. */
         function gmMapaFiltra() {
-            if (!gmMapaData) return { puntos: [], total: 0, sinCoord: 0, patron: null };
+            const paso = { leidos: 0, anio: 0, mes: 0, delito: 0, amg: 0, conCoord: 0, sinCoord: 0 };
+            if (!gmMapaData) return { puntos: [], paso, patron: null };
             const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
-            if (!patron) return { puntos: [], total: 0, sinCoord: 0, patron: null };
+            if (!patron) return { puntos: [], paso, patron: null };
             const mesTxt = dsNorm(GM_MESES[gmEstado.mes]);
-            let total = 0, sinCoord = 0;
             const puntos = [];
             gmMapaData.registros.forEach(r => {
+                paso.leidos++;
                 if (String(r.anio) !== GM_MAPA_ANIO) return;
+                paso.anio++;
                 if (dsNorm(r.mes) !== mesTxt) return;
+                paso.mes++;
                 if (!patron.test(dsNorm(r.delito))) return;
-                if (!r.amg) return;                       // el mapa es del AMG
-                total++;
-                if (r.y === null || r.x === null) { sinCoord++; return; }
+                paso.delito++;
+                if (!GM_AMG_SET.has(dsNorm(r.municipio))) return;
+                paso.amg++;
+                if (r.y === null || r.x === null || !Number.isFinite(r.y) || !Number.isFinite(r.x)) {
+                    paso.sinCoord++; return;
+                }
+                paso.conCoord++;
                 puntos.push(r);
             });
-            return { puntos, total, sinCoord, patron };
+            return { puntos, paso, patron };
+        }
+
+        /* Diagnóstico en PANTALLA, no en consola. Cuando el mapa no dibuja nada,
+           esto dice exactamente dónde se quedaron los registros y qué valores
+           trae la hoja, que es lo único que permite corregir los patrones. */
+        function gmMapaDiagnostico() {
+            const el = document.getElementById('gmMapaDiag');
+            if (!el || !gmMapaData) return;
+            const F = gmMapaFiltra();
+            const P = F.paso;
+            const cuenta = (campo, filtro) => {
+                const c = {};
+                gmMapaData.registros.forEach(r => {
+                    if (filtro && !filtro(r)) return;
+                    const k = r[campo] || '(vacío)';
+                    c[k] = (c[k] || 0) + 1;
+                });
+                return Object.entries(c).sort((a, b) => b[1] - a[1]);
+            };
+            const del2026 = r => String(r.anio) === GM_MAPA_ANIO;
+            const meses = cuenta('mes', del2026);
+            const delitos = cuenta('delito', del2026);
+            const sinPatron = delitos.filter(([d]) =>
+                !Object.keys(GM_MAPA_PATRON).some(k => GM_MAPA_PATRON[k].test(dsNorm(d))));
+            const fila = (k, v) => `<tr><td>${esc(k)}</td><td class="mun-num">${gmNf(v)}</td></tr>`;
+
+            el.innerHTML = `
+                <div class="table-wrapper" style="max-height:none">
+                <table class="data-table data-table-compacta">
+                    <thead><tr><th>Etapa del filtro</th><th class="mun-num">Registros</th></tr></thead>
+                    <tbody>
+                        ${fila('Leídos de la hoja', P.leidos)}
+                        ${fila('Del año ' + GM_MAPA_ANIO, P.anio)}
+                        ${fila('Del mes ' + GM_MESES[gmEstado.mes], P.mes)}
+                        ${fila('Del delito seleccionado', P.delito)}
+                        ${fila('En municipios del AMG', P.amg)}
+                        ${fila('Con coordenada utilizable', P.conCoord)}
+                        ${fila('Sin coordenada', P.sinCoord)}
+                    </tbody>
+                </table></div>
+                <p style="font-size:12px;color:var(--muted);margin:10px 0 4px"><b>Valores de MES en ${GM_MAPA_ANIO}:</b>
+                   ${meses.length ? meses.map(m => `${esc(m[0])} (${gmNf(m[1])})`).join(' · ') : 'ninguno'}</p>
+                <p style="font-size:12px;color:var(--muted);margin:4px 0"><b>Valores de Delito_EST sin equivalencia en esta vista:</b>
+                   ${sinPatron.length ? sinPatron.slice(0, 14).map(x => `${esc(x[0])} (${gmNf(x[1])})`).join(' · ')
+                     : 'ninguno: todos emparejaron'}</p>`;
         }
 
         function gmMapaRender() {
@@ -12262,6 +12376,7 @@
             });
 
             const F = gmMapaFiltra();
+            gmMapaDiagnostico();
 
             // Límites de los nueve municipios metropolitanos.
             const geo = hdGeoJalisco();
@@ -12281,10 +12396,8 @@
             if (F.puntos.length) {
                 const capa = L.layerGroup();
                 F.puntos.slice(-GM_MAPA_TOPE).forEach(r => capa.addLayer(
-                    L.circleMarker([r.y, r.x], {
-                        radius: 3.4, weight: 0,
-                        fillColor: r.violencia === 'SI' ? '#C0392B' : '#2E7D32',
-                        fillOpacity: .75
+                    L.marker([r.y, r.x], {
+                        icon: gmMapaIcono(gmEstado.delito, r.violencia === 'SI')
                     }).bindPopup(
                         `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
                             <b style="color:#18345D;font-size:13px">${esc(r.delito)}</b>
@@ -12298,7 +12411,7 @@
 
             const esMuestra = GM_MAPA_MUESTRA.indexOf(gmEstado.delito) >= 0;
             if (info) info.textContent =
-                `${gmNf(F.puntos.length)} de ${gmNf(F.total)} eventos ubicados` +
+                `${gmNf(F.puntos.length)} de ${gmNf(F.paso.amg)} eventos ubicados` +
                 (F.puntos.length > GM_MAPA_TOPE ? ` · se dibujan los ${gmNf(GM_MAPA_TOPE)} más recientes` : '');
 
             if (nota) {
@@ -12307,8 +12420,10 @@
                     `base del <b>IIEG</b>. Son universos con criterios de captura propios: ` +
                     `<b>sus cifras no coinciden</b> y no deben leerse como el desglose una de la otra. ` +
                     `Solo se muestran eventos del <b>AMG</b> en <b>${esc(GM_MESES[gmEstado.mes])} ${GM_MAPA_ANIO}</b>.`;
-                if (F.sinCoord) t += ` <b>${gmNf(F.sinCoord)}</b> eventos del periodo no tienen coordenada ` +
-                    `utilizable y no aparecen en el mapa, aunque sí cuentan en el total.`;
+                if (F.paso.sinCoord) t += ` <b>${gmNf(F.paso.sinCoord)}</b> eventos del periodo no tienen ` +
+                    `coordenada utilizable y no aparecen en el mapa, aunque sí cuentan en el total.`;
+                if (!F.paso.amg) t += ` <b>El filtro no devolvió ningún evento.</b> El detalle de abajo ` +
+                    `muestra en qué etapa se quedaron los registros y qué valores trae la hoja.`;
                 if (esMuestra) t += ` <b>Atención:</b> ${esc(gmEstado.delito)} en esta base es una ` +
                     `<b>muestra</b> de la Fiscalía y el C5 Zapopan, no el total estatal. El mapa enseña ` +
                     `una fracción de lo que reporta la gráfica.`;
