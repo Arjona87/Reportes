@@ -981,6 +981,47 @@
         /* Gráficas Mensuales. La tabla de acumulados puede llegar a diez años,
            frente a los seis de Comparativo Mensual: necesita más ancho y una
            tipografía algo menor. Reglas ADITIVAS: no se toca `munComp-*`. */
+        /* Composición institucional del mapa: lienzo a la izquierda, panel de
+           simbología a la derecha, como la lámina de QGIS. Reglas ADITIVAS. */
+        .gm-lam { border: 2px solid #7A7A7A; background: #fff; display: grid;
+            grid-template-columns: 1fr 232px; margin-top: 12px; overflow: hidden; }
+        .gm-lam-mapa { position: relative; height: 600px; }
+        .gm-lam-panel { border-left: 2px solid #7A7A7A; display: flex; flex-direction: column;
+            font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
+        .gm-p-caja { border-bottom: 2px solid #7A7A7A; padding: 9px 10px; }
+        .gm-p-tit { font-size: 15px; text-align: center; margin: 0 0 6px; }
+        .gm-p-mes { font-size: 14px; text-align: center; margin: 0; }
+        .gm-p-sub { font-size: 15px; text-align: center; margin: 0 0 8px; }
+        .gm-simb { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; line-height: 1.25; }
+        .gm-simb svg { flex: none; }
+        .gm-p-loc { padding: 8px 10px; border-bottom: 2px solid #7A7A7A; }
+        .gm-p-loc-t { font-size: 11.5px; text-align: center; margin: 0 0 4px; }
+        .gm-p-loc-w { position: relative; background: #CFE4F2; border: 1px solid #B7C6D6; }
+        .gm-p-loc-w svg { display: block; width: 100%; height: auto; }
+        .gm-norte { position: absolute; left: 6px; top: 6px; font-size: 9px; text-align: center;
+            color: #333; line-height: 1; }
+        .gm-p-fuente { padding: 9px 10px; font-size: 10.5px; color: #333; line-height: 1.45; flex: 1; }
+        .gm-p-fuente p { margin: 0 0 7px; }
+        .gm-p-fuente .gm-cred { font-size: 10px; color: #555; }
+        /* Aviso de reserva y escala, sobre el lienzo. */
+        .gm-reserva { position: absolute; left: 0; bottom: 0; z-index: 900;
+            background: rgba(255,255,255,.92); border-top: 1px solid #bbb; border-right: 1px solid #bbb;
+            padding: 5px 8px; max-width: 66%; font-family: Arial, sans-serif; font-size: 9.5px;
+            line-height: 1.35; color: #222; }
+        .gm-escala { position: absolute; right: 10px; bottom: 8px; z-index: 900;
+            background: rgba(255,255,255,.9); padding: 4px 8px 3px; border: 1px solid #bbb;
+            font-family: Arial, sans-serif; font-size: 10px; color: #222; }
+        .gm-escala-b { display: flex; height: 7px; margin-top: 2px; border: 1px solid #222; }
+        .gm-escala-b i { flex: 1; display: block; }
+        .gm-escala-b i:nth-child(odd) { background: #222; }
+        .gm-escala-n { display: flex; justify-content: space-between; font-size: 9px; margin-top: 1px; }
+        [data-tema="oscuro"] .gm-lam-panel { background: #fff; }
+        @media (max-width: 900px) {
+            .gm-lam { grid-template-columns: 1fr; }
+            .gm-lam-panel { border-left: 0; border-top: 2px solid #7A7A7A; }
+            .gm-lam-mapa { height: 420px; }
+        }
+
         .gm-mapa-icono { background: none; border: 0; }
         .gm-mapa-icono svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
         #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
@@ -2365,7 +2406,48 @@
                        de la Fiscalía cubre la zona metropolitana.</p>
                 </div>
                 <div class="mun-nota" id="gmMapaNota">Cargando el registro georreferenciado…</div>
-                <div id="gmMapaBox"></div>
+                <div class="gm-lam" id="gmLam">
+                    <div class="gm-lam-mapa">
+                        <div id="gmMapaBox" style="position:absolute;inset:0"></div>
+                        <div class="gm-reserva">
+                            El presente documento contiene información de carácter reservado, de
+                            conformidad con lo establecido en el capítulo II, artículo 17, fracción I,
+                            incisos a), c), f) de la Ley de Transparencia y Acceso a la Información
+                            Pública del Estado de Jalisco y sus Municipios. Se transfiere dicha
+                            información para que la proteja de cualquier vulneración, evitando así,
+                            alguna sanción que establece dicha Ley.
+                        </div>
+                        <div class="gm-escala">
+                            <div>Escala gráfica</div>
+                            <div class="gm-escala-b" id="gmEscalaB"><i></i><i></i><i></i><i></i></div>
+                            <div class="gm-escala-n" id="gmEscalaN"><span>0</span><span></span><span></span></div>
+                        </div>
+                    </div>
+                    <div class="gm-lam-panel">
+                        <div class="gm-p-caja">
+                            <p class="gm-p-tit">Incidencia delictiva</p>
+                            <p class="gm-p-mes" id="gmPMes">—</p>
+                        </div>
+                        <div class="gm-p-caja" style="flex:none">
+                            <p class="gm-p-sub">Simbología</p>
+                            <div id="gmPSimb"></div>
+                        </div>
+                        <div class="gm-p-loc">
+                            <p class="gm-p-loc-t">Estados Unidos Mexicanos</p>
+                            <div class="gm-p-loc-w">
+                                <div class="gm-norte">▲<br>N</div>
+                                <div id="gmPLoc"></div>
+                            </div>
+                        </div>
+                        <div class="gm-p-fuente">
+                            <p>Fuente: Elaboración propia a partir de Carpetas de Investigación de la
+                               Fiscalía del Estado.</p>
+                            <p>*Cifras preliminares. Las mismas pueden variar, derivado de modificación
+                               en el registro de la información.</p>
+                            <p class="gm-cred">CGES / DAAV</p>
+                        </div>
+                    </div>
+                </div>
                 <details style="margin-top:12px">
                     <summary style="cursor:pointer;font-size:12.5px;color:var(--muted);font-weight:600">
                         Detalle del filtro y valores de la hoja</summary>
@@ -12262,6 +12344,47 @@
         }
 
         /* Registros del delito y mes activos, ya acotados a 2026 y al AMG. */
+        /* Localizador nacional. Reutiliza el SVG que ya está incrustado para la
+           vista de Homicidios: no añade peso. Se le QUITAN los identificadores
+           antes de insertarlo, porque el mismo SVG puede estar ya en el
+           documento y dos elementos con el mismo `id` es marcado inválido; la
+           entidad se localiza después por `data-e`. */
+        let gmLocPuesto = false;
+        function gmMontaLocalizador() {
+            const cont = document.getElementById('gmPLoc');
+            if (!cont || gmLocPuesto || typeof HD_SVG === 'undefined') return;
+            cont.innerHTML = HD_SVG.replace(/\sid="(MX[A-Z]{3})"/g, ' data-e="$1"')
+                                   .replace(/\sid="hdSvgNac"/, '');
+            const svg = cont.querySelector('svg');
+            if (svg) { svg.removeAttribute('height'); svg.removeAttribute('width');
+                       svg.setAttribute('style', 'width:100%;height:auto'); }
+            const jal = cont.querySelector('[data-e="MXJAL"]');
+            if (jal) { jal.setAttribute('fill', '#F2C400');
+                       jal.setAttribute('stroke', '#8A6D00'); jal.setAttribute('stroke-width', '1.2'); }
+            gmLocPuesto = true;
+        }
+
+        /* Escala gráfica en kilómetros redondos, recalculada con el zoom.
+           Es lo que permite leer distancias en la lámina impresa, donde no hay
+           controles de acercamiento. */
+        function gmEscala() {
+            if (!gmMapa) return;
+            const b = document.getElementById('gmEscalaB');
+            const n = document.getElementById('gmEscalaN');
+            if (!b || !n) return;
+            const c = gmMapa.getCenter();
+            const p = gmMapa.latLngToContainerPoint(c);
+            const m = gmMapa.distance(c, gmMapa.containerPointToLatLng(L.point(p.x + 100, p.y)));
+            if (!m) return;
+            const objetivo = [1, 2, 4, 5, 8, 10, 20, 40, 50, 80, 100];
+            const aprox = m * 2.6 / 1000;
+            const km = objetivo.reduce((a, x) => Math.abs(x - aprox) < Math.abs(a - aprox) ? x : a);
+            const px = Math.round(km * 1000 / m * 100);
+            b.style.width = px + 'px';
+            n.style.width = px + 'px';
+            n.innerHTML = `<span>0</span><span>${km / 2}</span><span>${km} km</span>`;
+        }
+
         const GM_AMG_SET = new Set(MUN_AMG.map(dsNorm));
 
         /* La hoja de la Fiscalía guarda la geometría PROYECTADA en UTM zona 13N,
@@ -12382,7 +12505,7 @@
             if (!gmMapaData) return;
 
             const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
-            const cont = document.getElementById('gmMapaBox');
+            const cont = document.getElementById('gmLam');
             if (!patron) {
                 /* Delito sin georreferencia. Se declara en lugar de dejar el
                    mapa vacío, que parecería un fallo de carga. */
@@ -12394,6 +12517,7 @@
                 return;
             }
             if (cont) cont.style.display = '';
+            gmMontaLocalizador();
 
             if (typeof L === 'undefined') return;
             if (!gmMapa) {
@@ -12401,6 +12525,7 @@
                           .setView(GM_MAPA_CENTRO, GM_MAPA_ZOOM);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                     { attribution: '© OpenStreetMap', maxZoom: 18 }).addTo(gmMapa);
+                gmMapa.on('zoomend moveend', gmEscala);
             }
             ['calor', 'puntos', 'limites'].forEach(k => {
                 if (gmMapaCapas[k]) { gmMapa.removeLayer(gmMapaCapas[k]); gmMapaCapas[k] = null; }
@@ -12439,6 +12564,21 @@
                          </div>`)));
                 gmMapaCapas.puntos = capa.addTo(gmMapa);
             }
+
+            const pm = document.getElementById('gmPMes');
+            if (pm) pm.textContent = `${GM_MESES[gmEstado.mes]} ${GM_MAPA_ANIO}`;
+            /* Con un solo delito por mapa, la simbología tiene DOS entradas.
+               La lámina de QGIS muestra once porque grafica todos los robos a la
+               vez; aquí el delito lo elige el usuario arriba. */
+            const ps = document.getElementById('gmPSimb');
+            if (ps) {
+                const g = GM_MAPA_GLIFO[GM_MAPA_ICONO[gmEstado.delito] || 'punto'];
+                ps.innerHTML = [[true, 'Con violencia', GM_ROJO_V], [false, 'Sin violencia', GM_VERDE_S]]
+                    .map(o => `<div class="gm-simb"><svg viewBox="0 0 20 20" width="18" height="18">` +
+                        `<path d="${g}" fill="${o[2]}" stroke="#FFFFFF" stroke-width="0.6"/></svg>` +
+                        `<span>${esc(gmEstado.delito)} · ${o[1]}</span></div>`).join('');
+            }
+            gmEscala();
 
             const esMuestra = GM_MAPA_MUESTRA.indexOf(gmEstado.delito) >= 0;
             if (info) info.textContent =
