@@ -12181,7 +12181,7 @@
             'ROBO A CASA HABITACIÓN':        /CASA HABITACION/,
             'ROBO DE VEHÍCULO CARGA PESADA': /\bCARGA\b/,
             'ROBO A CUENTAHABIENTE':         /CUENTAHABIENTE/,
-            'ROBO A BANCOS':                 /BANCARIA|\bBANCO\b/,
+            'ROBO A BANCOS':                 /BANCARIA|\bBANCOS?\b/,
             'HOMICIDIO DOLOSO':              /HOMICIDIO DOLOSO/,
             'LESIONES DOLOSAS':              /LESIONES DOLOSAS/
         };
@@ -12264,6 +12264,31 @@
         /* Registros del delito y mes activos, ya acotados a 2026 y al AMG. */
         const GM_AMG_SET = new Set(MUN_AMG.map(dsNorm));
 
+        /* La hoja de la Fiscalía guarda la geometría PROYECTADA en UTM zona 13N,
+           no en grados: `wkt_geom` trae metros del orden de 670,000 y 2,280,000.
+           Pasarlos a Leaflet en crudo los interpreta como latitud y longitud, los
+           recorta al rango válido y los deposita en lugares sin sentido — que es
+           exactamente lo que ocurría: ocho puntos dispersos en vez de cincuenta y
+           nueve sobre la mancha urbana, y la capa de calor sin dibujarse.
+
+           Se reutiliza la conversión que la vista Fiscalía ya aplica. El filtro de
+           cordura contra el recuadro de Jalisco también es suyo: una coordenada
+           corrupta arrastraría el encuadre del mapa a otro continente. */
+        const GM_UTM_LISTO = { ok: false };
+        function gmAGrados(x, y) {
+            if (typeof proj4 === 'undefined') return null;
+            if (!GM_UTM_LISTO.ok) {
+                proj4.defs('EPSG:32613', '+proj=utm +zone=13 +datum=WGS84 +units=m +no_defs');
+                GM_UTM_LISTO.ok = true;
+            }
+            try {
+                const p = proj4('EPSG:32613', 'EPSG:4326', [x, y]);
+                const lon = p[0], lat = p[1];
+                if (lat > 18 && lat < 23 && lon > -106 && lon < -101) return { lat, lon };
+            } catch (e) { /* coordenada ilegible: se cuenta como fuera */ }
+            return null;
+        }
+
         /* Filtro con CONTEO POR ETAPA. Cuando el mapa sale vacío hay que poder
            ver en qué paso se perdieron los registros, sin abrir la consola.
 
@@ -12275,7 +12300,8 @@
            El mapa NO responde al conmutador de región: siempre muestra el AMG,
            que es el encuadre de la lámina institucional. */
         function gmMapaFiltra() {
-            const paso = { leidos: 0, anio: 0, mes: 0, delito: 0, amg: 0, conCoord: 0, sinCoord: 0 };
+            const paso = { leidos: 0, anio: 0, mes: 0, delito: 0, amg: 0,
+                           conCoord: 0, sinCoord: 0, enJalisco: 0, fueraJalisco: 0 };
             if (!gmMapaData) return { puntos: [], paso, patron: null };
             const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
             if (!patron) return { puntos: [], paso, patron: null };
@@ -12295,7 +12321,10 @@
                     paso.sinCoord++; return;
                 }
                 paso.conCoord++;
-                puntos.push(r);
+                const g = gmAGrados(r.x, r.y);
+                if (!g) { paso.fueraJalisco++; return; }
+                paso.enJalisco++;
+                puntos.push({ lat: g.lat, lon: g.lon, r });
             });
             return { puntos, paso, patron };
         }
@@ -12335,6 +12364,8 @@
                         ${fila('Del delito seleccionado', P.delito)}
                         ${fila('En municipios del AMG', P.amg)}
                         ${fila('Con coordenada utilizable', P.conCoord)}
+                        ${fila('Dentro del recuadro de Jalisco', P.enJalisco)}
+                        ${fila('Fuera de Jalisco o ilegible', P.fueraJalisco)}
                         ${fila('Sin coordenada', P.sinCoord)}
                     </tbody>
                 </table></div>
@@ -12389,22 +12420,22 @@
             }
 
             if (F.puntos.length && L.heatLayer) {
-                gmMapaCapas.calor = L.heatLayer(F.puntos.map(r => [r.y, r.x, .5]),
+                gmMapaCapas.calor = L.heatLayer(F.puntos.map(p => [p.lat, p.lon, .5]),
                     { radius: 18, blur: 22, minOpacity: .18,
                       gradient: { .3: '#f4cccc', .6: '#e06666', 1: '#990000' } }).addTo(gmMapa);
             }
             if (F.puntos.length) {
                 const capa = L.layerGroup();
-                F.puntos.slice(-GM_MAPA_TOPE).forEach(r => capa.addLayer(
-                    L.marker([r.y, r.x], {
-                        icon: gmMapaIcono(gmEstado.delito, r.violencia === 'SI')
+                F.puntos.slice(-GM_MAPA_TOPE).forEach(p => capa.addLayer(
+                    L.marker([p.lat, p.lon], {
+                        icon: gmMapaIcono(gmEstado.delito, p.r.violencia === 'SI')
                     }).bindPopup(
                         `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
-                            <b style="color:#18345D;font-size:13px">${esc(r.delito)}</b>
-                            <div style="color:#6B7785;margin-bottom:5px">${esc(r.fecha || (r.mes + ' ' + r.anio))}</div>
-                            <div><b style="color:#18345D">Municipio:</b> ${esc(r.municipio)}</div>
-                            <div><b style="color:#18345D">Colonia:</b> ${esc(r.colonia)}</div>
-                            <div><b style="color:#18345D">Violencia:</b> ${r.violencia === 'SI' ? 'Sí' : 'No'}</div>
+                            <b style="color:#18345D;font-size:13px">${esc(p.r.delito)}</b>
+                            <div style="color:#6B7785;margin-bottom:5px">${esc(p.r.fecha || (p.r.mes + ' ' + p.r.anio))}</div>
+                            <div><b style="color:#18345D">Municipio:</b> ${esc(p.r.municipio)}</div>
+                            <div><b style="color:#18345D">Colonia:</b> ${esc(p.r.colonia)}</div>
+                            <div><b style="color:#18345D">Violencia:</b> ${p.r.violencia === 'SI' ? 'Sí' : 'No'}</div>
                          </div>`)));
                 gmMapaCapas.puntos = capa.addTo(gmMapa);
             }
