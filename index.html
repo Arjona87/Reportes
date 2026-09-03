@@ -12077,11 +12077,11 @@
             [['gmPptxJal', 'Jalisco'], ['gmPptxAmg', 'AMG']].forEach(par => {
                 const b = document.getElementById(par[0]);
                 if (!b) return;
-                b.addEventListener('click', () => {
-                    b.disabled = true;
-                    b.textContent = 'Generando…';
-                    gmPptxMazo(par[1]);
-                });
+                /* No se toca aquí ni `disabled` ni el rótulo: gmPptxMazo guarda
+                   el rótulo original, deshabilita y restituye ambos en su
+                   `finally`. Escribirlo antes hacía que guardara «Generando…»
+                   como rótulo original y el botón nunca recuperaba su nombre. */
+                b.addEventListener('click', () => gmPptxMazo(par[1]));
             });
         }
 
@@ -12970,7 +12970,11 @@
 
         /* Colores tomados de la plantilla institucional. */
         const GM_AZUL = '152595', GM_VERDE = '00B050', GM_MORADO = '7030A0',
-              GM_ROJO = 'FF0000', GM_VERDE_T = '4EA72E', GM_AZUL_OSC = '001848';
+              GM_ROJO = 'FF0000', GM_VERDE_T = '4EA72E', GM_AZUL_OSC = '001848',
+              /* La tendencia iba en verde y sobre las barras verdes del año en
+                 curso se perdía. GM_VERDE_T se conserva: también pinta los
+                 porcentajes negativos de la tabla de seis años. */
+              GM_AMBAR = 'FFC000';
 
         function gmDelitosMazo() {
             if (!gmData) return [];
@@ -13150,10 +13154,15 @@
                                 fontSize: 28, bold: true, color: '000000', fontFace: 'Arial' });
                             sl.addText(region, { x: 0.27, y: 0.60, w: 1.6, h: 0.4,
                                 fontSize: 18, bold: true, color: GM_AZUL, fontFace: 'Arial' });
+                            /* El fondo institucional dibuja «Coordinación de
+                               Seguridad» en la esquina superior derecha, entre
+                               y=0.55 y y=0.78. El texto del periodo y la tabla
+                               bajan por debajo de esa franja y se recorren a la
+                               derecha para no encimarse con el logotipo. */
                             sl.addText('Acumulado durante el periodo:  enero-' + mesLow,
-                                { x: 4.76, y: 0.58, w: 5.0, h: 0.24, fontSize: 11, bold: true,
+                                { x: 5.15, y: 0.86, w: 4.60, h: 0.24, fontSize: 11, bold: true,
                                   align: 'center', color: '000000', fontFace: 'Arial' });
-                            sl.addTable(filas, { x: 4.76, y: 0.84, w: 5.0, colW: Array(filas[0].length).fill(5.0 / filas[0].length),
+                            sl.addTable(filas, { x: 5.15, y: 1.10, w: 4.60, colW: Array(filas[0].length).fill(4.60 / filas[0].length),
                                 border: { type: 'solid', color: 'FFFFFF', pt: 1 }, fontFace: 'Arial' });
                         };
 
@@ -13161,10 +13170,12 @@
                         const s1 = pptx.addSlide();
                         fondo(s1, GM_FONDO_LAMINA);
                         cabeza(s1);
+                        /* Sin recuadro: el borde obligaba a borrarlo a mano en
+                           cada reporte. Queda como una línea alineada a la
+                           derecha, justo debajo de la tabla. */
                         s1.addText('Promedio mensual (' + (D.act - 1) + '-' + D.act + ')= ' + gmNf1(D.prom),
-                            { x: 8.10, y: 1.66, w: 1.75, h: 0.44, fontSize: 9, align: 'center',
-                              color: GM_MORADO, fontFace: 'Arial',
-                              line: { color: GM_MORADO, width: 1.25 } });
+                            { x: 5.15, y: 1.84, w: 4.60, h: 0.24, fontSize: 11, align: 'right',
+                              color: GM_MORADO, fontFace: 'Arial' });
                         /* Barras + dos líneas calculadas. El promedio se toma de
                            `D.prom`, el MISMO valor que rotula el recuadro morado
                            de arriba: recalcularlo aparte abriría la puerta a que
@@ -13194,13 +13205,13 @@
                                 type: pptx.ChartType.line,
                                 data: linea1,
                                 options: {
-                                    chartColors: guia1.hayTend ? [GM_VERDE_T, GM_MORADO] : [GM_MORADO],
+                                    chartColors: guia1.hayTend ? [GM_AMBAR, GM_MORADO] : [GM_MORADO],
                                     lineSize: 2, lineDash: 'dash', lineSmooth: false,
                                     lineDataSymbol: 'none', showValue: false
                                 }
                             }
                         ], {
-                            x: 0.25, y: 1.69, w: 9.51, h: 3.50,
+                            x: 0.25, y: 1.95, w: 9.51, h: 3.10,
                             showLegend: false, showTitle: false,
                             catAxisLabelFontSize: 10, catAxisLabelColor: '404040',
                             valAxisHidden: true, valGridLine: { style: 'none' },
@@ -13215,9 +13226,8 @@
                         const nA0 = Math.min(6, D.anios.length);
                         const promA = D.acum.slice(-nA0).reduce((x, y) => x + y, 0) / nA0;
                         s2.addText('Promedio del acumulado (' + D.anios[D.anios.length - nA0] + '-' + D.act + ')= ' + gmNf1(promA),
-                            { x: 8.10, y: 1.66, w: 1.75, h: 0.44, fontSize: 9, align: 'center',
-                              color: GM_MORADO, fontFace: 'Arial',
-                              line: { color: GM_MORADO, width: 1.25 } });
+                            { x: 5.15, y: 1.84, w: 4.60, h: 0.24, fontSize: 11, align: 'right',
+                              color: GM_MORADO, fontFace: 'Arial' });
                         s2.addText('Acumulado enero–' + mesLow + ' por año',
                             { x: 0.27, y: 1.20, w: 4.2, h: 0.26, fontSize: 11, bold: true,
                               color: '404040', fontFace: 'Arial' });
@@ -13252,13 +13262,13 @@
                                 type: pptx.ChartType.line,
                                 data: linea2,
                                 options: {
-                                    chartColors: guia2.hayTend ? [GM_VERDE_T, GM_MORADO] : [GM_MORADO],
+                                    chartColors: guia2.hayTend ? [GM_AMBAR, GM_MORADO] : [GM_MORADO],
                                     lineSize: 2, lineDash: 'dash', lineSmooth: false,
                                     lineDataSymbol: 'none', showValue: false
                                 }
                             }
                         ], {
-                            x: 0.60, y: 1.75, w: 8.80, h: 3.42,
+                            x: 0.60, y: 1.95, w: 8.80, h: 3.10,
                             showLegend: false, showTitle: false,
                             catAxisLabelFontSize: 12, catAxisLabelColor: '333333',
                             valAxisHidden: true, valGridLine: { style: 'none' },
