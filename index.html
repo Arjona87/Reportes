@@ -1033,6 +1033,25 @@
         .gm-acum tr.pct td { font-size: 11.5px; }
         @media (max-width: 1180px) { .gm-caja { min-width: 0; width: 100%; margin-left: 0; } }
 
+        /* Serie histórica mensual. La cabecera de esta lámina lleva DOS tablas:
+           el acumulado enero-mes de corte y el promedio mensual por año. Reglas
+           ADITIVAS: `munComp-*` y `.gm-acum` quedan intactas. */
+        .gm-hist-caja { min-width: 780px; }
+        .gm-cab-tablas { display: flex; gap: 16px; align-items: flex-start; }
+        .gm-cab-tablas > div { min-width: 0; }
+        .gm-cab-tablas > .gm-acum-col { flex: 1 1 auto; }
+        .gm-cab-tablas > .gm-prom-col { flex: 0 1 auto; }
+        .gm-prom-tabla { width: auto; }
+        .gm-prom-tabla th, .gm-prom-tabla td { padding-left: 7px; padding-right: 7px; }
+        .gm-nota-meses { font-family: Arial, sans-serif; font-size: 10.5px; color: var(--muted);
+            line-height: 1.4; margin-top: 6px; text-align: right; }
+        @media (max-width: 1320px) {
+            .gm-hist-caja { min-width: 0; width: 100%; margin-left: 0; }
+            .gm-cab-tablas { flex-direction: column; gap: 12px; }
+            .gm-cab-tablas > .gm-prom-col { width: 100%; }
+            .gm-prom-tabla { width: 100%; }
+        }
+
         .variation-cell {
             display: inline-block;
             font-weight: 600;
@@ -11652,7 +11671,7 @@
             mes: 6,
             anios: [], anioActual: null, ultimoMesConDato: -1
         };
-        let gmData = null, gmCh1 = null, gmCh2 = null, gmMontado = false, gmEventos = false;
+        let gmData = null, gmCh1 = null, gmCh2 = null, gmCh3 = null, gmMontado = false, gmEventos = false;
 
         const GM_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                           'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -11866,6 +11885,148 @@
         }
 
 
+        /* --------------------- serie histórica ---------------------
+           Todos los meses desde enero del primer año de la hoja hasta el mes de
+           corte del año en curso. Un mes con captura parcial —así sea de un solo
+           día— SÍ cuenta: la serie llega hasta él y el promedio lo divide como un
+           mes más. Lo que nunca entra es un mes SIN captura alguna: sumar ceros
+           inexistentes hundiría la recta de tendencia y desinflaría el promedio. */
+        function gmMesEfectivo(mesCorte) {
+            if (!gmData || gmData.ultimoMes < 0) return mesCorte;
+            return Math.min(mesCorte, gmData.ultimoMes);
+        }
+        /* Acumulador por año-mes de una combinación concreta. No toca `gmEstado`:
+           lo usan tanto la pantalla como el mazo del PPTX. */
+        function gmMapaMeses(region, delito, medida) {
+            const p = String(medida).split('::'), dim = p[0], cat = p[1] || '';
+            const mapa = {};
+            if (!gmData) return mapa;
+            gmData.registros.forEach(r => {
+                if (r.delito !== delito) return;
+                if (dsNorm(r.ambito) !== dsNorm(region)) return;
+                if (r.dimension !== dim || r.categoria !== cat) return;
+                const k = r.anio + '-' + r.mes;
+                mapa[k] = (mapa[k] || 0) + r.cantidad;
+            });
+            return mapa;
+        }
+        function gmHistDatos(region, delito, medida, mesCorte) {
+            const anios = gmData ? gmData.anios : [];
+            const act = anios.length ? anios[anios.length - 1] : null;
+            const mesEf = gmMesEfectivo(mesCorte);
+            const mapa = gmMapaMeses(region, delito, medida);
+            const labels = [], valores = [], anioDe = [], mesDe = [], etqEje = [];
+            anios.forEach(a => {
+                const hasta = (a === act) ? mesEf : 11;
+                for (let m = 0; m <= hasta; m++) {
+                    labels.push(GM_MES_C[m] + ' ' + a);
+                    valores.push(mapa[a + '-' + m] || 0);
+                    anioDe.push(a); mesDe.push(m);
+                    etqEje.push(m === 0 ? String(a) : '');
+                }
+            });
+            return { labels, valores, anioDe, mesDe, etqEje, anios, act, mesEf,
+                     recortada: mesEf < mesCorte };
+        }
+        /* Tendencia por mínimos cuadrados. Se devuelve como SERIE CALCULADA, no
+           como propiedad de la librería: `trendlineType` de pptxgenjs se acepta
+           sin error pero no llega al XML. */
+        function gmTendLineal(valores) {
+            let sx = 0, sy = 0, sxy = 0, sxx = 0, k = 0;
+            valores.forEach((v, i) => {
+                if (v === null || v === undefined) return;
+                sx += i; sy += v; sxy += i * v; sxx += i * i; k++;
+            });
+            if (k < 3) return null;
+            const den = k * sxx - sx * sx;
+            if (!den) return null;
+            const m = (k * sxy - sx * sy) / den, b = (sy - m * sx) / k;
+            return { m: m, b: b, valores: valores.map((_, i) => Math.max(0, m * i + b)) };
+        }
+        /* Promedio mensual por año. Mismo número de meses para todos los años
+           —enero al mes efectivo— para que la comparación sea entre iguales. */
+        function gmPromedioAnual(region, delito, medida, mesCorte) {
+            const anios = gmData ? gmData.anios : [];
+            const mesEf = gmMesEfectivo(mesCorte);
+            const n = mesEf + 1;
+            const mapa = gmMapaMeses(region, delito, medida);
+            const prom = anios.map(a => {
+                let s = 0;
+                for (let m = 0; m <= mesEf; m++) s += (mapa[a + '-' + m] || 0);
+                return n ? s / n : 0;
+            });
+            return { anios: anios, prom: prom, n: n, mesEf: mesEf,
+                     recortada: mesEf < mesCorte };
+        }
+        /* Tabla de promedio mensual: los últimos seis años, las mismas columnas
+           que la tabla de acumulados de la lámina del PPTX. */
+        function gmTablaPromHTML() {
+            const P = gmPromedioAnual(gmEstado.region, gmEstado.delito, gmEstado.medida, gmEstado.mes);
+            const n = Math.min(6, P.anios.length);
+            const A = P.anios.slice(-n), V = P.prom.slice(-n);
+            let th = '<tr>', td = '<tr>';
+            A.forEach((y, i) => {
+                th += `<th class="${y >= gmEstado.anioActual - 1 ? 'act' : ''}">${y}</th>`;
+                td += `<td>${gmNf1(V[i])}</td>`;
+            });
+            return th + '</tr>' + td + '</tr>';
+        }
+
+        /* Etiqueta de dato rotada, cada N puntos. Con más de cien meses en el eje
+           rotularlos todos sería ilegible: se rotula uno de cada tres. */
+        const gmEtqRot = { id: 'gmEtqRot', afterDatasetsDraw(ch) {
+            const cfg = (ch.options.plugins || {}).gmEtqRot;
+            if (!cfg || !cfg.enabled) return;
+            const cada = cfg.cada || 3;
+            const meta = ch.getDatasetMeta(0), ds = ch.data.datasets[0];
+            if (!meta || meta.hidden || !ds) return;
+            const ctx = ch.ctx, esc2 = ch.canvas.width > 1200 ? 1.2 : 1;
+            ctx.save();
+            ctx.font = 'bold ' + (10 * esc2) + 'px Arial, sans-serif';
+            ctx.fillStyle = '#111';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            meta.data.forEach((pt, i) => {
+                if (i % cada !== 0) return;
+                const v = ds.data[i];
+                if (v === null || v === undefined) return;
+                ctx.save();
+                ctx.translate(pt.x, pt.y - 8 * esc2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText(gmNf(v), 0, 0);
+                ctx.restore();
+            });
+            ctx.restore();
+        }};
+
+        function gmCfg3() {
+            const H = gmHistDatos(gmEstado.region, gmEstado.delito, gmEstado.medida, gmEstado.mes);
+            const T = gmTendLineal(H.valores);
+            const sets = [{
+                label: 'Serie mensual', data: H.valores,
+                borderColor: '#001848', backgroundColor: '#001848',
+                borderWidth: 1.8, tension: 0, pointRadius: 2.4, pointHoverRadius: 4,
+                pointBackgroundColor: '#001848', pointBorderWidth: 0, order: 2
+            }];
+            if (T) sets.push({
+                label: 'Tendencia', data: T.valores,
+                borderColor: '#1FA25C', backgroundColor: '#1FA25C',
+                borderWidth: 2.6, tension: 0, pointRadius: 0, pointHitRadius: 0, order: 1
+            });
+            return { type: 'line',
+                data: { labels: H.labels, datasets: sets },
+                options: { responsive: true, maintainAspectRatio: false, animation: false,
+                    layout: { padding: { top: 40 } },
+                    plugins: { legend: { display: false },
+                               gmEtqRot: { enabled: true, cada: 3 } },
+                    scales: {
+                        x: { grid: { display: false },
+                             ticks: { autoSkip: false, maxRotation: 0, minRotation: 0,
+                                      font: { size: 11, weight: 'bold' }, color: '#555',
+                                      callback: (v, i) => H.etqEje[i] || '' } },
+                        y: { display: false, beginAtZero: true, grace: '16%' } } },
+                plugins: [gmEtqRot] };
+        }
+
         /* --------------------- maquetado --------------------- */
         function gmMonta() {
             const cont = document.getElementById('gmCuerpo');
@@ -11904,6 +12065,31 @@
                     <div class="munComp-box munComp-box-2"><canvas id="gmG2"></canvas></div>
                     <div class="mun-lectura" id="gmL2">—</div>
                     <div class="munComp-pie" id="gmPie2"></div>
+                </div>
+                <div class="munComp-lamina">
+                    <div class="munComp-cab">
+                        <div>
+                            <h3 class="munComp-tit" id="gmT3">—</h3>
+                            <p class="munComp-sub" id="gmS3">—</p>
+                            <p class="munComp-carp" id="gmC3"></p>
+                        </div>
+                        <div class="munComp-caja gm-caja gm-hist-caja">
+                            <div class="gm-cab-tablas">
+                                <div class="gm-acum-col">
+                                    <div class="munComp-caja-t" id="gmCT3">—</div>
+                                    <table class="munComp-acum gm-acum" id="gmTabla3"></table>
+                                </div>
+                                <div class="gm-prom-col">
+                                    <div class="munComp-caja-t" id="gmCTP">Promedio mensual por año</div>
+                                    <table class="munComp-acum gm-acum gm-prom-tabla" id="gmTablaProm"></table>
+                                    <div class="gm-nota-meses" id="gmNotaProm">—</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="munComp-box"><canvas id="gmG3"></canvas></div>
+                    <div class="mun-lectura" id="gmL3">—</div>
+                    <div class="munComp-pie" id="gmPie3"></div>
                 </div>`;
             gmMontado = true;
         }
@@ -12007,6 +12193,52 @@
             ['gmPie1', 'gmPie2'].forEach(id => {
                 const e = document.getElementById(id); if (e) e.textContent = pie;
             });
+
+            // ---- lámina 3: serie histórica mensual completa ----
+            const H3 = gmHistDatos(E.region, E.delito, E.medida, E.mes);
+            const P3 = gmPromedioAnual(E.region, E.delito, E.medida, E.mes);
+            const mesEfTxt = GM_MESES[P3.mesEf].toLowerCase();
+            const eT3 = document.getElementById('gmT3'); if (eT3) eT3.textContent = E.delito;
+            const eS3 = document.getElementById('gmS3');
+            if (eS3) eS3.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1)
+                + ' · SERIE HISTÓRICA ' + (H3.anios.length ? H3.anios[0] : '') + '–' + E.anioActual + '</small>';
+            const eC3 = document.getElementById('gmC3');
+            if (eC3) { eC3.innerHTML = txtC; eC3.className = 'munComp-carp' + (esPersona ? ' fuerte' : ''); }
+            const eT3a = document.getElementById('gmTabla3'); if (eT3a) eT3a.innerHTML = tabla;
+            const eCT3 = document.getElementById('gmCT3');
+            if (eCT3) eCT3.textContent = `Acumulado durante el periodo:  enero-${mesLow}`;
+            const eTP = document.getElementById('gmTablaProm');
+            if (eTP) eTP.innerHTML = gmTablaPromHTML();
+            const eNP = document.getElementById('gmNotaProm');
+            if (eNP) eNP.textContent = `Promedio de enero a ${mesEfTxt} de cada año: `
+                + `${P3.n} ${P3.n === 1 ? 'mes' : 'meses'}.`
+                + (P3.recortada ? ` ${GM_MESES[E.mes]} de ${E.anioActual} todavía no tiene captura y no se promedia.` : '');
+            const eP3 = document.getElementById('gmPie3'); if (eP3) eP3.textContent = pie;
+
+            if (gmCh3) { try { gmCh3.destroy(); } catch (e) {} }
+            const c3 = document.getElementById('gmG3');
+            if (c3 && typeof Chart !== 'undefined') gmCh3 = new Chart(c3, gmCfg3());
+
+            const T3 = gmTendLineal(H3.valores);
+            const eL3 = document.getElementById('gmL3');
+            if (eL3) {
+                let l3 = `Serie completa de <b>${H3.valores.length}</b> meses, de enero de `
+                    + `${H3.anios.length ? H3.anios[0] : ''} a ${mesEfTxt} de ${E.anioActual}. `;
+                if (T3) {
+                    const paso = T3.m, total = paso * (H3.valores.length - 1);
+                    l3 += `La recta de mínimos cuadrados ${paso < 0 ? 'desciende' : (paso > 0 ? 'asciende' : 'se mantiene plana')} `
+                        + `<b>${gmNf1(Math.abs(paso))}</b> por mes, `
+                        + `<b>${gmNf1(Math.abs(total))}</b> en todo el periodo. `
+                        + `Es el sentido general de la serie, <b>no un pronóstico</b>.`;
+                } else {
+                    l3 += 'La serie tiene menos de tres meses con dato: no se traza tendencia.';
+                }
+                if (H3.recortada) l3 += ` La serie se corta en ${mesEfTxt}: `
+                    + `${GM_MESES[E.mes].toLowerCase()} de ${E.anioActual} no tiene captura y graficarlo como cero `
+                    + `inventaría una caída.`;
+                eL3.innerHTML = l3;
+            }
+
             const res = document.getElementById('gmResumen');
             if (res) res.textContent = `${E.delito} · ${E.region} · ${etqMedida} · corte a ${mesTxt} ${E.anioActual}`;
 
@@ -13275,6 +13507,76 @@
                             catGridLine: { style: 'none' }
                         });
                         pie(s2);
+
+                        // --- lámina 3: serie histórica mensual completa ---
+                        const H = gmHistDatos(region, delito, medida, mes);
+                        if (H.valores.length >= 3) {
+                            const s3 = pptx.addSlide();
+                            fondo(s3, GM_FONDO_LAMINA);
+                            cabeza(s3);
+                            const P = gmPromedioAnual(region, delito, medida, mes);
+                            const nP = Math.min(6, P.anios.length);
+                            const aniosP = P.anios.slice(-nP), promP = P.prom.slice(-nP);
+                            const mesEfLow = GM_MESES[P.mesEf].toLowerCase();
+                            /* Promedio mensual por año, con las MISMAS seis columnas
+                               que la tabla de acumulados de arriba: alinearlas permite
+                               leer las dos cifras del mismo año en vertical. */
+                            s3.addText('Promedio mensual por año:  enero-' + mesEfLow,
+                                { x: 5.15, y: 1.88, w: 4.60, h: 0.20, fontSize: 10, bold: true,
+                                  align: 'center', color: '000000', fontFace: 'Arial' });
+                            s3.addTable([
+                                aniosP.map((y, i) => ({ text: String(y), options: {
+                                    fill: { color: i >= nP - 2 ? GM_VERDE : GM_AZUL },
+                                    color: 'FFFFFF', bold: true, align: 'center', fontSize: 9 } })),
+                                promP.map(v => ({ text: gmNf1(v), options: {
+                                    align: 'center', bold: true, fontSize: 11, color: '000000' } }))
+                            ], { x: 5.15, y: 2.06, w: 4.60, colW: Array(nP).fill(4.60 / nP),
+                                 border: { type: 'solid', color: 'FFFFFF', pt: 1 }, fontFace: 'Arial' });
+                            s3.addText('Calculado sobre ' + P.n + (P.n === 1 ? ' mes' : ' meses') + ' de cada año.',
+                                { x: 5.15, y: 2.54, w: 4.60, h: 0.20, fontSize: 8, align: 'right',
+                                  color: '404040', fontFace: 'Arial' });
+                            s3.addText('Serie mensual ' + H.anios[0] + '–' + H.act,
+                                { x: 0.27, y: 1.20, w: 4.2, h: 0.26, fontSize: 11, bold: true,
+                                  color: '404040', fontFace: 'Arial' });
+                            /* Tendencia como serie calculada, igual que en las láminas
+                               1 y 2: `trendlineType` no llega al XML. */
+                            const tend3 = gmTendLineal(H.valores);
+                            /* Serie espejo para rotular. PowerPoint aplica `showValue` a
+                               la serie completa, así que rotular uno de cada cuatro puntos
+                               exige una serie aparte con el resto en blanco. Va sin línea
+                               ni marcador: solo aporta las cifras. */
+                            const espejo = H.valores.map((v, i) => (i % 4 === 0 ? v : null));
+                            const grupos = [{
+                                type: pptx.ChartType.line,
+                                data: [{ name: 'Serie mensual', labels: H.etqEje, values: H.valores }],
+                                options: { chartColors: [GM_AZUL_OSC], lineSize: 1.5,
+                                    lineSmooth: false, lineDataSymbol: 'circle',
+                                    lineDataSymbolSize: 4, showValue: false }
+                            }];
+                            if (tend3) grupos.push({
+                                type: pptx.ChartType.line,
+                                data: [{ name: 'Tendencia', labels: H.etqEje, values: tend3.valores }],
+                                options: { chartColors: [GM_VERDE_T], lineSize: 2.25,
+                                    lineSmooth: false, lineDataSymbol: 'none', showValue: false }
+                            });
+                            grupos.push({
+                                type: pptx.ChartType.line,
+                                data: [{ name: 'Etiquetas', labels: H.etqEje, values: espejo }],
+                                options: { chartColors: [GM_AZUL_OSC], lineSize: 0,
+                                    lineSmooth: false, lineDataSymbol: 'none',
+                                    showValue: true, dataLabelColor: '000000',
+                                    dataLabelFontSize: 8, dataLabelFontBold: true,
+                                    dataLabelPosition: 't', dataLabelRotate: -90 }
+                            });
+                            s3.addChart(grupos, {
+                                x: 0.25, y: 2.80, w: 9.51, h: 2.28,
+                                showLegend: false, showTitle: false,
+                                catAxisLabelFontSize: 9, catAxisLabelColor: '404040',
+                                valAxisHidden: true, valGridLine: { style: 'none' },
+                                catGridLine: { style: 'none' }
+                            });
+                            pie(s3);
+                        }
 
                         hechas++;
                         if (btn) btn.textContent = `Generando… ${hechas}/${delitos.length * regiones.length}`;
