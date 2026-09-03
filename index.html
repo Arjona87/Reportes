@@ -1022,14 +1022,6 @@
             .gm-lam-mapa { height: 420px; }
         }
 
-        /* Análisis del mes. Prefijo propio: no toca las reglas de munComp-*. */
-        .gm-an-h { font-size: 12.5px; font-weight: 700; letter-spacing: .3px;
-            text-transform: uppercase; color: var(--muted); margin: 18px 0 4px; }
-        .gm-an-txt { white-space: pre-wrap; word-break: break-word;
-            font-family: inherit; font-size: 13px; line-height: 1.62; color: inherit;
-            background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.26);
-            border-radius: 10px; padding: 14px 16px; margin: 6px 0 10px; }
-
         .gm-mapa-icono { background: none; border: 0; }
         .gm-mapa-icono svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
         #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
@@ -2468,29 +2460,11 @@
         <section id="gmAnalisis">
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
                 <span class="h2-marca"></span><h2>Análisis del mes</h2>
-                <span class="panel-nota" id="gmAnNota">—</span>
+                <span class="panel-nota" id="gmAnNota">Jalisco y AMG en paralelo</span>
                 <span class="panel-toggle">▾</span>
             </div>
             <div class="panel-cuerpo">
-                <div class="mun-intro">
-                    <span class="mun-kicker">Jalisco y AMG · sigue al selector de mes de corte</span>
-                    <p>Mensaje completo de los <b>dos ámbitos</b>, en dos versiones: la de WhatsApp
-                       con asteriscos y la de texto plano. El selector de delito no interviene:
-                       el análisis recorre todos los delitos de la hoja.</p>
-                </div>
-                <p class="gm-an-h">Versión WhatsApp</p>
-                <pre class="gm-an-txt" id="gmAnWa">—</pre>
-                <div class="an-acciones">
-                    <button class="btn btn-primary" id="gmAnCopiarWa">Copiar para WhatsApp</button>
-                    <span id="gmAnStatusWa" class="an-copiado"></span>
-                </div>
-                <p class="gm-an-h">Versión texto plano</p>
-                <pre class="gm-an-txt" id="gmAnPlano">—</pre>
-                <div class="an-acciones">
-                    <button class="btn btn-secondary" id="gmAnCopiarPlano">Copiar texto plano</button>
-                    <span id="gmAnStatusPlano" class="an-copiado"></span>
-                </div>
-                <div class="munComp-pie" id="gmAnPie"></div>
+                <div id="gmAnCuerpo"><p class="an-empty">Sin datos disponibles todavía.</p></div>
             </div>
         </section>
       </div><!-- /vistaGraficas -->
@@ -6665,14 +6639,31 @@
             }
         }
 
-        /* Vista según el hash. Se compara en minúsculas para que #IncidenciaMunicipal,
-           #incidenciamunicipal y #INCIDENCIAMUNICIPAL abran lo mismo. */
+        /* Vista según el hash. Se resuelve CONTRA EL REGISTRO `VISTAS`, no contra
+           una cadena de condiciones: cada vista nueva traía su entrada en VISTAS
+           pero se olvidaba aquí, y el hash caía al valor por omisión. Así fue como
+           #homicidios y #GraficasMensuales abrían el Reporte Semanal.
+
+           Se compara en minúsculas para que #IncidenciaMunicipal,
+           #incidenciamunicipal y #INCIDENCIAMUNICIPAL abran lo mismo, y se
+           descarta la cadena de consulta: el tablero admite hashes del tipo
+           #semanal?param=valor. */
+        const DS_ALIAS_HASH = {
+            desaparecidas: 'desaparecidos',
+            municipal: 'incidenciamunicipal',
+            'fiscalía': 'fiscalia',
+            mensuales: 'graficasmensuales',
+            graficas: 'graficasmensuales',
+            homicidio: 'homicidios'
+        };
         function dsVistaDesdeHash() {
-            const h = (window.location.hash || '').toLowerCase().replace('#', '');
-            if (h === 'desaparecidos' || h === 'desaparecidas') return 'desaparecidos';
-            if (h === 'incidenciamunicipal' || h === 'municipal') return 'incidenciamunicipal';
-            if (h === 'fiscalia' || h === 'fiscalía') return 'fiscalia';
-            return 'semanal';
+            let h = (window.location.hash || '').replace('#', '').split('?')[0];
+            try { h = decodeURIComponent(h); } catch (e) { /* hash mal formado: se usa tal cual */ }
+            h = h.toLowerCase().trim();
+            if (!h) return VISTAS[0].id;
+            const v = VISTAS.find(x => x.id === h || x.hash.toLowerCase() === h);
+            if (v) return v.id;
+            return DS_ALIAS_HASH[h] || VISTAS[0].id;
         }
 
         window.addEventListener('hashchange', () => dsMostrarVista(dsVistaDesdeHash(), true));
@@ -12080,10 +12071,6 @@
                 gmRender();
                 gmAnRender();
             });
-            const bWa = document.getElementById('gmAnCopiarWa');
-            if (bWa) bWa.addEventListener('click', () => gmAnCopiar(true));
-            const bPl = document.getElementById('gmAnCopiarPlano');
-            if (bPl) bPl.addEventListener('click', () => gmAnCopiar(false));
             /* Un botón por región: cada uno lanza el MISMO mazo, acotado a su
                ámbito. El rótulo y el estado del botón se restituyen en el
                `finally` de gmPptxMazo, que es quien conoce el desenlace. */
@@ -12264,6 +12251,18 @@
             return n + ': ' + gmNf(x.vPrev) + ' → ' + gmNf(x.v)
                  + ' (' + gmAnPctN(p) + ')';
         }
+        /* Forma breve para la línea de «Atención»: ahí interesa la dirección,
+           no la cifra, que ya aparece completa en las líneas de arriba. */
+        function gmAnCorto(x) {
+            const n = gmTitulo(x.delito);
+            if (!x.vPrev) return n + ' pasa de 0 a ' + gmNf(x.v);
+            const p = (x.v - x.vPrev) / x.vPrev * 100;
+            return n + ' ' + (p >= 0 ? 'sube' : 'baja') + ' ' + Math.abs(p).toFixed(1) + ' %';
+        }
+        function gmAnUne(xs) {
+            if (xs.length <= 1) return xs.join('');
+            return xs.slice(0, -1).join(', ') + ' y ' + xs[xs.length - 1];
+        }
         function gmAnVs(a, b) {
             if (!b) return b === a ? 'sin cambio' : 'sin base comparable';
             return gmAnPctN((a - b) / b * 100);
@@ -12295,7 +12294,7 @@
             if (contra.length) {
                 L.push(neg('Atención:') + ' mientras el total '
                     + (dTot <= 0 ? 'baja' : 'sube') + ', '
-                    + contra.map(gmAnMov).join('; ') + '.');
+                    + gmAnUne(contra.map(gmAnCorto)) + '.');
             }
 
             L.push(neg('Contexto:') + ' vs ' + mesLow + ' ' + D.ant + ' ('
@@ -12332,37 +12331,185 @@
         }
 
         /* --------------------- pintado y copiado --------------------- */
+        /* Se guarda el cálculo del último pintado para que los botones de copiar
+           no tengan que rehacer el índice completo de la hoja. */
+        let gmAnCache = null;
+
+        function gmAnPctHtml(a, b) {
+            if (!b) return '<span class="an-neutro">sin base comparable</span>';
+            const p = (a - b) / b * 100;
+            const c = p > 0 ? 'an-up' : (p < 0 ? 'an-down' : 'an-neutro');
+            return '<span class="' + c + '">' + gmAnPctN(p) + '</span>';
+        }
+        function gmAnMovHtml(x) {
+            const n = esc(gmTitulo(x.delito));
+            const c = x.delta > 0 ? 'an-up' : (x.delta < 0 ? 'an-down' : 'an-neutro');
+            const f = x.delta > 0 ? '▲' : (x.delta < 0 ? '▼' : '=');
+            if (!x.vPrev) return n + ': <span class="' + c + '">0 → ' + gmNf(x.v) + ' ' + f + '</span>';
+            const p = (x.v - x.vPrev) / x.vPrev * 100;
+            return n + ': <span class="' + c + '">' + gmNf(x.vPrev) + ' → ' + gmNf(x.v)
+                 + ' (' + gmAnPctN(p) + ') ' + f + '</span>';
+        }
+        function gmAnLineaHtml(et, clase, partes, vacio, sep) {
+            return '<div class="an-linea"><b' + (clase ? ' class="' + clase + '"' : '') + '>'
+                 + et + '</b> '
+                 + (partes.length ? partes.join(sep || ' &nbsp;·&nbsp; ') + '.' : vacio)
+                 + '</div>';
+        }
+
+        const GM_AN_ROTULO = { 'Jalisco': 'ESTADO DE JALISCO',
+                               'AMG': 'ÁREA METROPOLITANA DE GUADALAJARA' };
+
+        function gmAnBloqueHtml(D, mes) {
+            const T = D.total, dTot = T.mes - T.mesPrev;
+            const mesLow = GM_MESES[mes].toLowerCase();
+            const c = dTot > 0 ? 'an-up' : (dTot < 0 ? 'an-down' : 'an-neutro');
+            const f = dTot > 0 ? '▲' : (dTot < 0 ? '▼' : '=');
+            const varTxt = T.mesPrev
+                ? gmAnPctN((T.mes - T.mesPrev) / T.mesPrev * 100)
+                : 'sin base comparable';
+
+            const ctx = [
+                'vs. ' + mesLow + ' ' + D.ant + ' (' + gmNf(T.mesAnual) + '): '
+                    + gmAnPctHtml(T.mes, T.mesAnual),
+                'promedio mensual ' + D.ant + ': <strong>' + gmNf1(T.promAnt) + '</strong>',
+                'promedio mensual ' + D.act + ' (enero-' + mesLow + '): <strong>'
+                    + gmNf1(T.promAct) + '</strong>',
+                'acumulado enero-' + mesLow + ' (' + gmNf(T.acumAct) + ') vs. ' + D.ant + ': '
+                    + gmAnPctHtml(T.acumAct, T.acumAnt),
+                'vs. ' + GM_AN_BASE + ': ' + gmAnPctHtml(T.acumAct, T.acumBase)
+            ];
+
+            const contra = D.alto.filter(x => dTot <= 0 ? x.delta > 0 : x.delta < 0);
+            const aten = contra.length
+                ? '<div class="an-linea"><b class="an-up">Atención:</b> mientras el total '
+                  + (dTot <= 0 ? 'baja' : 'sube') + ', '
+                  + esc(gmAnUne(contra.map(gmAnCorto))) + '.</div>'
+                : '';
+
+            return `
+                <div class="an-bloque">
+                    <div class="an-region">${GM_AN_ROTULO[D.region] || esc(D.region)}</div>
+                    <div class="an-periodo">${GM_MESES[mes]} ${D.act} &nbsp;·&nbsp; incidencia total del IIEG
+                        &nbsp;·&nbsp; acumulado enero-${mesLow}</div>
+                    <div class="an-total">
+                        <strong>${gmNf(T.mes)}</strong> delitos totales
+                        <span class="${c}">${f} ${varTxt} vs. el mes anterior</span>
+                    </div>
+                    ${gmAnLineaHtml('Aumentos:', 'an-up', D.aumentos.map(gmAnMovHtml),
+                                    'sin incrementos registrados.', ';&nbsp; ')}
+                    ${gmAnLineaHtml('Disminuciones:', 'an-down', D.disminuciones.map(gmAnMovHtml),
+                                    'sin disminuciones registradas.', ';&nbsp; ')}
+                    ${gmAnLineaHtml('Por volumen:', '',
+                                    D.volumen.map(x => esc(gmTitulo(x.delito))
+                                        + ' <strong>' + gmNf(x.v) + '</strong>'),
+                                    'sin movimientos registrados.')}
+                    ${gmAnLineaHtml('Alto impacto:', '', D.alto.map(gmAnMovHtml),
+                                    'sin registro en la hoja.')}
+                    ${aten}
+                    <div class="an-contexto"><b>Contexto:</b> ${ctx.join(' &nbsp;·&nbsp; ')}</div>
+                </div>`;
+        }
+
         function gmAnRender() {
-            const wa = document.getElementById('gmAnWa');
-            const pl = document.getElementById('gmAnPlano');
-            if (!wa || !pl) return;
-            if (!gmData) { wa.textContent = '—'; pl.textContent = '—'; return; }
+            const cont = document.getElementById('gmAnCuerpo');
+            if (!cont) return;
+            const nota = document.getElementById('gmAnNota');
+            if (!gmData) {
+                gmAnCache = null;
+                cont.innerHTML = '<p class="an-empty">Sin datos disponibles todavía.</p>';
+                return;
+            }
+            const mes = gmEstado.mes;
+            if (nota) nota.textContent = GM_MESES[mes] + ' ' + gmEstado.anioActual;
+
+            /* Bloqueo de meses sin captura. La hoja no distingue «cero casos» de
+               «todavía sin capturar»: los meses posteriores al corte llegan en
+               cero y redactar sobre ellos produciría un «-100 %» inventado. Se
+               declara el motivo en pantalla en vez de emitir un mensaje falso. */
+            if (gmData.ultimoMes >= 0 && mes > gmData.ultimoMes) {
+                gmAnCache = null;
+                cont.innerHTML = `<div class="mun-nota mun-nota-fuerte">
+                    <b>Sin captura para ${esc(GM_MESES[mes])} ${gmEstado.anioActual}.</b>
+                    El último mes con registro en la hoja es
+                    <b>${esc(GM_MESES[gmData.ultimoMes])}</b>. Los meses posteriores al corte
+                    llegan en cero y no son una caída: el análisis no se redacta para no
+                    publicar variaciones que no existen. Elige un mes con captura.</div>`;
+                return;
+            }
+
             try {
-                const ix = gmAnIndice(), mes = gmEstado.mes;
+                const ix = gmAnIndice();
                 const hay = r => gmData.ambitos.some(a => dsNorm(a) === dsNorm(r));
                 const dJal = hay('Jalisco') ? gmAnCalcula(ix, 'Jalisco', mes) : null;
                 const dAmg = hay('AMG')     ? gmAnCalcula(ix, 'AMG', mes)     : null;
-                wa.textContent = gmAnTexto(dJal, dAmg, mes, true);
-                pl.textContent = gmAnTexto(dJal, dAmg, mes, false);
-                const nota = document.getElementById('gmAnNota');
-                if (nota) nota.textContent = GM_MESES[mes] + ' ' + gmEstado.anioActual;
+                gmAnCache = { dJal: dJal, dAmg: dAmg, mes: mes };
+
+                const bloques = [dJal, dAmg].filter(Boolean)
+                    .map(D => gmAnBloqueHtml(D, mes)).join('');
+
+                let comparativo = '';
+                if (dJal && dAmg && dJal.total.mes > 0) {
+                    const cMes  = dAmg.total.mes / dJal.total.mes * 100;
+                    const cAcum = dJal.total.acumAct
+                        ? dAmg.total.acumAct / dJal.total.acumAct * 100 : 0;
+                    comparativo = `
+                        <div class="an-comparativo">
+                            <b>Jalisco vs. AMG:</b> el Área Metropolitana concentra el
+                            <strong>${cMes.toFixed(1)}%</strong> de los delitos del estado en el mes
+                            (${gmNf(dAmg.total.mes)} de ${gmNf(dJal.total.mes)}) y el
+                            <strong>${cAcum.toFixed(1)}%</strong> del acumulado
+                            enero-${GM_MESES[mes].toLowerCase()}.
+                        </div>`;
+                }
+
+                const acciones = `
+                    <div class="an-acciones">
+                        <button class="btn btn-primary" id="gmAnCopiarWa">Copiar para WhatsApp</button>
+                        <button class="btn btn-secondary" id="gmAnCopiarPlano">Copiar texto plano</button>
+                        <span id="gmAnStatus" class="an-copiado"></span>
+                    </div>`;
+
+                const ahora = new Date().toLocaleString('es-MX', {
+                    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                const pie = `
+                    <div class="an-fuente">
+                        Fuente: IIEG y Fiscalía del Estado de Jalisco, pestaña
+                        "${esc(SHEETS.GRAFICAS.nombre || 'IIEG')}". Datos consultados el ${ahora}.
+                        Elaborado por: CGES/DGAPP/AA.<br>
+                        El total corresponde a <b>incidencia total del IIEG</b> y no es la suma de los
+                        delitos desglosados. Homicidio doloso y feminicidio se contabilizan en
+                        <b>víctimas</b>; el resto, en carpetas de investigación. El análisis recorre
+                        todos los delitos de la hoja: el selector de delito no interviene.<br>
+                        Cifras preliminares: pueden variar por la hora de corte o por modificación
+                        en el registro de la información.
+                    </div>`;
+
+                cont.innerHTML = bloques + comparativo + acciones + pie;
+
+                const bWa = document.getElementById('gmAnCopiarWa');
+                if (bWa) bWa.addEventListener('click', () => gmAnCopiar(true));
+                const bPl = document.getElementById('gmAnCopiarPlano');
+                if (bPl) bPl.addEventListener('click', () => gmAnCopiar(false));
             } catch (err) {
                 console.error('[Gráficas Mensuales · análisis]', err);
-                wa.textContent = pl.textContent = 'No se pudo redactar el análisis: '
-                    + (err.message || err);
+                gmAnCache = null;
+                cont.innerHTML = '<p class="an-empty">No se pudo redactar el análisis: '
+                    + esc(err.message || String(err)) + '</p>';
             }
         }
 
         /* Mismo patrón probado en el Reporte Semanal y en Desaparecidos, con
            respaldo para navegadores sin API de portapapeles. */
         function gmAnCopiar(wa) {
-            const el = document.getElementById(wa ? 'gmAnWa' : 'gmAnPlano');
-            const st = document.getElementById(wa ? 'gmAnStatusWa' : 'gmAnStatusPlano');
-            if (!el) return;
-            const texto = el.textContent || '';
+            const st = document.getElementById('gmAnStatus');
+            const aviso = (t) => { if (st) { st.textContent = t; setTimeout(() => st.textContent = '', 2500); } };
+            if (!gmAnCache) { aviso('⚠️ No hay análisis que copiar'); return; }
+            const texto = gmAnTexto(gmAnCache.dJal, gmAnCache.dAmg, gmAnCache.mes, wa);
             const etq = wa ? 'Copiado para WhatsApp' : 'Copiado en texto plano';
-            const ok  = () => { if (st) { st.textContent = '✅ ' + etq; setTimeout(() => st.textContent = '', 2500); } };
-            const err = () => { if (st) { st.textContent = '❌ No se pudo copiar'; setTimeout(() => st.textContent = '', 2500); } };
+            const ok  = () => aviso('✅ ' + etq);
+            const err = () => aviso('❌ No se pudo copiar');
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(texto).then(ok).catch(err);
             } else {
