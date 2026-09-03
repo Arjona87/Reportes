@@ -1022,6 +1022,14 @@
             .gm-lam-mapa { height: 420px; }
         }
 
+        /* Análisis del mes. Prefijo propio: no toca las reglas de munComp-*. */
+        .gm-an-h { font-size: 12.5px; font-weight: 700; letter-spacing: .3px;
+            text-transform: uppercase; color: var(--muted); margin: 18px 0 4px; }
+        .gm-an-txt { white-space: pre-wrap; word-break: break-word;
+            font-family: inherit; font-size: 13px; line-height: 1.62; color: inherit;
+            background: rgba(127,127,127,.07); border: 1px solid rgba(127,127,127,.26);
+            border-radius: 10px; padding: 14px 16px; margin: 6px 0 10px; }
+
         .gm-mapa-icono { background: none; border: 0; }
         .gm-mapa-icono svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
         #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
@@ -2381,8 +2389,8 @@
                     </span>
                     <label class="mun-et" for="gmMes">Mes de corte</label>
                     <select id="gmMes"></select>
-                    <button class="btn-sec btn-acento" id="gmPptx">Generar reporte</button>
-                    <button class="btn-sec" id="gmPptxTodos" title="Un mazo con todos los delitos">Reporte completo</button>
+                    <button class="btn-sec btn-acento" id="gmPptxJal">Generar Reporte Jalisco</button>
+                    <button class="btn-sec btn-acento" id="gmPptxAmg">Generar Reporte AMG</button>
                     <span class="panel-nota" style="margin-left:auto" id="gmResumen">—</span>
                 </div>
                 <div id="gmCuerpo">
@@ -2454,6 +2462,35 @@
                     <div id="gmMapaDiag" style="margin-top:10px"></div>
                 </details>
                 <div class="munComp-pie" id="gmMapaPie"></div>
+            </div>
+        </section>
+
+        <section id="gmAnalisis">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Análisis del mes</h2>
+                <span class="panel-nota" id="gmAnNota">—</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo">
+                <div class="mun-intro">
+                    <span class="mun-kicker">Jalisco y AMG · sigue al selector de mes de corte</span>
+                    <p>Mensaje completo de los <b>dos ámbitos</b>, en dos versiones: la de WhatsApp
+                       con asteriscos y la de texto plano. El selector de delito no interviene:
+                       el análisis recorre todos los delitos de la hoja.</p>
+                </div>
+                <p class="gm-an-h">Versión WhatsApp</p>
+                <pre class="gm-an-txt" id="gmAnWa">—</pre>
+                <div class="an-acciones">
+                    <button class="btn btn-primary" id="gmAnCopiarWa">Copiar para WhatsApp</button>
+                    <span id="gmAnStatusWa" class="an-copiado"></span>
+                </div>
+                <p class="gm-an-h">Versión texto plano</p>
+                <pre class="gm-an-txt" id="gmAnPlano">—</pre>
+                <div class="an-acciones">
+                    <button class="btn btn-secondary" id="gmAnCopiarPlano">Copiar texto plano</button>
+                    <span id="gmAnStatusPlano" class="an-copiado"></span>
+                </div>
+                <div class="munComp-pie" id="gmAnPie"></div>
             </div>
         </section>
       </div><!-- /vistaGraficas -->
@@ -11876,9 +11913,6 @@
                     <div class="munComp-box munComp-box-2"><canvas id="gmG2"></canvas></div>
                     <div class="mun-lectura" id="gmL2">—</div>
                     <div class="munComp-pie" id="gmPie2"></div>
-                </div>
-                <div id="gmLienzo" style="position:fixed;left:-9999px;top:0">
-                    <canvas id="gmCx" width="1700" height="620"></canvas>
                 </div>`;
             gmMontado = true;
         }
@@ -12041,131 +12075,27 @@
             const sm = document.getElementById('gmMedida');
             if (sm) sm.addEventListener('change', e => { gmEstado.medida = e.target.value; gmRender(); });
             const mes = document.getElementById('gmMes');
-            if (mes) mes.addEventListener('change', e => { gmEstado.mes = +e.target.value; gmRender(); });
-            const btn = document.getElementById('gmPptx');
-            if (btn) btn.addEventListener('click', gmPptx);
-            const btnT = document.getElementById('gmPptxTodos');
-            if (btnT) btnT.addEventListener('click', e => {
-                e.target.disabled = true;
-                e.target.textContent = 'Generando…';
-                gmPptxMazo();
+            if (mes) mes.addEventListener('change', e => {
+                gmEstado.mes = +e.target.value;
+                gmRender();
+                gmAnRender();
             });
-        }
-
-        /* --------------------- reporte PPTX --------------------- */
-        function gmImagen(cfg, alto) {
-            const cx = document.getElementById('gmCx');
-            if (!cx) return null;
-            cx.width = 1700; cx.height = alto || 620;
-            const ctx = cx.getContext('2d');
-            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, cx.width, cx.height);
-            const c = { type: cfg.type, data: cfg.data, plugins: cfg.plugins,
-                        options: Object.assign({}, cfg.options, { responsive: false, animation: false }) };
-            const ch = new Chart(cx, c);
-            ch.update('none');
-            const url = cx.toDataURL('image/png', 1);
-            ch.destroy();
-            return url;
-        }
-        async function gmPptx() {
-            const btn = document.getElementById('gmPptx');
-            const rotulo = btn ? btn.textContent : '';
-            if (btn) { btn.disabled = true; btn.textContent = 'Generando…'; }
-            try {
-                await fisCargarLibs();
-                if (typeof PptxGenJS === 'undefined')
-                    throw new Error('no se pudo cargar la librería de PowerPoint');
-                const E = gmEstado;
-                const mesTxt = GM_MESES[E.mes], mesLow = mesTxt.toLowerCase();
-                const etqMedida = gmEtiquetaMedida(E.medida);
-                const acum = gmAcumulados(), act = acum[acum.length - 1];
-                const serie = gmSerieMostrada();
-                const promMes = serie.length ? serie.reduce((a, b) => a + b, 0) / serie.length : 0;
-                const promAcum = acum.length ? acum.reduce((x, y) => x + y, 0) / acum.length : 0;
-                const img1 = gmImagen(gmCfg1(), 620), img2 = gmImagen(gmCfg2(), 520);
-
-                const pptx = new PptxGenJS();
-                pptx.layout = 'LAYOUT_16x9';
-                pptx.author = 'CGES / DGAPP / AA';
-                pptx.company = 'Coordinación General Estratégica de Seguridad · Gobierno de Jalisco';
-                const PIE = 'Fuente: IIEG y Fiscalía del Estado de Jalisco. Cifras preliminares: pueden '
-                    + 'variar por la hora de corte o por modificación en el registro de la información.';
-                const barraPie = sl => {
-                    sl.addShape(pptx.ShapeType.rect, { x: 0, y: 5.32, w: '100%', h: 0.31, fill: { color: '5B6470' } });
-                    sl.addText(PIE, { x: 0.15, y: 5.35, w: 8.2, h: 0.26, fontSize: 7, color: 'FFFFFF', fontFace: 'Arial' });
-                    sl.addText('CGES/DGAPP/AA', { x: 8.35, y: 5.35, w: 1.5, h: 0.26, fontSize: 7,
-                        color: 'FFFFFF', align: 'right', fontFace: 'Arial' });
-                };
-                const nCol = E.anios.length, ancho = 5.6;
-                const filas = [
-                    E.anios.map(y => ({ text: String(y), options: {
-                        fill: { color: y >= E.anioActual - 1 ? '43A047' : '1F2C9B' },
-                        color: 'FFFFFF', bold: true, align: 'center', fontSize: 9 } })),
-                    acum.map(v => ({ text: gmNf(v), options: { align: 'center', bold: true, fontSize: 10 } })),
-                    E.anios.map((y, i) => {
-                        if (i === nCol - 1) return { text: '', options: {} };
-                        if (!acum[i]) return { text: 'n/d', options: { align: 'center', fontSize: 9 } };
-                        const p = (act - acum[i]) / acum[i] * 100;
-                        return { text: (p > 0 ? '+' : '') + p.toFixed(1) + '%', options: {
-                            align: 'center', bold: true, fontSize: 9, color: p < 0 ? '43A047' : 'E53935' } };
-                    })
-                ];
-                const opcTabla = { x: 4.1, y: 0.46, w: ancho, colW: Array(nCol).fill(ancho / nCol),
-                    border: { type: 'solid', color: 'FFFFFF', pt: 1 }, fontFace: 'Arial' };
-                const cabTabla = { x: 4.1, y: 0.2, w: ancho, h: 0.24, fontSize: 11, bold: true,
-                    align: 'center', color: '111111', fontFace: 'Arial' };
-
-                const p0 = pptx.addSlide();
-                p0.background = { color: 'EEF1F5' };
-                p0.addText('Coordinación de Seguridad', { x: 0.9, y: 1.9, w: 8.2, h: 0.8,
-                    fontSize: 34, bold: true, color: '1F2C9B', fontFace: 'Arial' });
-                p0.addText('GOBIERNO DE JALISCO', { x: 0.95, y: 2.66, w: 8, h: 0.4,
-                    fontSize: 14, bold: true, color: '1F2C9B', charSpacing: 2, fontFace: 'Arial' });
-                p0.addText([{ text: 'Gráficas mensuales\n', options: { fontSize: 26, bold: true } },
-                            { text: E.region.toUpperCase() + '\n', options: { fontSize: 22, bold: true } },
-                            { text: mesTxt + ' ' + E.anioActual, options: { fontSize: 18 } }],
-                    { x: 0.9, y: 3.5, w: 8.2, h: 1.6, color: '1F2C9B', fontFace: 'Arial' });
-                p0.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
-
-                const lamina = (titulo, sub, img, prom, etqProm, y, alto) => {
-                    const sl = pptx.addSlide();
-                    sl.background = { color: 'FFFFFF' };
-                    sl.addText(titulo, { x: 0.35, y: 0.16, w: 3.6, h: 0.6, fontSize: 21, bold: true,
-                        color: '111111', fontFace: 'Arial' });
-                    sl.addText(sub, { x: 0.38, y: 0.76, w: 3.6, h: 0.28, fontSize: 11, bold: true,
-                        color: '1F2C9B', fontFace: 'Arial' });
-                    sl.addText(etqMedida, { x: 0.38, y: 1.04, w: 3.6, h: 0.24, fontSize: 10,
-                        color: '333333', fontFace: 'Arial' });
-                    sl.addText('Acumulado durante el periodo:  enero-' + mesLow, cabTabla);
-                    sl.addTable(filas, opcTabla);
-                    sl.addText(etqProm + ' = ' + gmNf1(prom), { x: 6.3, y: 1.32, w: 3.4, h: 0.32,
-                        fontSize: 10.5, align: 'center', color: '111111', fontFace: 'Arial',
-                        line: { color: '5B2C8D', width: 1.5 } });
-                    if (img) sl.addImage({ data: img, x: 0.3, y: y, w: 9.4, h: alto });
-                    barraPie(sl);
-                };
-                lamina(E.delito, E.region.toUpperCase(), img1, promMes,
-                       `Promedio mensual (${E.anioActual - 1}-${E.anioActual})`, 1.76, 3.42);
-                lamina(E.delito, 'ACUMULADO ENERO–' + mesTxt.toUpperCase(), img2, promAcum,
-                       `Promedio del acumulado (${E.anios[0]}-${E.anioActual})`, 1.80, 3.35);
-
-                const pf = pptx.addSlide();
-                pf.background = { color: 'EEF1F5' };
-                pf.addText('Coordinación de Seguridad', { x: 1.0, y: 2.4, w: 8, h: 0.8,
-                    fontSize: 32, bold: true, color: '1F2C9B', align: 'center', fontFace: 'Arial' });
-                pf.addText('GOBIERNO DE JALISCO', { x: 1.0, y: 3.15, w: 8, h: 0.4,
-                    fontSize: 14, bold: true, color: '1F2C9B', align: 'center', charSpacing: 2, fontFace: 'Arial' });
-                pf.addShape(pptx.ShapeType.rect, { x: 0, y: 5.35, w: '100%', h: 0.28, fill: { color: '5B6470' } });
-
-                const limpio = dsNorm(E.delito).replace(/[^A-Z0-9]+/g, '_');
-                await pptx.writeFile({ fileName:
-                    `Graficas_Mensuales_${limpio}_${dsNorm(E.region)}_${mesTxt.toUpperCase()}_${E.anioActual}.pptx` });
-            } catch (err) {
-                console.error('[Gráficas Mensuales]', err);
-                alert('No se pudo generar el reporte: ' + (err.message || err));
-            } finally {
-                if (btn) { btn.disabled = false; btn.textContent = rotulo; }
-            }
+            const bWa = document.getElementById('gmAnCopiarWa');
+            if (bWa) bWa.addEventListener('click', () => gmAnCopiar(true));
+            const bPl = document.getElementById('gmAnCopiarPlano');
+            if (bPl) bPl.addEventListener('click', () => gmAnCopiar(false));
+            /* Un botón por región: cada uno lanza el MISMO mazo, acotado a su
+               ámbito. El rótulo y el estado del botón se restituyen en el
+               `finally` de gmPptxMazo, que es quien conoce el desenlace. */
+            [['gmPptxJal', 'Jalisco'], ['gmPptxAmg', 'AMG']].forEach(par => {
+                const b = document.getElementById(par[0]);
+                if (!b) return;
+                b.addEventListener('click', () => {
+                    b.disabled = true;
+                    b.textContent = 'Generando…';
+                    gmPptxMazo(par[1]);
+                });
+            });
         }
 
         /* --------------------- carga --------------------- */
@@ -12200,7 +12130,9 @@
                 gmLlenaMedidas();
                 gmConecta();
                 gmRender();
+                gmAnRender();
                 observeReveal(document.getElementById('gmSeccion'));
+                observeReveal(document.getElementById('gmAnalisis'));
             } catch (err) {
                 console.error('[Gráficas Mensuales]', err);
                 if (cuerpo) cuerpo.innerHTML = `<div class="mun-nota mun-nota-fuerte">
@@ -12230,6 +12162,220 @@
            delitos de Jalisco, para validar el formato sin esperar a las 42
            láminas. Basta ponerlo en false para producir el mazo completo.
            ===================================================================== */
+
+
+        /* =====================================================================
+           ANÁLISIS DEL MES   (prefijo gmAn*)
+           =====================================================================
+           Redacta el mensaje que se envía por WhatsApp, con los DOS ámbitos
+           siempre: Jalisco primero y AMG después. No depende del selector de
+           delito, solo del mes de corte.
+
+           El total del mes se toma de «INCIDENCIA TOTAL» TAL CUAL viene del
+           IIEG. No es la suma de los delitos desglosados —la hoja incluye
+           delitos que la tabla no detalla— y por eso las dos cifras no cuadran:
+           el descuadre se declara, no se corrige.
+
+           Homicidio doloso y feminicidio se cuentan en VÍCTIMAS; el resto en
+           carpetas de investigación. Es la misma regla del mazo, así que se
+           reutiliza `gmMedidaMazo` en vez de duplicar el criterio.
+           ===================================================================== */
+        const GM_AN_TOTAL   = 'INCIDENCIA TOTAL';
+        const GM_AN_ALTO    = ['HOMICIDIO DOLOSO', 'FEMINICIDIO', 'SECUESTRO', 'VIOLACION'];
+        const GM_AN_TOP     = 5;      // «Por volumen»: los cinco delitos con más casos del mes
+        const GM_AN_BASE    = 2021;   // año de referencia del comparativo largo
+
+        /* Un solo recorrido de `registros`: el análisis consulta decenas de
+           combinaciones y hacer un filtrado por cada una recorrería la hoja
+           entera otras tantas veces. */
+        function gmAnIndice() {
+            const ix = new Map();
+            gmData.registros.forEach(r => {
+                const k = dsNorm(r.ambito) + '|' + r.delito + '|'
+                        + r.dimension + '::' + r.categoria + '|' + r.anio;
+                let a = ix.get(k);
+                if (!a) { a = new Array(12).fill(0); ix.set(k, a); }
+                a[r.mes] += r.cantidad;
+            });
+            return ix;
+        }
+        const GM_AN_CERO = new Array(12).fill(0);
+        function gmAnSerie(ix, region, delito, anio) {
+            const medida = gmMedidaMazo(delito);
+            if (!medida) return GM_AN_CERO;
+            return ix.get(dsNorm(region) + '|' + delito + '|' + medida + '|' + anio) || GM_AN_CERO;
+        }
+
+        function gmAnCalcula(ix, region, mes) {
+            const anios = gmData.anios;
+            const act = anios[anios.length - 1], ant = act - 1;
+            /* En enero el «mes anterior» es diciembre del año pasado: usar el
+               índice -1 devolvería `undefined` y la variación saldría falsa. */
+            const mesP = mes === 0 ? 11 : mes - 1;
+            const anioP = mes === 0 ? ant : act;
+
+            const val  = (d, a, m) => gmAnSerie(ix, region, d, a)[m] || 0;
+            const acum = (d, a) => gmAnSerie(ix, region, d, a).slice(0, mes + 1)
+                                     .reduce((x, y) => x + y, 0);
+
+            const serieAnt = gmAnSerie(ix, region, GM_AN_TOTAL, ant);
+            const serieAct = gmAnSerie(ix, region, GM_AN_TOTAL, act);
+            const mesesAct = mes + 1;
+
+            const total = {
+                mes:      val(GM_AN_TOTAL, act, mes),
+                mesPrev:  val(GM_AN_TOTAL, anioP, mesP),
+                mesAnual: val(GM_AN_TOTAL, ant, mes),
+                promAnt:  serieAnt.reduce((x, y) => x + y, 0) / 12,
+                promAct:  serieAct.slice(0, mesesAct).reduce((x, y) => x + y, 0) / mesesAct,
+                acumAct:  acum(GM_AN_TOTAL, act),
+                acumAnt:  acum(GM_AN_TOTAL, ant),
+                acumBase: acum(GM_AN_TOTAL, GM_AN_BASE)
+            };
+
+            const subs = gmDelitosMazo().map(d => {
+                const v = val(d, act, mes), vP = val(d, anioP, mesP);
+                return { delito: d, v: v, vPrev: vP, delta: v - vP };
+            });
+
+            const mov = subs.filter(x => x.delta !== 0);
+            return {
+                region: region, act: act, ant: ant, anioPrev: anioP, mesPrev: mesP,
+                total: total, subs: subs,
+                aumentos:      mov.filter(x => x.delta > 0).sort((a, b) => b.delta - a.delta),
+                disminuciones: mov.filter(x => x.delta < 0).sort((a, b) => a.delta - b.delta),
+                volumen:       subs.slice().sort((a, b) => b.v - a.v).slice(0, GM_AN_TOP),
+                alto:          GM_AN_ALTO
+                                 .map(n => subs.find(x => dsNorm(x.delito) === n))
+                                 .filter(Boolean)
+            };
+        }
+
+        /* --------------------- redacción --------------------- */
+        const gmAnPctN = p => (p > 0 ? '+' : '') + p.toFixed(1) + ' %';
+        const gmAnFlecha = d => d > 0 ? '▲' : (d < 0 ? '▼' : '=');
+        /* Cuando el mes anterior es cero no hay porcentaje que calcular: se
+           dice «pasa de 0 a N». Dividir entre cero produciría un infinito o un
+           «+100 %» que no significa nada. */
+        function gmAnMov(x) {
+            const n = gmTitulo(x.delito);
+            if (!x.vPrev) return n + ': pasa de 0 a ' + gmNf(x.v);
+            const p = (x.v - x.vPrev) / x.vPrev * 100;
+            return n + ': ' + gmNf(x.vPrev) + ' → ' + gmNf(x.v)
+                 + ' (' + gmAnPctN(p) + ')';
+        }
+        function gmAnVs(a, b) {
+            if (!b) return b === a ? 'sin cambio' : 'sin base comparable';
+            return gmAnPctN((a - b) / b * 100);
+        }
+
+        function gmAnBloque(D, mes, neg) {
+            const L = [];
+            const mesTxt = GM_MESES[mes].toUpperCase();
+            const mesLow = GM_MESES[mes].toLowerCase();
+            const T = D.total;
+            const dTot = T.mes - T.mesPrev;
+
+            L.push(neg(D.region + '.'));
+            L.push(neg(gmNf(T.mes) + ' delitos totales') + ' en ' + mesTxt + ' ' + D.act
+                 + ' (' + gmAnFlecha(dTot) + ' ' + gmAnVs(T.mes, T.mesPrev) + ' vs mes anterior).');
+
+            L.push(neg('Aumentos:') + ' ' + (D.aumentos.length
+                ? D.aumentos.map(gmAnMov).join(' · ') + '.' : 'ninguno.'));
+            L.push(neg('Disminuciones:') + ' ' + (D.disminuciones.length
+                ? D.disminuciones.map(gmAnMov).join(' · ') + '.' : 'ninguna.'));
+            L.push(neg('Por volumen:') + ' ' + D.volumen
+                .map(x => gmTitulo(x.delito) + ' ' + gmNf(x.v)).join(' · ') + '.');
+            L.push(neg('Alto impacto:') + ' ' + (D.alto.length
+                ? D.alto.map(gmAnMov).join(' · ') + '.' : 'sin registro en la hoja.'));
+
+            /* Lo que el titular puede tapar: delitos de alto impacto que se
+               mueven en dirección CONTRARIA al total. */
+            const contra = D.alto.filter(x => dTot <= 0 ? x.delta > 0 : x.delta < 0);
+            if (contra.length) {
+                L.push(neg('Atención:') + ' mientras el total '
+                    + (dTot <= 0 ? 'baja' : 'sube') + ', '
+                    + contra.map(gmAnMov).join('; ') + '.');
+            }
+
+            L.push(neg('Contexto:') + ' vs ' + mesLow + ' ' + D.ant + ' ('
+                + gmNf(T.mesAnual) + '): ' + gmAnVs(T.mes, T.mesAnual)
+                + '. Promedio mensual ' + D.ant + ': ' + gmNf1(T.promAnt)
+                + '; promedio mensual ' + D.act + ' (enero-' + mesLow + '): ' + gmNf1(T.promAct)
+                + '. Acumulado enero-' + mesLow + ' ' + D.act + ': ' + gmNf(T.acumAct)
+                + ', ' + gmAnVs(T.acumAct, T.acumAnt) + ' vs ' + D.ant
+                + ' y ' + gmAnVs(T.acumAct, T.acumBase) + ' vs ' + GM_AN_BASE + '.');
+            return L.join('\n');
+        }
+
+        function gmAnTexto(dJal, dAmg, mes, wa) {
+            const neg = t => wa ? '*' + t + '*' : t;
+            const mesLow = GM_MESES[mes].toLowerCase();
+            const partes = [];
+            if (dJal) partes.push(gmAnBloque(dJal, mes, neg));
+            if (dAmg) partes.push(gmAnBloque(dAmg, mes, neg));
+
+            if (dJal && dAmg) {
+                const cMes  = dJal.total.mes ? dAmg.total.mes / dJal.total.mes * 100 : 0;
+                const cAcum = dJal.total.acumAct ? dAmg.total.acumAct / dJal.total.acumAct * 100 : 0;
+                partes.push(neg('Concentración del AMG:') + ' ' + cMes.toFixed(1)
+                    + ' % del total del mes y ' + cAcum.toFixed(1)
+                    + ' % del acumulado enero-' + mesLow + '.');
+            }
+            partes.push('Nota: homicidio doloso y feminicidio se contabilizan en VÍCTIMAS; '
+                + 'el resto de los delitos, en carpetas de investigación. El total corresponde '
+                + 'a incidencia total del IIEG y no es la suma de los delitos desglosados.');
+            partes.push('Fuente: IIEG y Fiscalía del Estado de Jalisco. Cifras preliminares: '
+                + 'pueden variar por la hora de corte o por modificación en el registro de la '
+                + 'información. Elaborado por CGES/DGAPP/AA.');
+            return partes.join('\n\n');
+        }
+
+        /* --------------------- pintado y copiado --------------------- */
+        function gmAnRender() {
+            const wa = document.getElementById('gmAnWa');
+            const pl = document.getElementById('gmAnPlano');
+            if (!wa || !pl) return;
+            if (!gmData) { wa.textContent = '—'; pl.textContent = '—'; return; }
+            try {
+                const ix = gmAnIndice(), mes = gmEstado.mes;
+                const hay = r => gmData.ambitos.some(a => dsNorm(a) === dsNorm(r));
+                const dJal = hay('Jalisco') ? gmAnCalcula(ix, 'Jalisco', mes) : null;
+                const dAmg = hay('AMG')     ? gmAnCalcula(ix, 'AMG', mes)     : null;
+                wa.textContent = gmAnTexto(dJal, dAmg, mes, true);
+                pl.textContent = gmAnTexto(dJal, dAmg, mes, false);
+                const nota = document.getElementById('gmAnNota');
+                if (nota) nota.textContent = GM_MESES[mes] + ' ' + gmEstado.anioActual;
+            } catch (err) {
+                console.error('[Gráficas Mensuales · análisis]', err);
+                wa.textContent = pl.textContent = 'No se pudo redactar el análisis: '
+                    + (err.message || err);
+            }
+        }
+
+        /* Mismo patrón probado en el Reporte Semanal y en Desaparecidos, con
+           respaldo para navegadores sin API de portapapeles. */
+        function gmAnCopiar(wa) {
+            const el = document.getElementById(wa ? 'gmAnWa' : 'gmAnPlano');
+            const st = document.getElementById(wa ? 'gmAnStatusWa' : 'gmAnStatusPlano');
+            if (!el) return;
+            const texto = el.textContent || '';
+            const etq = wa ? 'Copiado para WhatsApp' : 'Copiado en texto plano';
+            const ok  = () => { if (st) { st.textContent = '✅ ' + etq; setTimeout(() => st.textContent = '', 2500); } };
+            const err = () => { if (st) { st.textContent = '❌ No se pudo copiar'; setTimeout(() => st.textContent = '', 2500); } };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(texto).then(ok).catch(err);
+            } else {
+                const ta = document.createElement('textarea');
+                ta.value = texto;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); ok(); } catch (e) { err(); }
+                document.body.removeChild(ta);
+            }
+        }
 
         /* =====================================================================
            MAPA MENSUAL DE INCIDENCIA   (prefijo gmMapa*)
@@ -12724,8 +12870,31 @@
             }).join(' ');
         }
 
-        async function gmPptxMazo() {
-            const btn = document.getElementById('gmPptxTodos');
+        /* Series guía para las gráficas del PPTX.
+           `trendlineType` de pptxgenjs NO llega al archivo: la propiedad se
+           acepta sin error pero el XML sale sin la línea. Por eso la tendencia
+           se calcula aquí por mínimos cuadrados y se dibuja como una serie de
+           línea más, igual que el promedio. */
+        function gmSeriesGuia(labels, valores) {
+            let sx = 0, sy = 0, sxy = 0, sxx = 0, k = 0;
+            valores.forEach((v, i) => { if (v == null) return; sx += i; sy += v; sxy += i * v; sxx += i * i; k++; });
+            const prom = k ? sy / k : 0;
+            let tend = null;
+            if (k >= 3) {
+                const m = (k * sxy - sx * sy) / (k * sxx - sx * sx), b = (sy - m * sx) / k;
+                tend = valores.map((_, i) => Math.max(0, m * i + b));
+            }
+            const out = [];
+            if (tend) out.push({ name: 'Tendencia', labels: labels, values: tend });
+            out.push({ name: 'Promedio', labels: labels, values: new Array(valores.length).fill(prom) });
+            return { series: out, prom: prom, hayTend: !!tend };
+        }
+
+        async function gmPptxMazo(regionUnica) {
+            /* Una región por invocación. Se normaliza para que el mazo no
+               dependa de cómo venga escrita la etiqueta del botón. */
+            const region1 = (dsNorm(regionUnica) === 'AMG') ? 'AMG' : 'Jalisco';
+            const btn = document.getElementById(region1 === 'AMG' ? 'gmPptxAmg' : 'gmPptxJal');
             const rotulo = btn ? btn.textContent : '';
             try {
                 await fisCargarLibs();
@@ -12733,12 +12902,17 @@
                     throw new Error('no se pudo cargar la librería de PowerPoint');
                 /* El mapa se carga solo al llegar a su sección. Si el usuario nunca
                    bajó hasta ahí, el mazo saldría sin mapas: se fuerza la descarga. */
-                if (btn) btn.textContent = 'Cargando mapas…';
-                await gmMapaCargar(true);
+                /* Solo el mazo del AMG lleva láminas de mapa: forzar la
+                   descarga del georreferenciado en el de Jalisco costaría 2 MB
+                   que ninguna lámina va a usar. */
+                if (region1 === 'AMG') {
+                    if (btn) btn.textContent = 'Cargando mapas…';
+                    await gmMapaCargar(true);
+                }
                 const E = gmEstado;
                 const mes = E.mes, mesTxt = GM_MESES[mes], mesLow = mesTxt.toLowerCase();
                 const delitos = gmDelitosMazo();
-                const regiones = GM_PPTX_PRUEBA ? ['Jalisco'] : GM_REGIONES_MAZO;
+                const regiones = [region1];
                 if (!delitos.length) throw new Error('no hay delitos que graficar');
 
                 const pptx = new PptxGenJS();
@@ -12844,23 +13018,46 @@
                             { x: 8.10, y: 1.66, w: 1.75, h: 0.44, fontSize: 9, align: 'center',
                               color: GM_MORADO, fontFace: 'Arial',
                               line: { color: GM_MORADO, width: 1.25 } });
-                        s1.addChart(pptx.ChartType.bar, [{
-                            name: titulo, labels: etqMeses(D.act), values: D.serie
-                        }], {
+                        /* Barras + dos líneas calculadas. El promedio se toma de
+                           `D.prom`, el MISMO valor que rotula el recuadro morado
+                           de arriba: recalcularlo aparte abriría la puerta a que
+                           el número y la línea dejaran de coincidir. */
+                        const etqM = etqMeses(D.act);
+                        const guia1 = gmSeriesGuia(etqM, D.serie);
+                        const linea1 = [];
+                        if (guia1.hayTend) linea1.push(guia1.series[0]);
+                        linea1.push({ name: 'Promedio', labels: etqM,
+                                      values: D.serie.map(() => D.prom) });
+                        s1.addChart([
+                            {
+                                type: pptx.ChartType.bar,
+                                data: [{ name: titulo, labels: etqM, values: D.serie }],
+                                options: {
+                                    barDir: 'col', barGapWidthPct: 20,
+                                    /* Un color por barra: azul el año anterior,
+                                       verde el actual, como en la plantilla. */
+                                    chartColors: D.serie.map((v, i) => i < 12 ? GM_AZUL : GM_VERDE),
+                                    varyColors: true,
+                                    showValue: true, dataLabelColor: '000000',
+                                    dataLabelFontSize: 10, dataLabelFontBold: true,
+                                    dataLabelPosition: 'outEnd'
+                                }
+                            },
+                            {
+                                type: pptx.ChartType.line,
+                                data: linea1,
+                                options: {
+                                    chartColors: guia1.hayTend ? [GM_VERDE_T, GM_MORADO] : [GM_MORADO],
+                                    lineSize: 2, lineDash: 'dash', lineSmooth: false,
+                                    lineDataSymbol: 'none', showValue: false
+                                }
+                            }
+                        ], {
                             x: 0.25, y: 1.69, w: 9.51, h: 3.50,
-                            barDir: 'col', barGapWidthPct: 20,
-                            /* Un color por barra: azul el año anterior, verde el
-                               actual, como en la plantilla. */
-                            chartColors: D.serie.map((v, i) => i < 12 ? GM_AZUL : GM_VERDE),
-                            varyColors: true,
                             showLegend: false, showTitle: false,
-                            showValue: true, dataLabelColor: '000000',
-                            dataLabelFontSize: 10, dataLabelFontBold: true,
-                            dataLabelPosition: 'outEnd',
                             catAxisLabelFontSize: 10, catAxisLabelColor: '404040',
                             valAxisHidden: true, valGridLine: { style: 'none' },
-                            catGridLine: { style: 'none' },
-                            trendlineType: 'linear', trendlineColor: GM_VERDE_T
+                            catGridLine: { style: 'none' }
                         });
                         pie(s1);
 
@@ -12882,22 +13079,43 @@
                            universos distintos dentro de la misma lámina. */
                         const nA = Math.min(6, D.anios.length);
                         const aniosG = D.anios.slice(-nA), acumG = D.acum.slice(-nA);
-                        s2.addChart(pptx.ChartType.bar, [{
-                            name: 'Acumulado enero-' + mesLow,
-                            labels: aniosG.map(String), values: acumG
-                        }], {
+                        /* Promedio sobre los SEIS acumulados mostrados, que es
+                           `promA`: el mismo que rotula el recuadro morado. */
+                        const etqA = aniosG.map(String);
+                        const guia2 = gmSeriesGuia(etqA, acumG);
+                        const linea2 = [];
+                        if (guia2.hayTend) linea2.push(guia2.series[0]);
+                        linea2.push({ name: 'Promedio', labels: etqA,
+                                      values: acumG.map(() => promA) });
+                        s2.addChart([
+                            {
+                                type: pptx.ChartType.bar,
+                                data: [{ name: 'Acumulado enero-' + mesLow,
+                                         labels: etqA, values: acumG }],
+                                options: {
+                                    barDir: 'col', barGapWidthPct: 60,
+                                    chartColors: aniosG.map(y => y === D.act ? GM_VERDE : GM_AZUL),
+                                    varyColors: true,
+                                    showValue: true, dataLabelColor: '000000',
+                                    dataLabelFontSize: 11, dataLabelFontBold: true,
+                                    dataLabelPosition: 'outEnd'
+                                }
+                            },
+                            {
+                                type: pptx.ChartType.line,
+                                data: linea2,
+                                options: {
+                                    chartColors: guia2.hayTend ? [GM_VERDE_T, GM_MORADO] : [GM_MORADO],
+                                    lineSize: 2, lineDash: 'dash', lineSmooth: false,
+                                    lineDataSymbol: 'none', showValue: false
+                                }
+                            }
+                        ], {
                             x: 0.60, y: 1.75, w: 8.80, h: 3.42,
-                            barDir: 'col', barGapWidthPct: 60,
-                            chartColors: aniosG.map(y => y === D.act ? GM_VERDE : GM_AZUL),
-                            varyColors: true,
                             showLegend: false, showTitle: false,
-                            showValue: true, dataLabelColor: '000000',
-                            dataLabelFontSize: 11, dataLabelFontBold: true,
-                            dataLabelPosition: 'outEnd',
                             catAxisLabelFontSize: 12, catAxisLabelColor: '333333',
                             valAxisHidden: true, valGridLine: { style: 'none' },
-                            catGridLine: { style: 'none' },
-                            trendlineType: 'linear', trendlineColor: GM_VERDE_T
+                            catGridLine: { style: 'none' }
                         });
                         pie(s2);
 
@@ -12917,7 +13135,7 @@
 
                 const suf = GM_PPTX_PRUEBA ? '_PRUEBA' : '';
                 await pptx.writeFile({ fileName:
-                    `Graficas_Mensuales_${gmData.anios[gmData.anios.length - 1]}_${mesTxt.toUpperCase()}${suf}.pptx` });
+                    `Graficas_Mensuales_${gmData.anios[gmData.anios.length - 1]}_${dsNorm(region1)}_${mesTxt.toUpperCase()}${suf}.pptx` });
             } catch (err) {
                 console.error('[Gráficas Mensuales · mazo]', err);
                 alert('No se pudo generar el reporte: ' + (err.message || err));
