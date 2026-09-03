@@ -11678,6 +11678,36 @@
         const GM_MES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
         const GM_REGIONES = ['Jalisco', 'AMG', 'Interior'];
 
+        /* Primer año visible en TODA la vista: gráficas, tablas, análisis y PPTX.
+           El corte se aplica una sola vez, al leer la hoja, para que ninguna
+           consulta posterior pueda contradecirlo. Los años anteriores siguen en
+           el libro; simplemente no se cargan. */
+        const GM_ANIO_MIN = 2021;
+        /* Fila de total del IIEG. NO es la suma de los delitos desglosados: la
+           hoja incluye delitos que la vista no detalla, así que sumarlos daría
+           una cifra distinta. Se toma tal cual viene. */
+        const GM_TOTAL_EST = 'INCIDENCIA TOTAL';
+        /* En el ámbito metropolitano la palabra «ESTATAL» contradice la lámina. */
+        function gmRotulo(delito, region) {
+            if (delito !== GM_TOTAL_EST) return delito;
+            return dsNorm(region) === 'AMG'
+                ? 'TOTAL INCIDENCIA DELICTIVA'
+                : 'TOTAL INCIDENCIA DELICTIVA ESTATAL';
+        }
+        /* El total encabeza el catálogo: es la cifra que se lee primero. */
+        function gmListaDelitos() {
+            if (!gmData) return [];
+            const ds = gmData.delitos.slice();
+            const i = ds.indexOf(GM_TOTAL_EST);
+            if (i > 0) { ds.splice(i, 1); ds.unshift(GM_TOTAL_EST); }
+            return ds;
+        }
+        function gmOpcionesDelito() {
+            gmOpciones('gmDelito',
+                gmListaDelitos().map(d => [d, gmRotulo(d, gmEstado.region)]),
+                gmEstado.delito);
+        }
+
         const gmNf  = v => (Number.isFinite(+v) ? Math.round(+v) : 0).toLocaleString('es-MX');
         const gmNf1 = v => (Number.isFinite(+v) ? +v : 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
         const gmPct = (a, b) => b ? (a / b * 100).toFixed(1) + ' %' : '0.0 %';
@@ -11719,12 +11749,16 @@
                     + '(Fecha, Ambito, Delito, Dimension, Categoria, Cantidad).');
 
             const registros = [];
-            const audit = { sinFecha: 0, sinCantidad: 0 };
+            const audit = { sinFecha: 0, sinCantidad: 0, previos: 0 };
             for (let f = 1; f < filas.length; f++) {
                 const r = filas[f];
                 if (!r || !r[iD]) continue;
                 const fe = gmFecha(r[iF]);
                 if (!fe) { audit.sinFecha++; continue; }
+                /* Corte de año. Se descarta aquí y no en cada consulta: un solo
+                   punto de verdad evita que una tabla muestre 2018 y la gráfica
+                   de al lado no. */
+                if (fe.anio < GM_ANIO_MIN) { audit.previos++; continue; }
                 const q = dsNum(r[iQ]);
                 if (q === null) { audit.sinCantidad++; continue; }
                 registros.push({
@@ -12105,7 +12139,7 @@
                             : (E.region === 'Interior' ? 'INTERIOR DEL ESTADO' : 'JALISCO');
 
             ['gmT1', 'gmT2'].forEach(id => {
-                const e = document.getElementById(id); if (e) e.textContent = E.delito;
+                const e = document.getElementById(id); if (e) e.textContent = gmRotulo(E.delito, E.region);
             });
             const s1 = document.getElementById('gmS1');
             if (s1) s1.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1)
@@ -12158,7 +12192,7 @@
             // ---- lecturas ----
             const act = acum[acum.length - 1], ref = acum[acum.length - 2];
             const varPct = ref ? (act - ref) / ref * 100 : null;
-            let l1 = `<b>${esc(E.delito)}</b> · ${esc(E.region)} · ${esc(etqMedida)}. ` +
+            let l1 = `<b>${esc(gmRotulo(E.delito, E.region))}</b> · ${esc(E.region)} · ${esc(etqMedida)}. ` +
                 `Promedio mensual del periodo mostrado: <b>${gmNf1(promMes)}</b>. ` +
                 `Acumulado enero–${mesLow} de ${E.anioActual}: <b>${gmNf(act)}</b>, ` +
                 (varPct === null ? `sin base comparable en ${E.anioActual - 1}.`
@@ -12198,7 +12232,7 @@
             const H3 = gmHistDatos(E.region, E.delito, E.medida, E.mes);
             const P3 = gmPromedioAnual(E.region, E.delito, E.medida, E.mes);
             const mesEfTxt = GM_MESES[P3.mesEf].toLowerCase();
-            const eT3 = document.getElementById('gmT3'); if (eT3) eT3.textContent = E.delito;
+            const eT3 = document.getElementById('gmT3'); if (eT3) eT3.textContent = gmRotulo(E.delito, E.region);
             const eS3 = document.getElementById('gmS3');
             if (eS3) eS3.innerHTML = regionTxt.charAt(0) + '<small>' + regionTxt.slice(1)
                 + ' · SERIE HISTÓRICA ' + (H3.anios.length ? H3.anios[0] : '') + '–' + E.anioActual + '</small>';
@@ -12214,6 +12248,17 @@
                 + `${P3.n} ${P3.n === 1 ? 'mes' : 'meses'}.`
                 + (P3.recortada ? ` ${GM_MESES[E.mes]} de ${E.anioActual} todavía no tiene captura y no se promedia.` : '');
             const eP3 = document.getElementById('gmPie3'); if (eP3) eP3.textContent = pie;
+
+            /* El total viene tal cual del IIEG. Decirlo evita la comparación
+               que nunca cuadra: la hoja incluye delitos que estas láminas no
+               detallan, así que sumar los desglosados da otra cifra. */
+            if (E.delito === GM_TOTAL_EST) {
+                ['gmC1', 'gmC2', 'gmC3'].forEach(id => {
+                    const e = document.getElementById(id); if (!e) return;
+                    e.innerHTML += ' Cifra tomada <b>tal cual</b> de la fila de incidencia '
+                        + 'total del IIEG: <b>no es la suma</b> de los delitos desglosados.';
+                });
+            }
 
             if (gmCh3) { try { gmCh3.destroy(); } catch (e) {} }
             const c3 = document.getElementById('gmG3');
@@ -12240,7 +12285,7 @@
             }
 
             const res = document.getElementById('gmResumen');
-            if (res) res.textContent = `${E.delito} · ${E.region} · ${etqMedida} · corte a ${mesTxt} ${E.anioActual}`;
+            if (res) res.textContent = `${gmRotulo(E.delito, E.region)} · ${E.region} · ${etqMedida} · corte a ${mesTxt} ${E.anioActual}`;
 
             const pieM = document.getElementById('gmMapaPie');
             if (pieM) pieM.textContent =
@@ -12287,6 +12332,9 @@
                 if (!b) return;
                 gmEstado.region = b.dataset.r;
                 b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+                /* El rótulo del total depende del ámbito: se vuelve a escribir
+                   el catálogo para que el selector no diga «ESTATAL» sobre AMG. */
+                gmOpcionesDelito();
                 gmRender();
             });
             const sd = document.getElementById('gmDelito');
@@ -12339,7 +12387,7 @@
                 E.medida = gmMedidaPorDefecto(E.delito);
                 if (gmData.ambitos.indexOf(E.region) < 0) E.region = gmData.ambitos[0];
 
-                gmOpciones('gmDelito', gmData.delitos, E.delito);
+                gmOpcionesDelito();
                 gmOpciones('gmMes', GM_MESES.map((m, i) => [i, m]), E.mes);
                 const reg = document.getElementById('gmRegion');
                 if (reg) {
@@ -12452,7 +12500,7 @@
                 acumBase: acum(GM_AN_TOTAL, GM_AN_BASE)
             };
 
-            const subs = gmDelitosMazo().map(d => {
+            const subs = gmDelitosDesglose().map(d => {
                 const v = val(d, act, mes), vP = val(d, anioP, mesP);
                 return { delito: d, v: v, vPrev: vP, delta: v - vP };
             });
@@ -13208,17 +13256,32 @@
                  porcentajes negativos de la tabla de seis años. */
               GM_AMBAR = 'FFC000';
 
-        function gmDelitosMazo() {
+        /* Delitos desglosados. Los agregados quedan fuera: sumarlos con los
+           demás contaría dos veces el mismo hecho. Es la lista que consume el
+           «Análisis del mes» para sus rankings. */
+        function gmDelitosDesglose() {
             if (!gmData) return [];
             let ds = gmData.delitos.filter(d =>
                 GM_AGREGADOS.indexOf(d) < 0 && GM_SIN_LAMINA.indexOf(d) < 0);
             if (GM_PPTX_PRUEBA) ds = ds.filter(d => GM_PPTX_PRUEBA_DELITOS.indexOf(d) >= 0);
             return ds;
         }
+        /* Delitos del mazo. El total va primero y con lámina propia, pero NO
+           entra en el desglose: en los rankings del análisis aplastaría a los
+           demás por ser la suma de todos ellos. */
+        function gmDelitosMazo() {
+            if (!gmData) return [];
+            const ds = gmDelitosDesglose();
+            return gmData.delitos.indexOf(GM_TOTAL_EST) >= 0 ? [GM_TOTAL_EST].concat(ds) : ds;
+        }
         /* Medida de cada delito para el mazo. Homicidio y feminicidio van en
            VÍCTIMAS: es la cifra que se reporta y la que trae la plantilla. */
         function gmMedidaMazo(delito) {
             const disp = gmData.medidas[delito] || [];
+            /* El total se cuenta en su propia medida agregada. Declararlo aquí
+               evita que dependa del orden accidental del catálogo. */
+            if (delito === GM_TOTAL_EST && disp.indexOf('Agregado::Incidencia total') >= 0)
+                return 'Agregado::Incidencia total';
             for (const p of ['Unidad::Víctimas', 'Total::Total', 'Fosas::Víctimas localizadas'])
                 if (disp.indexOf(p) >= 0) return p;
             return disp[0] || '';
@@ -13379,7 +13442,7 @@
                         if (!medida) continue;
                         const D = gmDatos(region, delito, medida, mes);
                         if (!D.acum.some(v => v > 0)) continue;   // sin datos: no se dibuja lámina vacía
-                        const titulo = gmTitulo(delito);
+                        const titulo = gmTitulo(gmRotulo(delito, region));
                         const filas = tablaSeis(D.anios, D.acum);
                         const cabeza = sl => {
                             sl.addText(titulo, { x: 0.25, y: 0.16, w: 7.4, h: 0.5,
