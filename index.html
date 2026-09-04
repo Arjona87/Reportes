@@ -1031,6 +1031,14 @@
         .gm-acum th { font-size: 10px; padding: 5px 2px; }
         .gm-acum td { font-size: 13px; padding: 4px 2px; }
         .gm-acum tr.pct td { font-size: 11.5px; }
+        /* Los porcentajes salían en negro: `.munComp-acum td { color:#111 }` gana
+           por especificidad a `.munComp-baja` / `.munComp-sube`. Se recupera el
+           color con los mismos hexadecimales del PPTX, solo en las tablas `gm`. */
+        .gm-acum tr.pct td.munComp-baja { color: #4EA72E; }
+        .gm-acum tr.pct td.munComp-sube { color: #FF0000; }
+        /* Promedio sin recuadro y en un solo renglón, como en la lámina. */
+        .gm-prom { border: 0; border-radius: 0; padding: 0; margin-top: 8px;
+            white-space: nowrap; text-align: right; }
         @media (max-width: 1180px) { .gm-caja { min-width: 0; width: 100%; margin-left: 0; } }
 
         /* Serie histórica mensual. La cabecera de esta lámina lleva DOS tablas:
@@ -11949,18 +11957,21 @@
             const act = anios.length ? anios[anios.length - 1] : null;
             const mesEf = gmMesEfectivo(mesCorte);
             const mapa = gmMapaMeses(region, delito, medida);
-            const labels = [], valores = [], anioDe = [], mesDe = [], etqEje = [];
+            const labels = [], valores = [], anioDe = [], mesDe = [], etqEje = [],
+                  inicial = [], cortes = [];
             anios.forEach(a => {
                 const hasta = (a === act) ? mesEf : 11;
                 for (let m = 0; m <= hasta; m++) {
+                    if (m === 0 && labels.length) cortes.push(labels.length);
                     labels.push(GM_MES_C[m] + ' ' + a);
                     valores.push(mapa[a + '-' + m] || 0);
                     anioDe.push(a); mesDe.push(m);
                     etqEje.push(m === 0 ? String(a) : '');
+                    inicial.push(GM_MES_C[m].charAt(0).toUpperCase());
                 }
             });
-            return { labels, valores, anioDe, mesDe, etqEje, anios, act, mesEf,
-                     recortada: mesEf < mesCorte };
+            return { labels, valores, anioDe, mesDe, etqEje, inicial, cortes,
+                     anios, act, mesEf, recortada: mesEf < mesCorte };
         }
         /* Tendencia por mínimos cuadrados. Se devuelve como SERIE CALCULADA, no
            como propiedad de la librería: `trendlineType` de pptxgenjs se acepta
@@ -12008,6 +12019,30 @@
 
         /* Etiqueta de dato rotada, cada N puntos. Con más de cien meses en el eje
            rotularlos todos sería ilegible: se rotula uno de cada tres. */
+        /* Separador vertical en cada enero. Sin él, con casi seis años en un solo
+           eje, no se distingue dónde termina un año y empieza el siguiente. Se
+           dibuja DETRÁS de las series para no tapar la línea ni los marcadores. */
+        const gmSepAnios = { id: 'gmSepAnios', beforeDatasetsDraw(ch) {
+            const cfg = (ch.options.plugins || {}).gmSepAnios;
+            if (!cfg || !cfg.enabled || !cfg.cortes || !cfg.cortes.length) return;
+            const ejeX = ch.scales.x, area = ch.chartArea;
+            if (!ejeX || !area) return;
+            const ctx = ch.ctx;
+            ctx.save();
+            ctx.strokeStyle = '#b9bed0';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            cfg.cortes.forEach(i => {
+                const x = ejeX.getPixelForValue(i) - (ejeX.width / ejeX.ticks.length) / 2;
+                if (x <= area.left || x >= area.right) return;
+                ctx.beginPath();
+                ctx.moveTo(x, area.top);
+                ctx.lineTo(x, area.bottom);
+                ctx.stroke();
+            });
+            ctx.restore();
+        }};
+
         const gmEtqRot = { id: 'gmEtqRot', afterDatasetsDraw(ch) {
             const cfg = (ch.options.plugins || {}).gmEtqRot;
             if (!cfg || !cfg.enabled) return;
@@ -12051,14 +12086,21 @@
                 options: { responsive: true, maintainAspectRatio: false, animation: false,
                     layout: { padding: { top: 40 } },
                     plugins: { legend: { display: false },
-                               gmEtqRot: { enabled: true, cada: 3 } },
+                               gmEtqRot: { enabled: true, cada: 3 },
+                               gmSepAnios: { enabled: true, cortes: H.cortes } },
                     scales: {
                         x: { grid: { display: false },
                              ticks: { autoSkip: false, maxRotation: 0, minRotation: 0,
-                                      font: { size: 11, weight: 'bold' }, color: '#555',
-                                      callback: (v, i) => H.etqEje[i] || '' } },
+                                      font: { size: 9 }, color: '#666',
+                                      /* Dos niveles: inicial del mes en todos los
+                                         puntos y el año, en negrita, bajo enero.
+                                         Con casi setenta meses la abreviatura de
+                                         tres letras se encimaría. */
+                                      callback: (v, i) => H.etqEje[i]
+                                        ? [H.inicial[i], H.etqEje[i]]
+                                        : H.inicial[i] } },
                         y: { display: false, beginAtZero: true, grace: '16%' } } },
-                plugins: [gmEtqRot] };
+                plugins: [gmEtqRot, gmSepAnios] };
         }
 
         /* --------------------- maquetado --------------------- */
@@ -12076,7 +12118,7 @@
                         <div class="munComp-caja gm-caja">
                             <div class="munComp-caja-t" id="gmCT1">—</div>
                             <table class="munComp-acum gm-acum" id="gmTabla1"></table>
-                            <div class="munComp-prom-w"><div class="munComp-prom" id="gmP1">—</div></div>
+                            <div class="munComp-prom-w"><div class="munComp-prom gm-prom" id="gmP1">—</div></div>
                         </div>
                     </div>
                     <div class="munComp-box"><canvas id="gmG1"></canvas></div>
@@ -12093,7 +12135,7 @@
                         <div class="munComp-caja gm-caja">
                             <div class="munComp-caja-t" id="gmCT2">—</div>
                             <table class="munComp-acum gm-acum" id="gmTabla2"></table>
-                            <div class="munComp-prom-w"><div class="munComp-prom" id="gmP2">—</div></div>
+                            <div class="munComp-prom-w"><div class="munComp-prom gm-prom" id="gmP2">—</div></div>
                         </div>
                     </div>
                     <div class="munComp-box munComp-box-2"><canvas id="gmG2"></canvas></div>
@@ -12178,9 +12220,9 @@
                 if (e) e.textContent = `Acumulado durante el periodo:  enero-${mesLow}`;
             });
             const e1 = document.getElementById('gmP1');
-            if (e1) e1.innerHTML = `Promedio mensual (${E.anioActual - 1}-${E.anioActual})<br>= ${gmNf1(promMes)}`;
+            if (e1) e1.innerHTML = `Promedio mensual (${E.anioActual - 1}-${E.anioActual}) = ${gmNf1(promMes)}`;
             const e2 = document.getElementById('gmP2');
-            if (e2) e2.innerHTML = `Promedio del acumulado (${E.anios[0]}-${E.anioActual})<br>= ${gmNf1(promAcum)}`;
+            if (e2) e2.innerHTML = `Promedio del acumulado (${E.anios[0]}-${E.anioActual}) = ${gmNf1(promAcum)}`;
 
             if (gmCh1) { try { gmCh1.destroy(); } catch (e) {} }
             const c1 = document.getElementById('gmG1');
