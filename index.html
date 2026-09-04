@@ -928,11 +928,20 @@
         }
 
         /* =====================================================================
-           SECCIÓN COMPARATIVO MENSUAL — CSS exclusivo
-           Reproduce el formato de las láminas institucionales «Gráficas
-           mensuales JALISCO». Todo va prefijado `munComp-` para que no pueda
-           colisionar con las cinco vistas; los colores de lámina son los del
-           documento original, distintos de los tokens del tablero.
+           BLOQUE `munComp-*` — CSS de las láminas de Gráficas Mensuales
+
+           ATENCIÓN: el prefijo es HISTÓRICO. La sección Comparativo Mensual,
+           para la que se escribió este bloque, fue ELIMINADA del archivo. Las
+           clases sobrevivieron porque quien las consume hoy es GRÁFICAS
+           MENSUALES: cabecera, tabla de acumulados, porcentajes, promedio y
+           cajas de gráfica. Lo mismo vale para los cuatro plugins de Chart.js
+           `munCompEtqDentro`, `munCompEtqEncima`, `munCompLineaProm` y
+           `munCompTendencia`. BORRAR CUALQUIERA DE ELLOS DEJA `gm` EN BLANCO.
+
+           El renombrado a `gm-*` se evaluó y se descartó: son unas sesenta
+           referencias, no cambia nada visible y el riesgo de dejar vistas en
+           blanco es real. Los colores son los del documento institucional
+           original, distintos de los tokens del tablero.
            ===================================================================== */
         .munComp-lamina {
             background: #fff; border: 1px solid var(--line); border-radius: var(--r-md);
@@ -975,7 +984,6 @@
             font-size: 10.5px; color: var(--muted); line-height: 1.5; }
         [data-tema="oscuro"] .munComp-lamina { background: #F4F7FA; }
         [data-tema="oscuro"] .munComp-pie { color: #55627A; }
-        #munCompLienzo { position: fixed; left: -9999px; top: 0; }
         @media (max-width: 1080px) { .munComp-caja { min-width: 0; width: 100%; margin-left: 0; } }
 
         /* Gráficas Mensuales. La tabla de acumulados puede llegar a diez años,
@@ -11141,6 +11149,13 @@
         const GM_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                           'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
         const GM_MES_C = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+
+        /* Delitos que la hoja sigue trayendo pero que NO se muestran: sin
+           seguimiento vigente. Se declara aquí, antes de su primer uso, para no
+           depender del orden de evaluación del bloque (la TDZ de `const` no la
+           salva un guard con `typeof`). Fuente única: la consumen tanto el
+           catálogo del selector como el filtro del mazo. */
+        const GM_OCULTOS = ['VICTIMAS LOCALIZADAS EN FOSAS'];
         const GM_REGIONES = ['Jalisco', 'AMG', 'Interior'];
 
         /* Primer año visible en TODA la vista: gráficas, tablas, análisis y PPTX.
@@ -11162,7 +11177,7 @@
         /* El total encabeza el catálogo: es la cifra que se lee primero. */
         function gmListaDelitos() {
             if (!gmData) return [];
-            const ds = gmData.delitos.slice();
+            const ds = gmData.delitos.filter(d => GM_OCULTOS.indexOf(d) < 0);
             const i = ds.indexOf(GM_TOTAL_EST);
             if (i > 0) { ds.splice(i, 1); ds.unshift(GM_TOTAL_EST); }
             return ds;
@@ -11879,9 +11894,13 @@
                 /* El mes de corte NO se limita a los meses con captura: se elige
                    libremente y los que faltan cuentan como cero, con aviso. */
                 E.mes = gmData.ultimoMes >= 0 ? gmData.ultimoMes : 11;
-                if (!E.delito || gmData.delitos.indexOf(E.delito) < 0) {
-                    const pref = gmData.delitos.find(d => /HOMICIDIO DOLOSO/.test(dsNorm(d)));
-                    E.delito = pref || gmData.delitos[0];
+                /* Se valida contra el catálogo VISIBLE, no contra el crudo: de
+                   otro modo un delito oculto podría quedar seleccionado y el
+                   selector mostraría una opción que no existe en su lista. */
+                const visibles = gmListaDelitos();
+                if (!E.delito || visibles.indexOf(E.delito) < 0) {
+                    const pref = visibles.find(d => /HOMICIDIO DOLOSO/.test(dsNorm(d)));
+                    E.delito = pref || visibles[0] || '';
                 }
                 E.medida = gmMedidaPorDefecto(E.delito);
                 if (gmData.ambitos.indexOf(E.region) < 0) E.region = gmData.ambitos[0];
@@ -12792,10 +12811,10 @@
         /* Agregados: ya incluyen a los demás delitos, así que no llevan lámina
            propia. Se excluyen del mazo por decisión metodológica, no técnica. */
         const GM_AGREGADOS = ['INCIDENCIA TOTAL', 'TOTAL DE ROBOS (ALTO IMPACTO)'];
-        /* Sin lámina propia, pero por un motivo distinto al de los agregados:
-           «Víctimas localizadas en fosas» no es un delito sino un hallazgo, y su
-           serie tiene meses sin captura. Se mantiene en la vista, no en el mazo. */
-        const GM_SIN_LAMINA = ['VICTIMAS LOCALIZADAS EN FOSAS'];
+        /* Sin lámina propia, por un motivo distinto al de los agregados: son
+           delitos ocultos. Deriva de GM_OCULTOS para no duplicar la lista: lo
+           que no se muestra en la vista tampoco puede entrar en el mazo. */
+        const GM_SIN_LAMINA = GM_OCULTOS.slice();
         const GM_REGIONES_MAZO = ['Jalisco', 'AMG'];   // el interior no entra
 
         /* Colores tomados de la plantilla institucional. */
@@ -13159,30 +13178,63 @@
                                exige una serie aparte con el resto en blanco. Va sin línea
                                ni marcador: solo aporta las cifras. */
                             const espejo = H.valores.map((v, i) => (i % 4 === 0 ? v : null));
+                            /* Eje de DOS NIVELES, réplica del de la vista web: la
+                               inicial del mes en cada punto y el año debajo. Antes
+                               se pasaba `H.etqEje`, que trae cadena vacía en once
+                               de cada doce meses, y la lámina salía con el eje
+                               desnudo. pptxgenjs traduce un `labels` de arreglo de
+                               arreglos a `multiLvlStrRef`: verificado sobre el XML
+                               generado, lvl[0] es el nivel interno —las letras— y
+                               lvl[1] el externo —el año—. */
+                            const ejeL3 = [H.inicial, H.anioDe.map(String)];
                             const grupos = [{
                                 type: pptx.ChartType.line,
-                                data: [{ name: 'Serie mensual', labels: H.etqEje, values: H.valores }],
+                                data: [{ name: 'Serie mensual', labels: ejeL3, values: H.valores }],
                                 options: { chartColors: [GM_AZUL_OSC], lineSize: 1.5,
                                     lineSmooth: false, lineDataSymbol: 'circle',
                                     lineDataSymbolSize: 4, showValue: false }
                             }];
                             if (tend3) grupos.push({
                                 type: pptx.ChartType.line,
-                                data: [{ name: 'Tendencia', labels: H.etqEje, values: tend3.valores }],
+                                data: [{ name: 'Tendencia', labels: ejeL3, values: tend3.valores }],
                                 options: { chartColors: [GM_VERDE_T], lineSize: 2.25,
                                     lineSmooth: false, lineDataSymbol: 'none', showValue: false }
                             });
                             grupos.push({
                                 type: pptx.ChartType.line,
-                                data: [{ name: 'Etiquetas', labels: H.etqEje, values: espejo }],
+                                data: [{ name: 'Etiquetas', labels: ejeL3, values: espejo }],
                                 options: { chartColors: [GM_AZUL_OSC], lineSize: 0,
                                     lineSmooth: false, lineDataSymbol: 'none',
                                     showValue: true, dataLabelColor: '000000',
                                     dataLabelFontSize: 8, dataLabelFontBold: true,
                                     dataLabelPosition: 't', dataLabelRotate: -90 }
                             });
+                            /* Área de trazado FIJADA a mano. PowerPoint la calcula
+                               por dentro y sin fijarla no hay forma de saber dónde
+                               cae cada enero. Con `layoutTarget="inner"` las cuatro
+                               fracciones se miden sobre el marco del gráfico, así
+                               que la posición de cada mes pasa a ser aritmética.
+                               Es el precio de tener los separadores alineados. */
+                            const L3 = { x: 0.25, y: 2.80, w: 9.51, h: 2.28,
+                                         lx: 0.005, ly: 0.060, lw: 0.990, lh: 0.780 };
+                            const pL3 = L3.x + L3.lx * L3.w, pW3 = L3.lw * L3.w,
+                                  pT3 = L3.y + L3.ly * L3.h, pH3 = L3.lh * L3.h,
+                                  banda3 = H.valores.length ? pW3 / H.valores.length : 0;
+                            /* Separadores de enero, réplica del plugin `gmSepAnios`.
+                               El eje sale con `crossBetween="between"`: el punto i
+                               ocupa el CENTRO de su banda, luego el corte va en el
+                               borde izquierdo, en pL + i·banda. Se dibujan ANTES del
+                               gráfico para que queden detrás de la línea: tanto el
+                               marco como el área de trazado se emiten sin relleno. */
+                            H.cortes.forEach(i => {
+                                s3.addShape(pptx.ShapeType.line, {
+                                    x: pL3 + i * banda3, y: pT3, w: 0, h: pH3,
+                                    line: { color: 'B9BED0', width: 0.75, dashType: 'dash' }
+                                });
+                            });
                             s3.addChart(grupos, {
-                                x: 0.25, y: 2.80, w: 9.51, h: 2.28,
+                                x: L3.x, y: L3.y, w: L3.w, h: L3.h,
+                                layout: { x: L3.lx, y: L3.ly, w: L3.lw, h: L3.lh },
                                 showLegend: false, showTitle: false,
                                 catAxisLabelFontSize: 9, catAxisLabelColor: '404040',
                                 valAxisHidden: true, valGridLine: { style: 'none' },
