@@ -1031,6 +1031,20 @@
         }
 
         .gm-mapa-icono { background: none; border: 0; }
+
+        /* Rótulo de cantidad sobre el centroide del municipio, común a las tres
+           coropletas. Se monta como tooltip permanente de Leaflet, así que hay
+           que desarmar el globo por defecto: fondo, borde, sombra y flecha.
+           La tinta la decide `hdTinta` según lo oscuro que sea el relleno; el
+           halo es lo que permite leer el número sobre el mosaico de OSM. */
+        .coro-etq { background: none; border: 0; box-shadow: none; padding: 0;
+            font: 700 11px/1 Inter, Arial, sans-serif; white-space: nowrap;
+            pointer-events: none; }
+        .coro-etq::before { display: none; }
+        .coro-etq-n { color: #111111; text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff; }
+        .coro-etq-b { color: #FFFFFF;
+            text-shadow: 0 0 3px rgba(0,0,0,.8), 0 0 3px rgba(0,0,0,.8), 0 0 3px rgba(0,0,0,.8); }
+        @media (max-width: 768px) { .coro-etq { font-size: 10px; } }
         .gm-mapa-icono svg { display: block; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
         .gm-simb-n { font-size: 11px; color: #444; margin-top: 6px; line-height: 1.4; }
         #gmMapaBox { height: 560px; border-radius: var(--r-md); border: 1px solid var(--line);
@@ -2195,7 +2209,7 @@
                         <button data-mapa="coropleta">Coropleta municipal</button>
                     </div>
                     <label class="mun-et" style="text-transform:none;letter-spacing:0">
-                        <input type="checkbox" id="fisLimites"> Límites municipales</label>
+                        <input type="checkbox" id="fisLimites" checked> Límites municipales</label>
                     <span id="fisMapaInfo" class="info-estado"></span>
                 </div>
                 <div id="fisMapa" style="height:520px;border-radius:var(--r-md);overflow:hidden"></div>
@@ -2410,6 +2424,14 @@
                        de la Fiscalía cubre la zona metropolitana.</p>
                 </div>
                 <div class="mun-nota" id="gmMapaNota">Cargando el registro georreferenciado…</div>
+                <div class="mun-barra-filtros" style="margin:12px 0">
+                    <div class="conmutador" id="gmMapaModoBtns" role="group" aria-label="Vista del mapa">
+                        <button data-gmmapa="puntos" class="on">Puntos y calor</button>
+                        <button data-gmmapa="coropleta">Coropleta municipal</button>
+                    </div>
+                    <label class="mun-et" style="text-transform:none;letter-spacing:0">
+                        <input type="checkbox" id="gmLimites" checked> Límites municipales</label>
+                </div>
                 <div class="gm-lam" id="gmLam">
                     <div class="gm-lam-mapa">
                         <div id="gmMapaBox" style="position:absolute;inset:0"></div>
@@ -8350,7 +8372,7 @@
         let fisMapa = null, fisCapa = null, fisCapaGeo = null;
         const fisEstado = { delito: '__TODOS__', anio: '__TODOS__', mes: '__TODOS__',
                             municipio: '__TODOS__', violencia: '__TODAS__', mapa: 'calor',
-                            limites: false,
+                            limites: true,
                             anioG5: null };
 
         const FIS_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
@@ -9147,7 +9169,7 @@
                         const k = hdBusca(ft.properties.nom, porMun);
                         const v = k ? porMun[k] : 0;
                         return modo === 'coropleta'
-                            ? { color: '#fff', weight: .8, fillColor: hdColorRel(v, maxMun), fillOpacity: .78 }
+                            ? coroEstilo(v, maxMun)
                             : { color: '#18345D', weight: .9, fill: false, opacity: .38 };
                     },
                     onEachFeature: (ft, capa) => {
@@ -9155,6 +9177,7 @@
                         const v = k ? porMun[k] : 0;
                         capa.bindPopup(`<b style="color:#18345D">${esc(ft.properties.nom)}</b><br>` +
                             `${nf(v)} ${v === 1 ? 'carpeta' : 'carpetas'} en el periodo filtrado`);
+                        if (modo === 'coropleta') coroRotulo(capa, v, nf(v), hdColorRel(v, maxMun));
                     }
                 }).addTo(fisMapa);
             }
@@ -9733,6 +9756,33 @@
             return c[Math.min(c.length - 1, Math.floor(v / (max || 1) * c.length))];
         }
         const hdTinta = hex => (hex === '#2171B5' || hex === '#084594') ? '#FFFFFF' : '#111111';
+
+        /* =====================================================================
+           COROPLETA · estilo y rótulo compartidos
+           =====================================================================
+           Los usan las TRES vistas con mapa: Fiscalía, Homicidios Dolosos y
+           Gráficas Mensuales. Están aquí, junto a la rampa de color, para que
+           el aspecto no se separe entre módulos.
+
+           El borde va OSCURO, no blanco. Con blanco no se distinguía dónde
+           empieza y termina el estado sobre el mosaico de OSM. Sobre los dos
+           azules más oscuros de la rampa el contorno pierde algo de contraste;
+           por eso el peso sube a 1.2 y la opacidad a 1.
+
+           `coroRotulo` solo escribe si hay al menos un caso: con los 125
+           municipios rotulados, incluidos los ceros, el mapa a escala de estado
+           es ilegible. La tinta se elige por el relleno, no por el valor. */
+        function coroEstilo(v, max) {
+            return { color: '#18345D', weight: 1.2, opacity: 1,
+                     fillColor: hdColorRel(v, max), fillOpacity: .78 };
+        }
+        function coroRotulo(capa, valor, texto, relleno) {
+            if (!valor) return;
+            capa.bindTooltip(texto, {
+                permanent: true, direction: 'center', opacity: 1,
+                className: 'coro-etq ' + (hdTinta(relleno) === '#FFFFFF' ? 'coro-etq-b' : 'coro-etq-n')
+            });
+        }
 
         /* Empareja el nombre del SVG con el de la hoja pese a acentos y variantes. */
         function hdBusca(nombre, mapa) {
@@ -10756,7 +10806,7 @@
                         const k = hdBusca(ft.properties.nom, porMun);
                         const v = k ? porMun[k] : 0;
                         return modo === 'coropleta'
-                            ? { color: '#fff', weight: .8, fillColor: hdColorRel(v, max), fillOpacity: .78 }
+                            ? coroEstilo(v, max)
                             : { color: '#18345D', weight: .9, fill: false, opacity: .38 };
                     },
                     onEachFeature: (ft, capa) => {
@@ -10764,6 +10814,7 @@
                         const v = k ? porMun[k] : 0;
                         capa.bindPopup(`<b style="color:#18345D">${esc(ft.properties.nom)}</b><br>` +
                             `${hdNf(v)} homicidios en el periodo filtrado`);
+                        if (modo === 'coropleta') coroRotulo(capa, v, hdNf(v), hdColorRel(v, max));
                     }
                 }).addTo(hdEstado.mapa);
             }
@@ -11898,6 +11949,21 @@
         function gmConecta() {
             if (gmEventos) return;
             gmEventos = true;
+            /* Controles del mapa. Solo redibujan el mapa: no tocan gmRender,
+               porque ni las gráficas ni las tablas dependen de estos dos. */
+            const gmb = document.getElementById('gmMapaModoBtns');
+            if (gmb) gmb.addEventListener('click', e => {
+                const b = e.target.closest('button[data-gmmapa]');
+                if (!b) return;
+                gmMapaModo = b.dataset.gmmapa;
+                b.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+                if (gmMapaData) gmMapaRender();
+            });
+            const gml = document.getElementById('gmLimites');
+            if (gml) gml.addEventListener('change', e => {
+                gmMapaLimites = e.target.checked;
+                if (gmMapaData) gmMapaRender();
+            });
             const reg = document.getElementById('gmRegion');
             if (reg) reg.addEventListener('click', e => {
                 const b = e.target.closest('button[data-r]');
@@ -11954,11 +12020,14 @@
                 E.mes = gmData.ultimoMes >= 0 ? gmData.ultimoMes : 11;
                 /* Se valida contra el catálogo VISIBLE, no contra el crudo: de
                    otro modo un delito oculto podría quedar seleccionado y el
-                   selector mostraría una opción que no existe en su lista. */
+                   selector mostraría una opción que no existe en su lista.
+                   El delito por defecto es el TOTAL ESTATAL, que es la lectura
+                   con la que se abre el briefing. Solo actúa cuando no hay nada
+                   guardado o lo guardado ya no existe: no pisa la elección del
+                   usuario al cambiar de región o de mes. */
                 const visibles = gmListaDelitos();
                 if (!E.delito || visibles.indexOf(E.delito) < 0) {
-                    const pref = visibles.find(d => /HOMICIDIO DOLOSO/.test(dsNorm(d)));
-                    E.delito = pref || visibles[0] || '';
+                    E.delito = (visibles.indexOf(GM_TOTAL_EST) >= 0 ? GM_TOTAL_EST : visibles[0]) || '';
                 }
                 E.medida = gmMedidaPorDefecto(E.delito);
                 if (gmData.ambitos.indexOf(E.region) < 0) E.region = gmData.ambitos[0];
@@ -12437,6 +12506,32 @@
 
         let gmMapaData = null, gmMapa = null, gmMapaCapas = {},
             gmMapaCargando = false, gmMapaObs = null;
+        /* Modo del mapa y visibilidad de los límites. Antes el mapa dibujaba
+           siempre calor y puntos a la vez, sin conmutador y sin forma de apagar
+           los límites. `puntos` reproduce ese comportamiento tal cual. */
+        let gmMapaModo = 'puntos', gmMapaLimites = true;
+
+        /* Conteo por municipio para la coropleta del AMG. Replica los filtros de
+           `gmMapaFiltra` PERO se detiene antes de exigir coordenada: el municipio
+           no la necesita, y descartar los registros sin `wkt_geom` utilizable
+           subcontaría la coropleta frente al total que declara la nota. */
+        function gmMapaPorMun() {
+            const out = {};
+            if (!gmMapaData) return out;
+            const todos = gmMapaEsTodos();
+            const patron = GM_MAPA_PATRON[gmEstado.delito] || null;
+            if (!todos && !patron) return out;
+            const mesTxt = dsNorm(GM_MESES[gmEstado.mes]);
+            gmMapaData.registros.forEach(r => {
+                if (String(r.anio) !== GM_MAPA_ANIO) return;
+                if (dsNorm(r.mes) !== mesTxt) return;
+                if (!todos && !patron.test(dsNorm(r.delito))) return;
+                if (!GM_AMG_SET.has(dsNorm(r.municipio))) return;
+                const m = String(r.municipio).trim();
+                if (m) out[m] = (out[m] || 0) + 1;
+            });
+            return out;
+        }
 
         /* Descarga acotada en el servidor. La columna R es «AÑO»: pedir solo
            2026 baja de ~5 MB a ~2. Si el filtro no es válido se reintenta sin
@@ -12713,17 +12808,35 @@
             const F = gmMapaFiltra();
             gmMapaDiagnostico();
 
-            /* Límites del AMG, en azul. La geometría vieja de `HD_GEO_TXT` se
-               retiró de este mapa: dibujaba Guadalajara con 43 vértices y no
-               seguía los límites reales. Aquí se usa la del INEGI. */
+            /* Límites del AMG. La geometría vieja de `HD_GEO_TXT` se retiró de
+               este mapa: dibujaba Guadalajara con 43 vértices y no seguía los
+               límites reales. Aquí se usa la del INEGI.
+
+               En modo coropleta la misma capa se rellena con la rampa de color y
+               rotula la cantidad en el centroide; en modo puntos es solo el
+               contorno azul de siempre, y puede apagarse con la casilla. */
             const geoF = gmGeoAMG();
-            if (geoF) {
+            const gmCoro = gmMapaModo === 'coropleta';
+            if (geoF && (gmMapaLimites || gmCoro)) {
+                const porMunG = gmCoro ? gmMapaPorMun() : null;
+                const maxMunG = gmCoro ? Math.max(1, ...Object.values(porMunG)) : 1;
                 gmMapaCapas.limitesF = L.geoJSON(geoF, {
-                    style: { color: '#1565C0', weight: 1.6, fill: false, opacity: .9 }
+                    style: ft => gmCoro
+                        ? coroEstilo(hdBusca(ft.properties.nom, porMunG)
+                            ? porMunG[hdBusca(ft.properties.nom, porMunG)] : 0, maxMunG)
+                        : { color: '#1565C0', weight: 1.6, fill: false, opacity: .9 },
+                    onEachFeature: (ft, capa) => {
+                        if (!gmCoro) return;
+                        const k = hdBusca(ft.properties.nom, porMunG);
+                        const v = k ? porMunG[k] : 0;
+                        capa.bindPopup(`<b style="color:#18345D">${esc(ft.properties.nom)}</b><br>` +
+                            `${gmNf(v)} ${v === 1 ? 'evento' : 'eventos'} en el mes filtrado`);
+                        coroRotulo(capa, v, gmNf(v), hdColorRel(v, maxMunG));
+                    }
                 }).addTo(gmMapa);
             }
 
-            if (F.puntos.length && L.heatLayer) {
+            if (!gmCoro && F.puntos.length && L.heatLayer) {
                 gmMapaCapas.calor = L.heatLayer(F.puntos.map(p => [p.lat, p.lon, .5]),
                     { radius: 18, blur: 22, minOpacity: .18,
                       gradient: { .3: '#f4cccc', .6: '#e06666', 1: '#990000' } }).addTo(gmMapa);
@@ -12732,7 +12845,7 @@
                del tope se dibujan los más recientes y se declara el corte. La capa
                de calor sí conserva el total, que es lo que da la lectura de zona. */
             const tope = esTodos ? GM_MAPA_TOPE_TODOS : GM_MAPA_TOPE;
-            if (F.puntos.length) {
+            if (!gmCoro && F.puntos.length) {
                 const capa = L.layerGroup();
                 F.puntos.slice(-tope).forEach(p => capa.addLayer(
                     L.marker([p.lat, p.lon], {
