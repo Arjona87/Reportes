@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maqueta · Resumen Ejecutivo — CGES Jalisco</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===================================================================
+   MAQUETA · RESUMEN EJECUTIVO
+   Archivo independiente. NO forma parte de index.html.
+   Tokens idénticos a los del tablero para que la comparación sea justa.
+   Prefijo rx* / RX_* en todo: verificado libre de colisiones.
+   =================================================================== */
+:root{
+  --brand:#18345D; --brand-deep:#0F2438; --brand-head:#24487A;
+  --accent:#F08013; --risk:#C0392B; --down:#1E8449; --warn:#B7791F;
+  --canvas:#F4F7FA; --surface:#FFFFFF; --surface-2:#F8FAFC; --surface-3:#EEF3F9;
+  --ink:#0F1E33; --ink-soft:#33465F; --muted:#64748B;
+  --line:#DCE4EE; --line-soft:#E9EFF6;
+  --shadow:0 1px 2px rgba(15,30,51,.06), 0 8px 24px rgba(15,30,51,.07);
+  --r-sm:6px; --r-md:10px; --r-lg:14px; --r-pill:999px;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--canvas); color:var(--ink);
+  font-family:'Inter',Arial,sans-serif; font-size:14px; line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.rx-cifra{font-family:'Poppins','Inter',sans-serif}
+:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- Aviso de maqueta ---------- */
+.rx-aviso{
+  background:var(--warn); color:#fff; font-size:12.5px; font-weight:600;
+  padding:7px 20px; text-align:center; letter-spacing:.1px;
+}
+
+/* ---------- Sello temporal ---------- */
+.rx-sello{
+  background:linear-gradient(120deg,var(--brand) 0%,var(--brand-deep) 100%);
+  color:#fff; padding:14px 22px;
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+}
+.rx-sello h1{font-size:17px; font-weight:700; margin:0; letter-spacing:.2px}
+.rx-sello-corte{font-size:13px; opacity:.92}
+.rx-sello-corte b{font-weight:600}
+.rx-estado{
+  display:inline-flex; align-items:center; gap:7px; font-size:12px;
+  background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.22);
+  border-radius:var(--r-pill); padding:4px 12px; font-weight:500;
+}
+.rx-punto{width:8px; height:8px; border-radius:50%; background:#7FD1A0; flex:none}
+.rx-punto.esperando{background:#F0C419}
+.rx-punto.falla{background:#E86B5C}
+.rx-region{margin-left:auto; display:flex; gap:4px; background:rgba(255,255,255,.10); padding:3px; border-radius:var(--r-pill)}
+.rx-region button{
+  font:inherit; font-size:12.5px; font-weight:600; color:#fff; cursor:pointer;
+  background:transparent; border:0; padding:5px 15px; border-radius:var(--r-pill);
+}
+.rx-region button[aria-pressed="true"]{background:#fff; color:var(--brand)}
+
+/* ---------- Rejilla ---------- */
+.rx-lienzo{max-width:1420px; margin:0 auto; padding:18px 22px 26px}
+.rx-grid{display:grid; grid-template-columns:340px 1fr 300px; gap:16px; align-items:start}
+.rx-col{display:flex; flex-direction:column; gap:16px}
+
+.rx-panel{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r-lg); box-shadow:var(--shadow); padding:16px 18px;
+}
+.rx-panel h2{
+  font-size:11.5px; font-weight:700; color:var(--muted);
+  margin:0 0 12px; letter-spacing:.4px; text-transform:uppercase;
+}
+.rx-panel h2 span{text-transform:none; letter-spacing:0; font-weight:500; color:var(--muted); opacity:.85}
+
+/* ---------- 1 · Termómetro ---------- */
+.rx-icrd-valor{font-size:62px; font-weight:800; line-height:.95; letter-spacing:-2px}
+.rx-icrd-lectura{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+.rx-icrd-nivel{
+  font-size:13px; font-weight:700; color:#fff; padding:4px 13px;
+  border-radius:var(--r-pill); letter-spacing:.3px;
+}
+.rx-icrd-desc{font-size:12.5px; color:var(--ink-soft); margin:10px 0 0; max-width:34ch}
+.rx-barra{
+  position:relative; height:9px; border-radius:var(--r-pill); margin-top:16px;
+  background:linear-gradient(90deg,#1E8449 0%,#1E8449 34%,#C9A227 34%,#C9A227 55%,#F08013 55%,#F08013 74%,#C0392B 74%,#C0392B 100%);
+}
+.rx-aguja{
+  position:absolute; top:-5px; width:3px; height:19px; background:var(--ink);
+  border-radius:2px; box-shadow:0 0 0 2px var(--surface); transform:translateX(-1.5px);
+}
+.rx-marcas{display:flex; justify-content:space-between; font-size:10px; color:var(--muted); margin-top:7px}
+.rx-fam{margin-top:18px; border-top:1px solid var(--line-soft); padding-top:14px}
+.rx-fam-fila{margin-bottom:13px}
+.rx-fam-fila:last-child{margin-bottom:0}
+.rx-fam-cab{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:5px}
+.rx-fam-n{font-size:12.5px; font-weight:600; color:var(--ink-soft)}
+.rx-fam-v{font-size:17px; font-weight:700; font-variant-numeric:tabular-nums}
+.rx-fam-pista{position:relative; height:5px; border-radius:var(--r-pill); background:var(--surface-3)}
+.rx-fam-pista i{position:absolute; top:-3px; width:2px; height:11px; border-radius:2px; background:var(--ink)}
+.rx-sin{font-size:11.5px; color:var(--muted); font-style:italic}
+
+/* ---------- 2 · Incidencia total ---------- */
+.rx-total{display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap}
+.rx-total-n{font-size:56px; font-weight:800; line-height:.95; letter-spacing:-2px; font-variant-numeric:tabular-nums}
+.rx-total-var{font-size:20px; font-weight:700; padding-bottom:7px}
+.rx-total-pie{font-size:12.5px; color:var(--muted); margin-top:8px}
+.rx-meta{
+  margin-top:14px; padding:11px 14px; border-radius:var(--r-md);
+  background:var(--surface-2); border:1px dashed var(--line);
+  font-size:12.5px; color:var(--muted);
+}
+.rx-meta b{color:var(--warn); font-weight:600}
+
+/* ---------- 3 · Alertas ---------- */
+.rx-alertas{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
+.rx-alerta{
+  border:1px solid var(--line); border-left:4px solid var(--ti); border-radius:var(--r-md);
+  padding:12px 13px; background:var(--surface-2);
+}
+.rx-alerta-cat{font-size:10px; font-weight:700; color:var(--ti); letter-spacing:.3px}
+.rx-alerta-n{font-size:13.5px; font-weight:700; margin:4px 0 7px; line-height:1.25}
+.rx-alerta-v{font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums}
+.rx-alerta-d{font-size:12.5px; font-weight:700; color:var(--risk); margin-top:3px; font-variant-numeric:tabular-nums}
+.rx-alerta-d em{font-style:normal; font-weight:500; font-size:10.5px; color:var(--warn)}
+
+/* ---------- 4 · Foco estratégico ---------- */
+.rx-foco{display:flex; flex-direction:column; gap:10px}
+.rx-foco-f{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:10px 12px; border-radius:var(--r-md); background:var(--surface-2);
+  border:1px solid var(--line-soft);
+}
+.rx-foco-n{font-size:12.5px; font-weight:600; color:var(--ink-soft); line-height:1.2}
+.rx-foco-c{display:flex; align-items:baseline; gap:9px}
+.rx-foco-v{font-size:24px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1}
+.rx-foco-d{font-size:12px; font-weight:700; font-variant-numeric:tabular-nums}
+
+/* ---------- 5 · Territorio ---------- */
+.rx-terr-cab{
+  border-radius:var(--r-md); background:var(--brand); color:#fff;
+  padding:13px 15px; margin-bottom:12px;
+}
+.rx-terr-nom{font-size:17px; font-weight:700; line-height:1.2}
+.rx-terr-tasa{font-size:28px; font-weight:800; font-variant-numeric:tabular-nums; margin-top:5px; line-height:1}
+.rx-terr-pie{font-size:11.5px; opacity:.85; margin-top:3px}
+.rx-terr-l{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; padding:6px 0; border-bottom:1px solid var(--line-soft)}
+.rx-terr-l:last-child{border-bottom:0}
+.rx-terr-l b{font-variant-numeric:tabular-nums; font-weight:700}
+.rx-terr-l span{color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.rx-nota-fuente{
+  margin-top:12px; padding-top:10px; border-top:1px solid var(--line-soft);
+  font-size:11px; color:var(--warn); line-height:1.4;
+}
+
+/* ---------- 6 · Decisiones ---------- */
+.rx-dec{border-left:4px solid var(--accent)}
+.rx-dec ol{margin:0; padding-left:20px}
+.rx-dec li{font-size:13.5px; margin-bottom:8px; color:var(--ink-soft); line-height:1.45}
+.rx-dec li:last-child{margin-bottom:0}
+.rx-firma{
+  margin-top:13px; padding-top:11px; border-top:1px solid var(--line-soft);
+  font-size:11.5px; color:var(--muted);
+}
+
+/* ---------- Estados explícitos ---------- */
+.rx-edo{
+  display:inline-flex; align-items:center; gap:7px; font-size:11.5px;
+  color:var(--muted); font-weight:500;
+}
+.rx-edo::before{content:''; width:7px; height:7px; border-radius:50%; background:var(--muted); flex:none}
+.rx-edo.proceso::before{background:var(--warn)}
+.rx-edo.falla::before{background:var(--risk)}
+.rx-edo.falla{color:var(--risk)}
+.rx-fallback{margin-top:10px; font-size:12px}
+.rx-fallback input{font:inherit; font-size:12px}
+
+/* ---------- Pie ---------- */
+.rx-pie{
+  max-width:1420px; margin:0 auto; padding:0 22px 30px;
+  font-size:11.5px; color:var(--muted); line-height:1.55;
+}
+
+@media (max-width:1180px){
+  .rx-grid{grid-template-columns:1fr 1fr}
+  .rx-col:nth-child(3){grid-column:1 / -1}
+}
+@media (max-width:760px){
+  .rx-grid{grid-template-columns:1fr}
+  .rx-alertas{grid-template-columns:1fr}
+  .rx-sello{flex-direction:column; align-items:flex-start; gap:10px}
+  .rx-region{margin-left:0}
+  .rx-icrd-valor{font-size:50px}
+  .rx-total-n{font-size:44px}
+}
+</style>
+</head>
+<body>
+
+<div class="rx-aviso">
+  Maqueta de evaluación. No es el tablero. Las cifras se descargan en vivo del mismo libro de Google Sheets que usa <code>index.html</code>.
+</div>
+
+<header class="rx-sello">
+  <h1>Situación de seguridad</h1>
+  <span class="rx-sello-corte">Corte semanal al <b id="rxCorte">—</b></span>
+  <span class="rx-estado"><span class="rx-punto esperando" id="rxPunto"></span><span id="rxEstado">Descargando la hoja SEMANAL</span></span>
+  <div class="rx-region" role="group" aria-label="Ámbito territorial">
+    <button id="rxBtnJal" aria-pressed="true">Jalisco</button>
+    <button id="rxBtnAmg" aria-pressed="false">AMG</button>
+  </div>
+</header>
+
+<main class="rx-lienzo">
+  <div class="rx-grid">
+
+    <!-- Columna 1 -->
+    <div class="rx-col">
+      <section class="rx-panel" aria-labelledby="rxH1">
+        <h2 id="rxH1">Índice compuesto de riesgo <span>· base 100 = promedio histórico</span></h2>
+        <div id="rxIcrd"><span class="rx-edo proceso">Calculando</span></div>
+      </section>
+    </div>
+
+    <!-- Columna 2 -->
+    <div class="rx-col">
+      <section class="rx-panel" aria-labelledby="rxH2">
+        <h2 id="rxH2">Incidencia total de la semana</h2>
+        <div id="rxTotal"><span class="rx-edo proceso">Calculando</span></div>
+      </section>
+
+      <section class="rx-panel" aria-labelledby="rxH3">
+        <h2 id="rxH3">Alertas críticas <span>· mayor incremento ponderado por gravedad</span></h2>
+        <div id="rxAlertas"><span class="rx-edo proceso">Calculando</span></div>
+      </section>
+
+      <section class="rx-panel rx-dec" aria-labelledby="rxH6">
+        <h2 id="rxH6">Decisiones sugeridas</h2>
+        <div id="rxDecisiones"></div>
+      </section>
+    </div>
+
+    <!-- Columna 3 -->
+    <div class="rx-col">
+      <section class="rx-panel" aria-labelledby="rxH4">
+        <h2 id="rxH4">Foco estratégico</h2>
+        <div id="rxFoco"><span class="rx-edo proceso">Calculando</span></div>
+      </section>
+
+      <section class="rx-panel" aria-labelledby="rxH5">
+        <h2 id="rxH5">Territorio crítico</h2>
+        <div id="rxTerritorio"><span class="rx-edo proceso">Descargando Municipal_SESNSP</span></div>
+      </section>
+    </div>
+
+  </div>
+</main>
+
+<footer class="rx-pie">
+  Fuente: Fiscalía del Estado de Jalisco, hoja SEMANAL (bloques 1 a 4) y SESNSP, pestaña Municipal_SESNSP con taxonomía homologada (bloque 5).
+  Población: Censo de Población y Vivienda 2020, INEGI. Elaborado por CGES/DGAPP/AA.
+  <span id="rxConsulta"></span>
+</footer>
+
+<script>
+/* ===================================================================
+   Lógica portada desde index.html sin alterarla, para que la maqueta
+   produzca EXACTAMENTE las mismas cifras que el tablero.
+   =================================================================== */
+
+const SHEET_ID = '15ryC1n0drurOdKMel8tBXwNqJUef1U9e5XLCNOd6oS4';
+const RX_GID_SEMANAL   = '0';
+const RX_GID_MUNICIPAL = '1983027362';
+const rxUrl = gid => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+
+/* ---------- Pesos, niveles y familias: copia literal de index.html ---------- */
+const ICRD_PESOS = {
+  'HOMICIDIOS DOLOSOS (VÍCTIMAS)':10,'FEMINICIDIO (VÍCTIMAS)':10,'SECUESTRO (VÍCTIMAS)':9,
+  'DESAPARICIÓN COMETIDA POR PARTICULARES':8,'PRIVACIÓN ILEGAL DE LA LIBERTAD':7,'EXTORSIÓN':7,
+  'VIOLACIÓN':6,'ABUSO SEXUAL INFANTIL':6,'VIOLENCIA FAMILIAR':4,'LESIONES DOLOSAS':3.5,
+  'ROBO A PERSONAS':2.5,'ROBO A CASA HABITACIÓN':2,'ROBO A NEGOCIO':2,'ROBO A CUENTAHABIENTES':1.5,
+  'ROBO DE VEHÍCULOS PARTICULARES':1.5,'ROBO DE MOTOCICLETA':1.5,'ROBO A VEHÍCULO DE CARGA PESADA':1.5,
+  'ROBO A BANCOS':1.5
+};
+const ICRD_NIVELES = [
+  {hasta:90,      etiqueta:'Bajo',     hex:'#1E8449', texto:'La semana se ubica por debajo de su promedio histórico ponderado.'},
+  {hasta:105,     etiqueta:'Moderado', hex:'#C9A227', texto:'La semana se mueve dentro de su rango habitual.'},
+  {hasta:120,     etiqueta:'Elevado',  hex:'#F08013', texto:'Los delitos de alto impacto empujan el índice por encima de su promedio.'},
+  {hasta:Infinity,etiqueta:'Crítico',  hex:'#C0392B', texto:'Concentración inusual de delitos de alto impacto: requiere revisión operativa.'}
+];
+const ICRD_MIN = 60, ICRD_MAX = 140;
+const ICRD_CATEGORIAS = [
+  {id:'robos', nombre:'Robos', claves:['ROBO DE VEHÍCULOS PARTICULARES','ROBO DE MOTOCICLETA','ROBO A PERSONAS','ROBO A NEGOCIO','ROBO A CASA HABITACIÓN','ROBO A CUENTAHABIENTES','ROBO A VEHÍCULO DE CARGA PESADA','ROBO A BANCOS']},
+  {id:'libertad', nombre:'Libertad e integridad', claves:['VIOLENCIA FAMILIAR','LESIONES DOLOSAS','ABUSO SEXUAL INFANTIL','VIOLACIÓN']},
+  {id:'alto', nombre:'Alto impacto', claves:['HOMICIDIOS DOLOSOS (VÍCTIMAS)','FEMINICIDIO (VÍCTIMAS)','SECUESTRO (VÍCTIMAS)','DESAPARICIÓN COMETIDA POR PARTICULARES','PRIVACIÓN ILEGAL DE LA LIBERTAD','EXTORSIÓN']}
+];
+const RX_CORTO = {
+  'HOMICIDIOS DOLOSOS (VÍCTIMAS)':'Homicidios dolosos','FEMINICIDIO (VÍCTIMAS)':'Feminicidio',
+  'SECUESTRO (VÍCTIMAS)':'Secuestro','DESAPARICIÓN COMETIDA POR PARTICULARES':'Desaparición por particulares',
+  'PRIVACIÓN ILEGAL DE LA LIBERTAD':'Privación ilegal de la libertad','EXTORSIÓN':'Extorsión',
+  'VIOLACIÓN':'Violación','ABUSO SEXUAL INFANTIL':'Abuso sexual infantil',
+  'VIOLENCIA FAMILIAR':'Violencia familiar','LESIONES DOLOSAS':'Lesiones dolosas',
+  'ROBO A PERSONAS':'Robo a personas','ROBO A CASA HABITACIÓN':'Robo a casa habitación',
+  'ROBO A NEGOCIO':'Robo a negocio','ROBO A CUENTAHABIENTES':'Robo a cuentahabientes',
+  'ROBO DE VEHÍCULOS PARTICULARES':'Robo de vehículos','ROBO DE MOTOCICLETA':'Robo de motocicleta',
+  'ROBO A VEHÍCULO DE CARGA PESADA':'Robo a carga pesada','ROBO A BANCOS':'Robo a bancos'
+};
+
+/* Los tres indicadores inamovibles del bloque 4. Los tres viven en la hoja
+   SEMANAL, así que no cuesta una sola descarga adicional. Deliberadamente NO se
+   usa el módulo Desaparecidos: ese registro es el RNPDNO acumulado histórico y
+   mezclarlo con el flujo semanal de la Fiscalía sería confrontar dos universos
+   distintos, exactamente lo que el proyecto prohíbe en otras vistas. */
+const RX_FOCO = ['HOMICIDIOS DOLOSOS (VÍCTIMAS)','FEMINICIDIO (VÍCTIMAS)','DESAPARICIÓN COMETIDA POR PARTICULARES'];
+
+/* Campo editorial. Ningún texto de este bloque se genera solo: lo escribe una
+   persona y va firmado. Si se vacía, el panel deja de dibujarse. */
+const RX_DECISIONES = {
+  puntos: [
+    'Texto de ejemplo. Sostener el despliegue en el municipio señalado en Territorio crítico hasta el siguiente corte semanal.',
+    'Texto de ejemplo. Convocar mesa de coordinación por el delito encabezando Alertas críticas.',
+    'Texto de ejemplo. Solicitar a la Fiscalía el desglose por colonia del incremento detectado.'
+  ],
+  autor: 'Sin firmar — bloque de demostración',
+  fecha: ''
+};
+
+const MUN_POBLACION = {
+  'Zapopan':1476491,'Guadalajara':1385629,'Tlajomulco de Zúñiga':727750,'San Pedro Tlaquepaque':687127,
+  'Tonalá':569913,'Puerto Vallarta':291839,'El Salto':232852,'Lagos de Moreno':172403,
+  'Tepatitlán de Morelos':150190,'Zapotlán el Grande':115141,'Ocotlán':106050,'Tala':87690,'Arandas':80609,
+  'San Juan de los Lagos':72230,'Ixtlahuacán de los Membrillos':67969,'La Barca':67937,
+  'Autlán de Navarro':64931,'Zapotlanejo':64806,'Atotonilco el Alto':64009,'Ameca':60386,'Chapala':55196,
+  'Poncitlán':53659,'Encarnación de Díaz':53039,'Jocotepec':47105,'Tequila':44353,'Ayotlán':41552,
+  'Cihuatlán':40139,'Teocaltiche':39839,'Tamazula de Gordiano':38955,'Tuxpan':37518,'Sayula':37186,
+  'Tomatlán':36316,'Zapotiltic':33713,'Ojuelos de Jalisco':33588,'Jalostotitlán':32678,
+  'San Miguel el Alto':31965,'Juanacatlán':30855,'Zacoalco de Torres':30472,'Cocula':29267,
+  'San Martín Hidalgo':28102,'El Grullo':25920,'Acatlán de Juárez':25250,'Jamay':24894,
+  'Ahualulco de Mercado':23630,'Tototlán':23573,'La Huerta':23258,'Acatic':23175,'Tizapán el Alto':22758,
+  'Yahualica de González Gallo':22394,'Mezquitic':22083,'Magdalena':21781,'Tapalpa':21245,'Degollado':21226,
+  'El Arenal':21115,'Casimiro Castillo':20548,'Ixtlahuacán del Río':20465,'Villa Hidalgo':20088,
+  'Etzatlán':20011,'Colotlán':19689,'Zapotlán del Rey':19279,'Unión de San Antonio':19069,
+  'Villa Corona':19063,'Jesús María':18982,'Cuautitlán de García Barragán':18370,
+  'San Ignacio Cerro Gordo':18341,'Cuquío':17820,'San Julián':16792,'Tecalitlán':16705,'Tecolotlán':16603,
+  'San Gabriel':16548,'Amatitán':16490,'Gómez Farías':16431,'Talpa de Allende':14997,'Mascota':14451,
+  'Mazamitla':14043,'Unión de Tula':13799,'Ayutla':12880,'Pihuamo':11386,'Villa Purificación':11303,
+  'Tolimán':11219,'Teocuitatlán de Corona':11039,'Cabo Corrientes':10940,'Huejuquilla el Alto':10015,
+  'Teuchitlán':9647,'San Juanito de Escobedo':9433,'Jilotlán de los Dolores':9425,'Hostotipaquillo':8732,
+  'Atoyac':8689,'Atemajac de Brizuela':7758,'Quitupan':7734,'San Diego de Alejandría':7609,'Tonila':7565,
+  'Zapotitlán de Vadillo':7466,'Tenamaxtlán':7302,'Bolaños':7043,'Tuxcueca':6702,'Valle de Guadalupe':6627,
+  'Concepción de Buenos Aires':6334,'Valle de Juárez':6151,'Chiquilistlán':5983,'Tonaya':5961,
+  'Huejúcar':5920,'Amacueca':5743,'Atengo':5599,'Juchitlán':5534,'Villa Guerrero':5525,'Tuxcacuesco':5482,
+  'El Limón':5368,'Mexticacán':5307,'San Sebastián del Oeste':5086,'Cañadas de Obregón':4388,
+  'Guachinango':4199,'Totatiche':4180,'Atenguillo':4176,'La Manzanilla de la Paz':4099,
+  'Techaluta de Montenegro':4072,'San Marcos':3791,'Mixtlán':3638,'Santa María de los Ángeles':3515,
+  'Chimaltitán':3270,'San Martín de Bolaños':3095,'San Cristóbal de la Barranca':2924,'Cuautla':2166,
+  'Ejutla':1981,'Santa María del Oro':1815
+};
+/* Mismo piso que ya aplica Incidencia Municipal: por debajo de 5,000 habitantes
+   un solo caso dispara la tasa y el ranking se llena de municipios marginales. */
+const RX_POB_MIN = 5000;
+const MUN_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+/* ---------- Utilidades portadas ---------- */
+const dsNorm = t => (t||'').toString().trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const dsNum  = t => { const v = parseInt((t||'').toString().replace(/[,\s]/g,''),10); return isNaN(v)?null:v; };
+const nf = n => (Number.isFinite(n)?n:0).toLocaleString('es-MX');
+const pf = n => (n>=0?'+':'') + (Number.isFinite(n)?n:0).toFixed(1) + '%';
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function parseCSV(csvText){
+  const rows=[]; let row=[], field='', inQuotes=false;
+  for(let i=0;i<csvText.length;i++){
+    const char=csvText[i], next=csvText[i+1];
+    if(inQuotes){
+      if(char==='"'&&next==='"'){field+='"';i++;}
+      else if(char==='"'){inQuotes=false;}
+      else{field+=char;}
+    }else{
+      if(char==='"'){inQuotes=true;}
+      else if(char===','){row.push(field.trim());field='';}
+      else if(char==='\r'){}
+      else if(char==='\n'){row.push(field.trim());rows.push(row);row=[];field='';}
+      else{field+=char;}
+    }
+  }
+  if(field.length>0||row.length>0){row.push(field.trim());rows.push(row);}
+  return rows;
+}
+
+function findLastDataColumn(csvArray,startRow,endRow){
+  for(let i=startRow;i<endRow&&i<csvArray.length;i++){
+    const name=csvArray[i][0]?csvArray[i][0].toUpperCase().trim():'';
+    if(name.includes('TOTAL')&&name.includes('DELITOS')){
+      const row=csvArray[i];
+      for(let c=row.length-1;c>=2;c--){
+        const cell=(row[c]||'').replace(/[^0-9]/g,'');
+        if(cell!=='')return c;
+      }
+    }
+  }
+  const headerRow=csvArray[startRow]||[];
+  let c=headerRow.length-1;
+  while(c>2&&(!headerRow[c]||!headerRow[c].trim()))c--;
+  return c;
+}
+
+let parsedData = { jalisco:{}, amg:{} };
+
+function processRegionData(csvArray,startRow,endRow,region){
+  const headerRow=csvArray[startRow]||[];
+  const lastCol=findLastDataColumn(csvArray,startRow,endRow);
+  const weekDates=headerRow.slice(2,lastCol+1);
+  const lastWeek=weekDates[weekDates.length-1]||'';
+  const previousWeek=weekDates[weekDates.length-2]||'';
+
+  parsedData[region]={weeks:weekDates,delitos:{},lastWeek,previousWeek,totalDelitos:0,totalDelitosAnterior:0,variacion:0};
+
+  for(let i=startRow+2;i<endRow&&i<csvArray.length;i++){
+    const row=csvArray[i];
+    if(!row||row.length<3||!row[0])continue;
+    const delitoName=row[0].trim();
+    if(!delitoName||delitoName.toUpperCase().startsWith('FUENTE'))continue;
+
+    const values=row.slice(2,lastCol+1).map(v=>{
+      const crudo=(v||'').trim();
+      if(crudo===''||crudo==='-'||crudo==='—'||crudo==='N/D')return null;
+      const num=parseInt(crudo.replace(/[^0-9-]/g,''),10);
+      return Number.isFinite(num)?num:null;
+    });
+    if(!values.some(v=>v!==null))continue;
+
+    const rellenados=[]; let ultimo=0;
+    values.forEach(v=>{if(v!==null)ultimo=v;rellenados.push(ultimo);});
+
+    parsedData[region].delitos[delitoName]={
+      values:rellenados, crudos:values,
+      lastValue:rellenados[rellenados.length-1]||0,
+      previousValue:rellenados[rellenados.length-2]||0
+    };
+
+    if(delitoName.toUpperCase().includes('TOTAL')){
+      const actual=rellenados[rellenados.length-1]||0;
+      const anterior=rellenados[rellenados.length-2]||0;
+      parsedData[region].totalDelitos=actual;
+      parsedData[region].totalDelitosAnterior=anterior;
+      parsedData[region].variacion=anterior>0?((actual-anterior)/anterior*100).toFixed(1):'0.0';
+    }
+  }
+}
+
+function processSheetData(csvArray){
+  let jaliscoStart=-1,amgStart=-1;
+  for(let i=0;i<csvArray.length;i++){
+    const firstCell=csvArray[i][0]?csvArray[i][0].toUpperCase().trim():'';
+    if(jaliscoStart===-1&&firstCell==='JALISCO')jaliscoStart=i;
+    if(amgStart===-1&&firstCell.includes('ÁREA METROPOLITANA'))amgStart=i;
+  }
+  if(jaliscoStart>=0){
+    const fin=(amgStart>jaliscoStart)?amgStart:csvArray.length;
+    processRegionData(csvArray,jaliscoStart,fin,'jalisco');
+  }
+  if(amgStart>=0){
+    const fin=(jaliscoStart>amgStart)?jaliscoStart:csvArray.length;
+    processRegionData(csvArray,amgStart,fin,'amg');
+  }
+  const hay=k=>parsedData[k]&&parsedData[k].weeks&&parsedData[k].weeks.length;
+  return hay('jalisco')||hay('amg');
+}
+
+/* ---------- ICRD: copia literal ---------- */
+function nivelICRD(v){ return ICRD_NIVELES.find(n=>v<n.hasta)||ICRD_NIVELES[ICRD_NIVELES.length-1]; }
+
+function calcularIndice(regionKey,claves,idx,minUsados){
+  const region=parsedData[regionKey];
+  if(!region||!region.delitos)return null;
+  let num=0,den=0,usados=0,sumaAct=0,sumaAnt=0;
+  claves.forEach(k=>{
+    const fila=region.delitos[k];
+    if(!fila||!Array.isArray(fila.values)||fila.values.length<5)return;
+    const i=(idx===undefined||idx===null)?fila.values.length-1:idx;
+    if(i<1||i>=fila.values.length)return;
+    const actual=fila.values[i], previo=fila.values[i-1];
+    if(Number.isFinite(actual))sumaAct+=actual;
+    if(Number.isFinite(previo))sumaAnt+=previo;
+    const hist=fila.values.slice(0,i).filter(v=>Number.isFinite(v));
+    if(hist.length<4)return;
+    const m=hist.reduce((a,b)=>a+b,0)/hist.length;
+    if(m<1)return;
+    const razon=Math.min(actual/m,3);
+    const w=ICRD_PESOS[k]||1;
+    num+=razon*w; den+=w; usados++;
+  });
+  if(!den||usados<(minUsados||4))return null;
+  const dif=sumaAct-sumaAnt;
+  return {valor:+(100*num/den).toFixed(1),delitos:usados,total:claves.length,suma:sumaAct,sumaPrevia:sumaAnt,dif,pct:sumaAnt?+(dif/sumaAnt*100).toFixed(1):null};
+}
+
+function calcularICRD(regionKey,idx){
+  const global=calcularIndice(regionKey,Object.keys(ICRD_PESOS),idx,4);
+  if(!global)return null;
+  const categorias=ICRD_CATEGORIAS.map(c=>{
+    const r=calcularIndice(regionKey,c.claves,idx,3);
+    return r?Object.assign({id:c.id,nombre:c.nombre},r):{id:c.id,nombre:c.nombre,valor:null};
+  });
+  return Object.assign({},global,{categorias});
+}
+
+function topIncrementos(regionKey,cuantos){
+  const region=parsedData[regionKey];
+  if(!region||!region.delitos)return [];
+  const catDe=k=>{
+    const c=ICRD_CATEGORIAS.find(x=>x.claves.indexOf(k)>=0);
+    return c?c.nombre:'';
+  };
+  return Object.keys(ICRD_PESOS).map(k=>{
+    const fila=region.delitos[k];
+    if(!fila||!Array.isArray(fila.values)||fila.values.length<2)return null;
+    const n=fila.values.length, act=fila.values[n-1], ant=fila.values[n-2];
+    if(!Number.isFinite(act)||!Number.isFinite(ant))return null;
+    const dif=act-ant;
+    if(dif<=0)return null;
+    const peso=ICRD_PESOS[k]||1;
+    return {clave:k,nombre:RX_CORTO[k]||k,categoria:catDe(k),ant,act,dif,peso,
+            pct:ant>0?(dif/ant*100):null,baseBaja:ant<5,puntaje:dif*peso};
+  }).filter(Boolean).sort((a,b)=>b.puntaje-a.puntaje||b.dif-a.dif).slice(0,cuantos||3);
+}
+
+/* ===================================================================
+   PINTADO
+   =================================================================== */
+let rxRegion = 'jalisco';
+const $ = id => document.getElementById(id);
+
+function rxMarcarEstado(txt,clase){
+  const p=$('rxPunto'), t=$('rxEstado');
+  if(t)t.textContent=txt;
+  if(p)p.className='rx-punto'+(clase?' '+clase:'');
+}
+
+function rxPintaIcrd(){
+  const cont=$('rxIcrd');
+  const r=calcularICRD(rxRegion);
+  if(!r){cont.innerHTML='<span class="rx-edo falla">El índice no se puede calcular: la hoja no trae suficientes semanas.</span>';return;}
+  const niv=nivelICRD(r.valor);
+  const pos=Math.max(0,Math.min(100,(r.valor-ICRD_MIN)/(ICRD_MAX-ICRD_MIN)*100));
+
+  const familias=r.categorias.map(c=>{
+    if(c.valor===null)return `<div class="rx-fam-fila"><div class="rx-fam-cab"><span class="rx-fam-n">${esc(c.nombre)}</span></div><span class="rx-sin">Sin base suficiente esta semana</span></div>`;
+    const nc=nivelICRD(c.valor);
+    const p=Math.max(0,Math.min(100,(c.valor-ICRD_MIN)/(ICRD_MAX-ICRD_MIN)*100));
+    return `<div class="rx-fam-fila">
+      <div class="rx-fam-cab"><span class="rx-fam-n">${esc(c.nombre)}</span>
+      <span class="rx-fam-v" style="color:${nc.hex}">${c.valor.toFixed(1)}</span></div>
+      <div class="rx-fam-pista"><i style="left:${p}%;background:${nc.hex}"></i></div></div>`;
+  }).join('');
+
+  cont.innerHTML = `
+    <div class="rx-icrd-lectura">
+      <span class="rx-cifra rx-icrd-valor" style="color:${niv.hex}">${r.valor.toFixed(1)}</span>
+      <span class="rx-icrd-nivel" style="background:${niv.hex}">${esc(niv.etiqueta)}</span>
+    </div>
+    <p class="rx-icrd-desc">${esc(niv.texto)}</p>
+    <div class="rx-barra"><span class="rx-aguja" style="left:${pos}%"></span></div>
+    <div class="rx-marcas"><span>60</span><span>90</span><span>105</span><span>120</span><span>140</span></div>
+    <div class="rx-fam">${familias}</div>`;
+}
+
+function rxPintaTotal(){
+  const cont=$('rxTotal'), reg=parsedData[rxRegion];
+  if(!reg||!reg.weeks){cont.innerHTML='<span class="rx-edo falla">Sin datos para este ámbito.</span>';return;}
+  const v=parseFloat(reg.variacion)||0;
+  const color=v>0?'var(--risk)':(v<0?'var(--down)':'var(--muted)');
+  const flecha=v>0?'▲':(v<0?'▼':'=');
+  cont.innerHTML = `
+    <div class="rx-total">
+      <span class="rx-cifra rx-total-n">${nf(reg.totalDelitos)}</span>
+      <span class="rx-total-var" style="color:${color}">${flecha} ${pf(v)}</span>
+    </div>
+    <div class="rx-total-pie">Semana del ${esc(reg.lastWeek)}. La semana anterior cerró en ${nf(reg.totalDelitosAnterior)} delitos.</div>
+    <div class="rx-meta">Meta institucional: <b>no definida en el sistema.</b> Este bloque queda deliberadamente vacío hasta que la Coordinación entregue la línea base y el objetivo del periodo. No se estima ni se infiere.</div>`;
+}
+
+function rxPintaAlertas(){
+  const cont=$('rxAlertas');
+  const lista=topIncrementos(rxRegion,3);
+  if(!lista.length){cont.innerHTML='<span class="rx-edo">Sin observaciones: ningún delito del catálogo aumentó respecto de la semana anterior.</span>';return;}
+  cont.innerHTML='<div class="rx-alertas">'+lista.map(d=>{
+    const tono=d.categoria==='Alto impacto'?'var(--risk)':(d.categoria==='Libertad e integridad'?'var(--accent)':'var(--muted)');
+    return `<div class="rx-alerta" style="--ti:${tono}">
+      <div class="rx-alerta-cat">${esc(d.categoria)}</div>
+      <div class="rx-alerta-n">${esc(d.nombre)}</div>
+      <div class="rx-alerta-v">${nf(d.ant)} → <b>${nf(d.act)}</b></div>
+      <div class="rx-alerta-d">▲ +${nf(d.dif)}${d.pct!==null?' · '+pf(d.pct):''}
+        ${d.baseBaja?'<em>base baja</em>':''}</div>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+function rxPintaFoco(){
+  const cont=$('rxFoco'), reg=parsedData[rxRegion];
+  if(!reg||!reg.delitos){cont.innerHTML='<span class="rx-edo falla">Sin datos.</span>';return;}
+  cont.innerHTML='<div class="rx-foco">'+RX_FOCO.map(k=>{
+    const f=reg.delitos[k];
+    if(!f)return `<div class="rx-foco-f"><span class="rx-foco-n">${esc(RX_CORTO[k]||k)}</span><span class="rx-sin">No está en la hoja</span></div>`;
+    const act=f.lastValue||0, ant=f.previousValue||0, dif=act-ant;
+    const color=dif>0?'var(--risk)':(dif<0?'var(--down)':'var(--muted)');
+    const flecha=dif>0?'▲':(dif<0?'▼':'=');
+    return `<div class="rx-foco-f">
+      <span class="rx-foco-n">${esc(RX_CORTO[k]||k)}</span>
+      <span class="rx-foco-c">
+        <span class="rx-cifra rx-foco-v">${nf(act)}</span>
+        <span class="rx-foco-d" style="color:${color}">${flecha} ${dif>0?'+':''}${nf(dif)}</span>
+      </span></div>`;
+  }).join('')+'</div>';
+}
+
+function rxPintaDecisiones(){
+  const cont=$('rxDecisiones');
+  if(!RX_DECISIONES.puntos||!RX_DECISIONES.puntos.length){
+    cont.closest('.rx-panel').style.display='none'; return;
+  }
+  cont.innerHTML =
+    '<ol>'+RX_DECISIONES.puntos.map(p=>`<li>${esc(p)}</li>`).join('')+'</ol>'+
+    `<div class="rx-firma">Redactado por ${esc(RX_DECISIONES.autor)}${RX_DECISIONES.fecha?', '+esc(RX_DECISIONES.fecha):''}.
+     Este bloque no se genera automáticamente: lo escribe una persona y va firmado.</div>`;
+}
+
+function rxPintaSemanal(){
+  const reg=parsedData[rxRegion];
+  $('rxCorte').textContent=(reg&&reg.lastWeek)?reg.lastWeek:'—';
+  rxPintaIcrd(); rxPintaTotal(); rxPintaAlertas(); rxPintaFoco();
+}
+
+/* ---------- Bloque 5: Municipal_SESNSP, segunda descarga ---------- */
+function rxProcesaMunicipal(csvText){
+  const filas=parseCSV(csvText);
+  if(filas.length<2)throw new Error('La pestaña Municipal llegó vacía.');
+  const cab=filas[0].map(c=>(c||'').trim());
+  const col=n=>cab.findIndex(c=>dsNorm(c)===dsNorm(n));
+  const iMuni=col('Municipio'), iAnio=col('Año'), iTipo=col('Tipo_H');
+  if(iMuni<0||iTipo<0)throw new Error('Faltan las columnas homologadas (Tipo_H). Revisa el gid.');
+  const iMes=MUN_MESES.map(m=>col(m));
+
+  // Índice de municipio normalizado, para casar la hoja con el diccionario de población.
+  const porNorm={}; Object.keys(MUN_POBLACION).forEach(m=>{porNorm[dsNorm(m)]=m;});
+
+  let anioMax=null;
+  const crudo=[];
+  for(let f=1;f<filas.length;f++){
+    const r=filas[f];
+    if(!r||!r[iMuni])continue;
+    const canon=porNorm[dsNorm(r[iMuni])];
+    if(!canon)continue;                                  // filtra a los 125 de Jalisco
+    const anio=iAnio>=0?dsNum(r[iAnio]):null;
+    if(anio===null)continue;
+    if(anioMax===null||anio>anioMax)anioMax=anio;
+    crudo.push({anio,canon,meses:iMes.map(i=>(i>=0?dsNum(r[i]):null))});
+  }
+  if(anioMax===null)throw new Error('No se reconoció ningún año en la hoja.');
+
+  // Último mes con captura en el año más reciente: el acumulado es enero–ese mes,
+  // nunca el año completo, que aparecería artificialmente bajo.
+  let ultimoMes=-1;
+  crudo.forEach(r=>{ if(r.anio!==anioMax)return;
+    r.meses.forEach((v,i)=>{ if(v!==null&&v>0&&i>ultimoMes)ultimoMes=i; }); });
+  if(ultimoMes<0)ultimoMes=11;
+
+  const porMun={};
+  crudo.forEach(r=>{ if(r.anio!==anioMax)return;
+    let s=0; for(let i=0;i<=ultimoMes;i++)s+=(r.meses[i]||0);
+    porMun[r.canon]=(porMun[r.canon]||0)+s; });
+
+  const lista=Object.keys(porMun)
+    .filter(m=>MUN_POBLACION[m]>=RX_POB_MIN)
+    .map(m=>({m,abs:porMun[m],pob:MUN_POBLACION[m],tasa:+(porMun[m]/MUN_POBLACION[m]*100000).toFixed(1)}))
+    .sort((a,b)=>b.tasa-a.tasa);
+
+  return {lista,anio:anioMax,mes:MUN_MESES[ultimoMes]};
+}
+
+function rxPintaTerritorio(d){
+  const cont=$('rxTerritorio');
+  if(!d.lista.length){cont.innerHTML='<span class="rx-edo falla">Sin municipios por encima del piso de población.</span>';return;}
+  const top=d.lista[0], resto=d.lista.slice(1,5);
+  cont.innerHTML = `
+    <div class="rx-terr-cab">
+      <div class="rx-terr-nom">${esc(top.m)}</div>
+      <div class="rx-cifra rx-terr-tasa">${nf(top.tasa)}</div>
+      <div class="rx-terr-pie">carpetas por cada 100 mil habitantes · ${nf(top.abs)} en total</div>
+    </div>
+    ${resto.map((x,i)=>`<div class="rx-terr-l"><span>${i+2}. ${esc(x.m)}</span><b>${nf(x.tasa)}</b></div>`).join('')}
+    <div class="rx-nota-fuente">
+      Periodo distinto al del resto de la pantalla: SESNSP, acumulado enero–${esc(d.mes)} de ${d.anio}.
+      Los otros cinco bloques son semanales, de la Fiscalía. No son comparables entre sí.
+      Se excluyen municipios de menos de ${nf(RX_POB_MIN)} habitantes.
+    </div>`;
+}
+
+/* ===================================================================
+   ARRANQUE · hidratación progresiva
+   =================================================================== */
+function rxFallback(destino,gid,etiqueta,alCargar){
+  const c=$(destino);
+  c.insertAdjacentHTML('beforeend',
+    `<div class="rx-fallback">El navegador bloqueó la descarga directa.
+     Descarga el CSV de ${esc(etiqueta)} y súbelo aquí:
+     <input type="file" accept=".csv,text/csv" id="rxFile_${gid}"></div>`);
+  const inp=$('rxFile_'+gid);
+  inp.addEventListener('change',()=>{
+    const f=inp.files&&inp.files[0]; if(!f)return;
+    const fr=new FileReader();
+    fr.onload=()=>{ try{ alCargar(fr.result); }catch(e){ c.innerHTML='<span class="rx-edo falla">'+esc(e.message)+'</span>'; } };
+    fr.readAsText(f,'UTF-8');
+  });
+}
+
+function rxCargarSemanal(txt){
+  if(!processSheetData(parseCSV(txt))) throw new Error('La hoja no contiene los bloques JALISCO ni ÁREA METROPOLITANA.');
+  rxMarcarEstado('Datos actualizados','');
+  rxPintaSemanal();
+}
+
+function rxCargarMunicipal(txt){ rxPintaTerritorio(rxProcesaMunicipal(txt)); }
+
+function rxArranque(){
+  $('rxConsulta').textContent=' Consultado el '+new Date().toLocaleString('es-MX')+'.';
+  rxPintaDecisiones();
+
+  // Bloques 1 a 4: una sola descarga, la misma que ya hace el tablero al abrir.
+  fetch(rxUrl(RX_GID_SEMANAL))
+    .then(r=>{ if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); })
+    .then(rxCargarSemanal)
+    .catch(err=>{
+      rxMarcarEstado('Fuente no disponible','falla');
+      ['rxIcrd','rxTotal','rxAlertas','rxFoco'].forEach(id=>{
+        $(id).innerHTML='<span class="rx-edo falla">Fuente no disponible: '+esc(err.message)+'</span>';
+      });
+      rxFallback('rxIcrd',RX_GID_SEMANAL,'la hoja SEMANAL',rxCargarSemanal);
+    });
+
+  // Bloque 5: única descarga adicional, en segundo plano, sin bloquear lo anterior.
+  fetch(rxUrl(RX_GID_MUNICIPAL))
+    .then(r=>{ if(!r.ok)throw new Error('HTTP '+r.status); return r.text(); })
+    .then(rxCargarMunicipal)
+    .catch(err=>{
+      $('rxTerritorio').innerHTML='<span class="rx-edo falla">Fuente no disponible: '+esc(err.message)+'</span>';
+      rxFallback('rxTerritorio',RX_GID_MUNICIPAL,'Municipal_SESNSP',rxCargarMunicipal);
+    });
+}
+
+['rxBtnJal','rxBtnAmg'].forEach(id=>{
+  $(id).addEventListener('click',()=>{
+    rxRegion = (id==='rxBtnJal')?'jalisco':'amg';
+    $('rxBtnJal').setAttribute('aria-pressed',String(rxRegion==='jalisco'));
+    $('rxBtnAmg').setAttribute('aria-pressed',String(rxRegion==='amg'));
+    if(parsedData[rxRegion]&&parsedData[rxRegion].weeks)rxPintaSemanal();
+  });
+});
+
+rxArranque();
+</script>
+</body>
+</html>
