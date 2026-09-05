@@ -2192,7 +2192,10 @@
                         <button data-mapa="calor" class="on">Mapa de calor</button>
                         <button data-mapa="clusters">Clusters</button>
                         <button data-mapa="puntos">Puntos</button>
+                        <button data-mapa="coropleta">Coropleta municipal</button>
                     </div>
+                    <label class="mun-et" style="text-transform:none;letter-spacing:0">
+                        <input type="checkbox" id="fisLimites"> Límites municipales</label>
                     <span id="fisMapaInfo" class="info-estado"></span>
                 </div>
                 <div id="fisMapa" style="height:520px;border-radius:var(--r-md);overflow:hidden"></div>
@@ -8340,9 +8343,14 @@
 
         let fisData = null;
         let fisCharts = [];
-        let fisMapa = null, fisCapa = null;
+        /* DOS capas, no una: hasta ahora el mapa de Fiscalía sustituía `fisCapa`
+           en cada render y solo podía mostrar una cosa a la vez. Los límites
+           municipales van en una capa aparte para poder superponerse al calor,
+           a los clusters o a los puntos. */
+        let fisMapa = null, fisCapa = null, fisCapaGeo = null;
         const fisEstado = { delito: '__TODOS__', anio: '__TODOS__', mes: '__TODOS__',
                             municipio: '__TODOS__', violencia: '__TODAS__', mapa: 'calor',
+                            limites: false,
                             anioG5: null };
 
         const FIS_MESES = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
@@ -9112,7 +9120,51 @@
                 }).addTo(fisMapa);
             }
             if (fisCapa) { fisMapa.removeLayer(fisCapa); fisCapa = null; }
-            if (!puntos.length) return;
+            if (fisCapaGeo) { fisMapa.removeLayer(fisCapaGeo); fisCapaGeo = null; }
+
+            /* Límites municipales y coropleta.
+               La geometría es la del Marco Geoestadístico INEGI 2025 que ya vive
+               en el bloque `hd*`: se reutilizan `hdGeoJalisco()` —que cachea el
+               parseo—, `hdBusca()` para emparejar municipio por nombre normalizado
+               y `hdColorRel()` para la escala de color. NO se añade una tercera
+               copia de la geometría; a cambio, Fiscalía queda acoplada a esas tres
+               funciones y tocar `hd*` puede romper este mapa.
+
+               El conteo va sobre `fisFiltra()` COMPLETO, no sobre los puntos: el
+               municipio no necesita coordenada y usar solo los georreferenciados
+               subcontaría las carpetas sin `wkt_geom` utilizable. */
+            const modo = fisEstado.mapa;
+            const geo = (typeof hdGeoJalisco === 'function') ? hdGeoJalisco() : null;
+            if (geo && (fisEstado.limites || modo === 'coropleta')) {
+                const porMun = {};
+                fisFiltra().forEach(r => {
+                    const m = r.municipio && String(r.municipio).trim();
+                    if (m) porMun[m] = (porMun[m] || 0) + 1;
+                });
+                const maxMun = Math.max(1, ...Object.values(porMun));
+                fisCapaGeo = L.geoJSON(geo, {
+                    style: ft => {
+                        const k = hdBusca(ft.properties.nom, porMun);
+                        const v = k ? porMun[k] : 0;
+                        return modo === 'coropleta'
+                            ? { color: '#fff', weight: .8, fillColor: hdColorRel(v, maxMun), fillOpacity: .78 }
+                            : { color: '#18345D', weight: .9, fill: false, opacity: .38 };
+                    },
+                    onEachFeature: (ft, capa) => {
+                        const k = hdBusca(ft.properties.nom, porMun);
+                        const v = k ? porMun[k] : 0;
+                        capa.bindPopup(`<b style="color:#18345D">${esc(ft.properties.nom)}</b><br>` +
+                            `${nf(v)} ${v === 1 ? 'carpeta' : 'carpetas'} en el periodo filtrado`);
+                    }
+                }).addTo(fisMapa);
+            }
+
+            /* La coropleta sustituye a los datos puntuales: no se dibujan encima
+               ni el calor ni los marcadores. Se sale aquí, ya con la capa puesta. */
+            if (modo === 'coropleta' || !puntos.length) {
+                setTimeout(() => fisMapa.invalidateSize(), 60);
+                return;
+            }
 
             /* Contenido del popup, común a Clusters y a Puntos.
                Solo metadatos NO sensibles: nunca calle, número ni identificadores.
@@ -9255,6 +9307,12 @@
 
         conmutar('fisViolBtns', 'viol', v => { fisEstado.violencia = v; fisRefrescar(); });
         conmutar('fisMapaBtns', 'mapa', v => { fisEstado.mapa = v; fisRenderMapa(); });
+        (function () {
+            const lim = document.getElementById('fisLimites');
+            if (lim) lim.addEventListener('change', e => {
+                fisEstado.limites = e.target.checked; fisRenderMapa();
+            });
+        })();
 
         (function () {
             const b = document.getElementById('fisLimpiar');
