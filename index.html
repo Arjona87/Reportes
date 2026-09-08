@@ -13447,6 +13447,488 @@
            documento y una petición pesada retrasa a las demás. */
         registrarCargador('homicidios', () => setTimeout(hdCargar, 400));
 
+        /* ═══════════════════════════════════════════════════════════════════
+           INICIO · MÓDULO RESUMEN EJECUTIVO  (prefijo rx* / RX_*)
+           ═══════════════════════════════════════════════════════════════════
+
+           QUÉ ES
+           Séptima vista. Responde en una sola pantalla, sin desplazamiento, a la
+           pregunta que el tablero no respondía: cómo está Jalisco esta semana y
+           qué exige atención. Las otras seis vistas siguen siendo el instrumento
+           de exploración; esta es el instrumento de decisión.
+
+           CÓMO SE ELIMINA
+           Borrando desde este comentario hasta el de cierre «FIN · MÓDULO
+           RESUMEN EJECUTIVO». No hay nada que quitar en ningún otro punto del
+           archivo: el módulo se autoinyecta. El botón de pestaña, el contenedor
+           de la vista, el CSS y la entrada del registro los crea él mismo en
+           tiempo de ejecución. Al borrarlo, el tablero vuelve a sus seis vistas
+           y a abrir en el Reporte Semanal, sin ajustes adicionales.
+
+           DE QUÉ DEPENDE  (no borrar estas piezas creyendo que solo las usa su
+           módulo de origen; el Resumen las lee o las llama)
+             Reporte Semanal → parsedData, calcularICRD, nivelICRD, ICRD_MIN,
+                               ICRD_MAX, topIncrementos, nombreCorto
+             Utilidades      → parseCSV, dsNorm, dsNum, nf, pf, esc
+             Municipal       → MUN_POBLACION, MUN_MESES
+             Navegación      → VISTAS, registrarCargador, dsMostrarVista
+             Ingesta         → SHEET_ID, SHEETS
+
+           POR QUÉ VA AL FINAL DEL BLOQUE
+           MUN_POBLACION (const, ~L. 6939) y VISTAS (const, ~L. 6625) no se izan.
+           Colocar el módulo antes de ellas lanza el SyntaxError de zona muerta
+           temporal que deja en blanco las siete vistas.
+
+           COSTO DE RED
+           Bloques 1 a 4: ninguno. init() llena parsedData en DOMContentLoaded
+           pase lo que pase, así que el Resumen lee lo ya descargado y espera con
+           sondeo acotado. Bloque 5: una descarga propia de Municipal_SESNSP. Se
+           eligió no leer munData para que el módulo siga siendo borrable de un
+           tajo; el precio es que ese CSV baja dos veces por sesión si el usuario
+           además entra a Incidencia Municipal.
+           ═══════════════════════════════════════════════════════════════════ */
+        (function () {
+            'use strict';
+
+            /* Los tres indicadores inamovibles del bloque «Foco estratégico».
+               Los tres viven en la hoja SEMANAL, así que no cuestan una descarga
+               adicional. Deliberadamente NO se usa el módulo Desaparecidos: ese
+               registro es el RNPDNO acumulado histórico y mezclarlo con el flujo
+               semanal de la Fiscalía sería confrontar dos universos distintos. */
+            const RX_FOCO = [
+                'HOMICIDIOS DOLOSOS (VÍCTIMAS)',
+                'FEMINICIDIO (VÍCTIMAS)',
+                'DESAPARICIÓN COMETIDA POR PARTICULARES'
+            ];
+
+            /* Campo editorial. Ningún texto de este bloque se genera solo: lo
+               escribe una persona y se edita aquí. Vaciar el arreglo hace que el
+               panel deje de dibujarse. Un tablero que derivara recomendaciones de
+               despliegue a partir de variaciones semanales le estaría dando
+               instrucciones al Gobernador sin que nadie las haya redactado. */
+            const RX_DECISIONES = [
+                'Sostener el despliegue en el municipio señalado en Territorio crítico hasta el siguiente corte semanal.',
+                'Convocar mesa de coordinación por el delito que encabeza Alertas críticas.',
+                'Solicitar a la Fiscalía el desglose por colonia del incremento detectado.'
+            ];
+
+            /* Mismo piso que ya aplica Incidencia Municipal: por debajo de 5,000
+               habitantes un solo caso dispara la tasa y el ranking se llena de
+               municipios marginales que cambian cada mes. */
+            const RX_POB_MIN = 5000;
+
+            const RX_ESPERA_MS = 250, RX_ESPERA_MAX = 40;
+
+            let rxRegion = 'jalisco';
+            let rxMunCache = null;
+            let rxMunPedido = false;
+
+            const rxEl = id => document.getElementById(id);
+
+            /* ---------- CSS: nodo propio, se va con el módulo ---------- */
+            function rxEstilos() {
+                const s = document.createElement('style');
+                s.id = 'rxEstilos';
+                s.textContent = `
+#vistaResumen .rx-lienzo{max-width:var(--maxw);margin:0 auto;padding:18px 0 26px}
+#vistaResumen .rx-grid{display:grid;grid-template-columns:340px 1fr 300px;gap:16px;align-items:start}
+#vistaResumen .rx-col{display:flex;flex-direction:column;gap:16px}
+#vistaResumen .rx-panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--shadow);padding:16px 18px}
+#vistaResumen .rx-panel h3{font-size:11.5px;font-weight:700;color:var(--muted);margin:0 0 12px;letter-spacing:.4px;text-transform:uppercase}
+#vistaResumen .rx-panel h3 span{text-transform:none;letter-spacing:0;font-weight:500;opacity:.85}
+#vistaResumen .rx-icrd-lectura{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+#vistaResumen .rx-icrd-valor{font-size:62px;font-weight:800;line-height:.95;letter-spacing:-2px}
+#vistaResumen .rx-icrd-nivel{font-size:13px;font-weight:700;color:#fff;padding:4px 13px;border-radius:var(--r-pill);letter-spacing:.3px}
+#vistaResumen .rx-icrd-desc{font-size:12.5px;color:var(--ink-soft);margin:10px 0 0;max-width:34ch}
+#vistaResumen .rx-barra{position:relative;height:9px;border-radius:var(--r-pill);margin-top:16px;background:linear-gradient(90deg,#1E8449 0%,#1E8449 34%,#C9A227 34%,#C9A227 55%,#F08013 55%,#F08013 74%,#C0392B 74%,#C0392B 100%)}
+#vistaResumen .rx-aguja{position:absolute;top:-5px;width:3px;height:19px;background:var(--ink);border-radius:2px;box-shadow:0 0 0 2px var(--surface);transform:translateX(-1.5px)}
+#vistaResumen .rx-marcas{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:7px}
+#vistaResumen .rx-fam{margin-top:18px;border-top:1px solid var(--line-soft);padding-top:14px}
+#vistaResumen .rx-fam-fila{margin-bottom:13px}
+#vistaResumen .rx-fam-fila:last-child{margin-bottom:0}
+#vistaResumen .rx-fam-cab{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+#vistaResumen .rx-fam-n{font-size:12.5px;font-weight:600;color:var(--ink-soft)}
+#vistaResumen .rx-fam-v{font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+#vistaResumen .rx-fam-pista{position:relative;height:5px;border-radius:var(--r-pill);background:var(--surface-3)}
+#vistaResumen .rx-fam-pista i{position:absolute;top:-3px;width:2px;height:11px;border-radius:2px;background:var(--ink)}
+#vistaResumen .rx-sin{font-size:11.5px;color:var(--muted);font-style:italic}
+#vistaResumen .rx-total{display:flex;align-items:flex-end;gap:22px;flex-wrap:wrap}
+#vistaResumen .rx-total-n{font-size:56px;font-weight:800;line-height:.95;letter-spacing:-2px;font-variant-numeric:tabular-nums}
+#vistaResumen .rx-total-var{font-size:20px;font-weight:700;padding-bottom:7px}
+#vistaResumen .rx-total-pie{font-size:12.5px;color:var(--muted);margin-top:8px}
+#vistaResumen .rx-meta{margin-top:14px;padding:11px 14px;border-radius:var(--r-md);background:var(--surface-2);border:1px dashed var(--line);font-size:12.5px;color:var(--muted)}
+#vistaResumen .rx-meta b{color:var(--warn);font-weight:600}
+#vistaResumen .rx-alertas{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+#vistaResumen .rx-alerta{border:1px solid var(--line);border-left:4px solid var(--ti);border-radius:var(--r-md);padding:12px 13px;background:var(--surface-2)}
+#vistaResumen .rx-alerta-cat{font-size:10px;font-weight:700;color:var(--ti);letter-spacing:.3px}
+#vistaResumen .rx-alerta-n{font-size:13.5px;font-weight:700;margin:4px 0 7px;line-height:1.25}
+#vistaResumen .rx-alerta-v{font-size:12.5px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+#vistaResumen .rx-alerta-d{font-size:12.5px;font-weight:700;color:var(--risk);margin-top:3px;font-variant-numeric:tabular-nums}
+#vistaResumen .rx-alerta-d em{font-style:normal;font-weight:500;font-size:10.5px;color:var(--warn)}
+#vistaResumen .rx-foco{display:flex;flex-direction:column;gap:10px}
+#vistaResumen .rx-foco-f{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-radius:var(--r-md);background:var(--surface-2);border:1px solid var(--line-soft)}
+#vistaResumen .rx-foco-n{font-size:12.5px;font-weight:600;color:var(--ink-soft);line-height:1.2}
+#vistaResumen .rx-foco-c{display:flex;align-items:baseline;gap:9px}
+#vistaResumen .rx-foco-v{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+#vistaResumen .rx-foco-d{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+#vistaResumen .rx-terr-cab{border-radius:var(--r-md);background:var(--brand);color:#fff;padding:13px 15px;margin-bottom:12px}
+#vistaResumen .rx-terr-nom{font-size:17px;font-weight:700;line-height:1.2}
+#vistaResumen .rx-terr-tasa{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:5px;line-height:1}
+#vistaResumen .rx-terr-pie{font-size:11.5px;opacity:.85;margin-top:3px}
+#vistaResumen .rx-terr-l{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+#vistaResumen .rx-terr-l:last-of-type{border-bottom:0}
+#vistaResumen .rx-terr-l b{font-variant-numeric:tabular-nums;font-weight:700}
+#vistaResumen .rx-terr-l span{color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#vistaResumen .rx-nota-fuente{margin-top:12px;padding-top:10px;border-top:1px solid var(--line-soft);font-size:11px;color:var(--warn);line-height:1.4}
+#vistaResumen .rx-dec{border-left:4px solid var(--accent)}
+#vistaResumen .rx-dec ol{margin:0;padding-left:20px}
+#vistaResumen .rx-dec li{font-size:13.5px;margin-bottom:8px;color:var(--ink-soft);line-height:1.45}
+#vistaResumen .rx-dec li:last-child{margin-bottom:0}
+#vistaResumen .rx-dec-nota{margin-top:13px;padding-top:11px;border-top:1px solid var(--line-soft);font-size:11.5px;color:var(--muted)}
+#vistaResumen .rx-edo{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;color:var(--muted);font-weight:500}
+#vistaResumen .rx-edo::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--muted);flex:none}
+#vistaResumen .rx-edo.proceso::before{background:var(--warn)}
+#vistaResumen .rx-edo.falla{color:var(--risk)}
+#vistaResumen .rx-edo.falla::before{background:var(--risk)}
+#vistaResumen .rx-cab{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:4px}
+#vistaResumen .rx-cab h2{font-size:19px;margin:0;color:var(--ink)}
+#vistaResumen .rx-cab-corte{font-size:13px;color:var(--muted)}
+#vistaResumen .rx-cab-corte b{color:var(--ink-soft)}
+#vistaResumen .rx-ambito{margin-left:auto;display:flex;gap:4px;background:var(--surface-3);padding:3px;border-radius:var(--r-pill)}
+#vistaResumen .rx-ambito button{font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-soft);cursor:pointer;background:transparent;border:0;padding:5px 15px;border-radius:var(--r-pill)}
+#vistaResumen .rx-ambito button[aria-pressed="true"]{background:var(--brand);color:#fff}
+#vistaResumen .rx-pie{margin-top:16px;font-size:11.5px;color:var(--muted);line-height:1.55}
+@media (max-width:1180px){#vistaResumen .rx-grid{grid-template-columns:1fr 1fr}#vistaResumen .rx-col:nth-child(3){grid-column:1 / -1}}
+@media (max-width:760px){#vistaResumen .rx-grid{grid-template-columns:1fr}#vistaResumen .rx-alertas{grid-template-columns:1fr}#vistaResumen .rx-icrd-valor{font-size:50px}#vistaResumen .rx-total-n{font-size:44px}#vistaResumen .rx-ambito{margin-left:0}}`;
+                document.head.appendChild(s);
+            }
+
+            /* ---------- Estructura: botón, contenedor y registro ---------- */
+            function rxMonta() {
+                rxEstilos();
+
+                const barra = document.querySelector('nav.tabs');
+                const btn = document.createElement('button');
+                btn.className = 'btn-nav btn-nav-off';
+                btn.id = 'navRxBtn';
+                btn.textContent = 'Resumen';
+                if (barra) barra.insertBefore(btn, barra.firstChild);
+
+                const cont = document.createElement('div');
+                cont.id = 'vistaResumen';
+                cont.style.display = 'none';
+                cont.innerHTML = `
+                  <div class="rx-lienzo">
+                    <div class="rx-cab">
+                      <h2>Situación de seguridad</h2>
+                      <span class="rx-cab-corte">Corte semanal al <b id="rxCorte">—</b></span>
+                      <div class="rx-ambito" role="group" aria-label="Ámbito territorial">
+                        <button id="rxBtnJal" aria-pressed="true">Jalisco</button>
+                        <button id="rxBtnAmg" aria-pressed="false">AMG</button>
+                      </div>
+                    </div>
+                    <div class="rx-grid">
+                      <div class="rx-col">
+                        <section class="rx-panel" aria-labelledby="rxT1">
+                          <h3 id="rxT1">Índice compuesto de riesgo <span>· base 100 = promedio histórico</span></h3>
+                          <div id="rxIcrd" role="status" aria-live="polite"><span class="rx-edo proceso">Cargando</span></div>
+                        </section>
+                      </div>
+                      <div class="rx-col">
+                        <section class="rx-panel" aria-labelledby="rxT2">
+                          <h3 id="rxT2">Incidencia total de la semana</h3>
+                          <div id="rxTotal" role="status" aria-live="polite"><span class="rx-edo proceso">Cargando</span></div>
+                        </section>
+                        <section class="rx-panel" aria-labelledby="rxT3">
+                          <h3 id="rxT3">Alertas críticas <span>· mayor incremento ponderado por gravedad</span></h3>
+                          <div id="rxAlertas"><span class="rx-edo proceso">Cargando</span></div>
+                        </section>
+                        <section class="rx-panel rx-dec" aria-labelledby="rxT6">
+                          <h3 id="rxT6">Decisiones sugeridas</h3>
+                          <div id="rxDecisiones"></div>
+                        </section>
+                      </div>
+                      <div class="rx-col">
+                        <section class="rx-panel" aria-labelledby="rxT4">
+                          <h3 id="rxT4">Foco estratégico</h3>
+                          <div id="rxFoco"><span class="rx-edo proceso">Cargando</span></div>
+                        </section>
+                        <section class="rx-panel" aria-labelledby="rxT5">
+                          <h3 id="rxT5">Territorio crítico</h3>
+                          <div id="rxTerritorio"><span class="rx-edo proceso">Cargando</span></div>
+                        </section>
+                      </div>
+                    </div>
+                    <div class="rx-pie">
+                      Fuente: Fiscalía del Estado de Jalisco, hoja SEMANAL, para el índice, la incidencia total,
+                      las alertas y el foco estratégico. SESNSP, pestaña Municipal_SESNSP con taxonomía homologada,
+                      para el territorio crítico. Población: Censo de Población y Vivienda 2020, INEGI.
+                      Elaborado por CGES/DGAPP/AA.
+                    </div>
+                  </div>`;
+                const main = document.querySelector('main');
+                const primera = document.getElementById('vistaSemanal');
+                if (main) main.insertBefore(cont, primera || main.firstChild);
+
+                /* Primera del registro: dsVistaDesdeHash() devuelve VISTAS[0].id
+                   cuando la URL no trae hash, así que el tablero abre aquí. */
+                VISTAS.unshift({ id: 'resumen', div: 'vistaResumen', btn: 'navRxBtn', hash: 'Resumen' });
+
+                /* El VISTAS.forEach que reparte los oyentes de navegación ya corrió
+                   antes de este punto y nunca vio este botón: se le pone el suyo. */
+                btn.addEventListener('click', () => { dsMostrarVista('resumen'); rxPintar(); });
+                window.addEventListener('hashchange', () => {
+                    if ((window.location.hash || '').toLowerCase().indexOf('resumen') >= 0) rxPintar();
+                });
+
+                ['rxBtnJal', 'rxBtnAmg'].forEach(id => {
+                    rxEl(id).addEventListener('click', () => {
+                        rxRegion = (id === 'rxBtnJal') ? 'jalisco' : 'amg';
+                        rxEl('rxBtnJal').setAttribute('aria-pressed', String(rxRegion === 'jalisco'));
+                        rxEl('rxBtnAmg').setAttribute('aria-pressed', String(rxRegion === 'amg'));
+                        rxPintarSemanal();
+                    });
+                });
+
+                registrarCargador('resumen', rxCargar);
+                rxPintaDecisiones();
+            }
+
+            /* ---------- Bloque 1 · Índice compuesto ---------- */
+            function rxPintaIcrd() {
+                const c = rxEl('rxIcrd');
+                const r = calcularICRD(rxRegion);
+                if (!r) { c.innerHTML = '<span class="rx-edo falla">El índice no se puede calcular: la hoja no trae suficientes semanas.</span>'; return; }
+                const niv = nivelICRD(r.valor);
+                const pos = Math.max(0, Math.min(100, ((r.valor - ICRD_MIN) / (ICRD_MAX - ICRD_MIN)) * 100));
+
+                const familias = r.categorias.map(cat => {
+                    if (cat.valor === null) {
+                        return `<div class="rx-fam-fila"><div class="rx-fam-cab"><span class="rx-fam-n">${esc(cat.nombre)}</span></div>`
+                             + `<span class="rx-sin">Sin base suficiente esta semana</span></div>`;
+                    }
+                    const nc = nivelICRD(cat.valor);
+                    const p = Math.max(0, Math.min(100, ((cat.valor - ICRD_MIN) / (ICRD_MAX - ICRD_MIN)) * 100));
+                    return `<div class="rx-fam-fila">
+                        <div class="rx-fam-cab"><span class="rx-fam-n">${esc(cat.nombre)}</span>
+                        <span class="rx-fam-v" style="color:${nc.hex}">${cat.valor.toFixed(1)}</span></div>
+                        <div class="rx-fam-pista"><i style="left:${p}%;background:${nc.hex}"></i></div></div>`;
+                }).join('');
+
+                c.innerHTML = `
+                    <div class="rx-icrd-lectura">
+                      <span class="cifra rx-icrd-valor" style="color:${niv.hex}">${r.valor.toFixed(1)}</span>
+                      <span class="rx-icrd-nivel" style="background:${niv.hex}">${esc(niv.etiqueta)}</span>
+                    </div>
+                    <p class="rx-icrd-desc">${esc(niv.texto)}</p>
+                    <div class="rx-barra"><span class="rx-aguja" style="left:${pos}%"></span></div>
+                    <div class="rx-marcas"><span>60</span><span>90</span><span>105</span><span>120</span><span>140</span></div>
+                    <div class="rx-fam">${familias}</div>`;
+            }
+
+            /* ---------- Bloque 2 · Incidencia total ---------- */
+            function rxPintaTotal() {
+                const c = rxEl('rxTotal'), reg = parsedData[rxRegion];
+                if (!reg || !reg.weeks) { c.innerHTML = '<span class="rx-edo falla">Sin datos para este ámbito.</span>'; return; }
+                const v = parseFloat(reg.variacion) || 0;
+                const color = v > 0 ? 'var(--risk)' : (v < 0 ? 'var(--down)' : 'var(--muted)');
+                const flecha = v > 0 ? '▲' : (v < 0 ? '▼' : '=');
+                c.innerHTML = `
+                    <div class="rx-total">
+                      <span class="cifra rx-total-n">${nf(reg.totalDelitos)}</span>
+                      <span class="rx-total-var" style="color:${color}">${flecha} ${pf(v)}</span>
+                    </div>
+                    <div class="rx-total-pie">Semana del ${esc(reg.lastWeek)}. La semana anterior cerró en ${nf(reg.totalDelitosAnterior)} delitos.</div>
+                    <div class="rx-meta">Meta institucional: <b>no definida en el sistema.</b> Este bloque queda vacío
+                      hasta que la Coordinación entregue la línea base y el objetivo del periodo. No se estima ni se infiere.</div>`;
+            }
+
+            /* ---------- Bloque 3 · Alertas críticas ---------- */
+            function rxPintaAlertas() {
+                const c = rxEl('rxAlertas');
+                const lista = topIncrementos(rxRegion, 3);
+                if (!lista.length) {
+                    c.innerHTML = '<span class="rx-edo">Sin observaciones: ningún delito del catálogo aumentó respecto de la semana anterior.</span>';
+                    return;
+                }
+                c.innerHTML = '<div class="rx-alertas">' + lista.map(d => {
+                    const tono = d.categoria === 'Alto impacto' ? 'var(--risk)'
+                               : (d.categoria === 'Libertad e Integridad' ? 'var(--accent)' : 'var(--muted)');
+                    return `<div class="rx-alerta" style="--ti:${tono}">
+                        <div class="rx-alerta-cat">${esc(d.categoria || 'Catálogo')}</div>
+                        <div class="rx-alerta-n">${esc(d.nombre)}</div>
+                        <div class="rx-alerta-v">${nf(d.ant)} → <b>${nf(d.act)}</b></div>
+                        <div class="rx-alerta-d">▲ +${nf(d.dif)}${d.pct !== null ? ' · ' + pf(d.pct) : ''}
+                          ${d.baseBaja ? '<em title="Menos de 5 casos la semana anterior: la variación porcentual no es interpretable">base baja</em>' : ''}</div>
+                      </div>`;
+                }).join('') + '</div>';
+            }
+
+            /* ---------- Bloque 4 · Foco estratégico ---------- */
+            function rxPintaFoco() {
+                const c = rxEl('rxFoco'), reg = parsedData[rxRegion];
+                if (!reg || !reg.delitos) { c.innerHTML = '<span class="rx-edo falla">Sin datos.</span>'; return; }
+                c.innerHTML = '<div class="rx-foco">' + RX_FOCO.map(k => {
+                    const f = reg.delitos[k];
+                    if (!f) return `<div class="rx-foco-f"><span class="rx-foco-n">${esc(nombreCorto(k))}</span>`
+                                 + `<span class="rx-sin">No está en la hoja</span></div>`;
+                    const act = f.lastValue || 0, ant = f.previousValue || 0, dif = act - ant;
+                    const color = dif > 0 ? 'var(--risk)' : (dif < 0 ? 'var(--down)' : 'var(--muted)');
+                    const flecha = dif > 0 ? '▲' : (dif < 0 ? '▼' : '=');
+                    return `<div class="rx-foco-f">
+                        <span class="rx-foco-n">${esc(nombreCorto(k))}</span>
+                        <span class="rx-foco-c">
+                          <span class="cifra rx-foco-v">${nf(act)}</span>
+                          <span class="rx-foco-d" style="color:${color}">${flecha} ${dif > 0 ? '+' : ''}${nf(dif)}</span>
+                        </span></div>`;
+                }).join('') + '</div>';
+            }
+
+            /* ---------- Bloque 6 · Decisiones ---------- */
+            function rxPintaDecisiones() {
+                const c = rxEl('rxDecisiones');
+                if (!c) return;
+                if (!RX_DECISIONES.length) {
+                    const panel = c.closest('.rx-panel');
+                    if (panel) panel.style.display = 'none';
+                    return;
+                }
+                c.innerHTML = '<ol>' + RX_DECISIONES.map(p => `<li>${esc(p)}</li>`).join('') + '</ol>'
+                    + '<div class="rx-dec-nota">Redacción editorial. Este bloque no se genera automáticamente '
+                    + 'a partir de las variaciones de la semana.</div>';
+            }
+
+            /* ---------- Bloque 5 · Territorio crítico ---------- */
+            function rxProcesaMunicipal(csvText) {
+                const filas = parseCSV(csvText);
+                if (filas.length < 2) throw new Error('La pestaña Municipal llegó vacía.');
+                const cab = filas[0].map(x => (x || '').trim());
+                const col = n => cab.findIndex(x => dsNorm(x) === dsNorm(n));
+                const iMuni = col('Municipio'), iAnio = col('Año'), iTipo = col('Tipo_H');
+                if (iMuni < 0 || iTipo < 0) {
+                    throw new Error('Faltan las columnas homologadas (Tipo_H). Verifica que el gid apunte a Municipal_SESNSP.');
+                }
+                const iMes = MUN_MESES.map(m => col(m));
+
+                // Índice normalizado para casar la hoja con el diccionario de población.
+                const porNorm = {};
+                Object.keys(MUN_POBLACION).forEach(m => { porNorm[dsNorm(m)] = m; });
+
+                let anioMax = null;
+                const crudo = [];
+                for (let f = 1; f < filas.length; f++) {
+                    const r = filas[f];
+                    if (!r || !r[iMuni]) continue;
+                    const canon = porNorm[dsNorm(r[iMuni])];
+                    if (!canon) continue;                       // deja solo los 125 de Jalisco
+                    const anio = iAnio >= 0 ? dsNum(r[iAnio]) : null;
+                    if (anio === null) continue;
+                    if (anioMax === null || anio > anioMax) anioMax = anio;
+                    crudo.push({ anio: anio, canon: canon, meses: iMes.map(i => (i >= 0 ? dsNum(r[i]) : null)) });
+                }
+                if (anioMax === null) throw new Error('No se reconoció ningún año en la hoja.');
+
+                /* Último mes con captura del año más reciente. El acumulado va de
+                   enero a ese mes, nunca el año completo: los meses sin capturar
+                   entrarían como cero y hundirían la tasa artificialmente. */
+                let ultimoMes = -1;
+                crudo.forEach(r => {
+                    if (r.anio !== anioMax) return;
+                    r.meses.forEach((v, i) => { if (v !== null && v > 0 && i > ultimoMes) ultimoMes = i; });
+                });
+                if (ultimoMes < 0) ultimoMes = 11;
+
+                const porMun = {};
+                crudo.forEach(r => {
+                    if (r.anio !== anioMax) return;
+                    let s = 0;
+                    for (let i = 0; i <= ultimoMes; i++) s += (r.meses[i] || 0);
+                    porMun[r.canon] = (porMun[r.canon] || 0) + s;
+                });
+
+                const lista = Object.keys(porMun)
+                    .filter(m => MUN_POBLACION[m] >= RX_POB_MIN)
+                    .map(m => ({
+                        m: m, abs: porMun[m], pob: MUN_POBLACION[m],
+                        tasa: +(porMun[m] / MUN_POBLACION[m] * 100000).toFixed(1)
+                    }))
+                    .sort((a, b) => b.tasa - a.tasa);
+
+                return { lista: lista, anio: anioMax, mes: MUN_MESES[ultimoMes] };
+            }
+
+            function rxPintaTerritorio(d) {
+                const c = rxEl('rxTerritorio');
+                if (!d.lista.length) { c.innerHTML = '<span class="rx-edo falla">Ningún municipio supera el piso de población.</span>'; return; }
+                const top = d.lista[0], resto = d.lista.slice(1, 5);
+                c.innerHTML = `
+                    <div class="rx-terr-cab">
+                      <div class="rx-terr-nom">${esc(top.m)}</div>
+                      <div class="cifra rx-terr-tasa">${nf(top.tasa)}</div>
+                      <div class="rx-terr-pie">carpetas por cada 100 mil habitantes · ${nf(top.abs)} en total</div>
+                    </div>
+                    ${resto.map((x, i) => `<div class="rx-terr-l"><span>${i + 2}. ${esc(x.m)}</span><b>${nf(x.tasa)}</b></div>`).join('')}
+                    <div class="rx-nota-fuente">
+                      Periodo distinto al del resto de la pantalla: SESNSP, acumulado enero–${esc(d.mes)} de ${d.anio}.
+                      Los otros cuatro bloques son semanales y provienen de la Fiscalía. No son comparables entre sí.
+                      Se excluyen los municipios de menos de ${nf(RX_POB_MIN)} habitantes.
+                    </div>`;
+            }
+
+            function rxMunFetch() {
+                if (rxMunPedido) { if (rxMunCache) rxPintaTerritorio(rxMunCache); return; }
+                rxMunPedido = true;
+                const url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID
+                          + '/export?format=csv&gid=' + SHEETS.MUNICIPAL.gid;
+                fetch(url)
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                    .then(txt => { rxMunCache = rxProcesaMunicipal(txt); rxPintaTerritorio(rxMunCache); })
+                    .catch(err => {
+                        rxEl('rxTerritorio').innerHTML =
+                            '<span class="rx-edo falla">Fuente no disponible: ' + esc(err.message || err) + '</span>';
+                        console.error('[Resumen Ejecutivo · Municipal]', err);
+                    });
+            }
+
+            /* ---------- Orquestación ---------- */
+            function rxPintarSemanal() {
+                const reg = parsedData[rxRegion];
+                const corte = rxEl('rxCorte');
+                if (corte) corte.textContent = (reg && reg.lastWeek) ? reg.lastWeek : '—';
+                rxPintaIcrd(); rxPintaTotal(); rxPintaAlertas(); rxPintaFoco();
+            }
+
+            /* init() llena parsedData en DOMContentLoaded pase lo que pase, pero no
+               hay forma de engancharse a su cadena de await sin modificarla, y este
+               módulo no modifica nada. Se espera con sondeo acotado y estados
+               explícitos: nunca se queda con el esqueleto puesto. */
+            function rxEsperaDatos(intento) {
+                const n = intento || 0;
+                const reg = parsedData[rxRegion];
+                if (reg && reg.weeks && reg.weeks.length) { rxPintarSemanal(); return; }
+                if (n >= RX_ESPERA_MAX) {
+                    ['rxIcrd', 'rxTotal', 'rxAlertas', 'rxFoco'].forEach(id => {
+                        const e = rxEl(id);
+                        if (e) e.innerHTML = '<span class="rx-edo falla">Fuente no disponible: la hoja SEMANAL no llegó.</span>';
+                    });
+                    return;
+                }
+                setTimeout(() => rxEsperaDatos(n + 1), RX_ESPERA_MS);
+            }
+
+            function rxPintar() {
+                const reg = parsedData[rxRegion];
+                if (reg && reg.weeks && reg.weeks.length) rxPintarSemanal(); else rxEsperaDatos(0);
+                rxMunFetch();
+            }
+
+            function rxCargar() { rxPintar(); }
+
+            rxMonta();
+        })();
+        /* ═══════════ FIN · MÓDULO RESUMEN EJECUTIVO (rx*) ═══════════ */
+
+
     </script>
 </body>
 </html>
