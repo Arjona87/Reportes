@@ -13929,6 +13929,734 @@
         /* ═══════════ FIN · MÓDULO RESUMEN EJECUTIVO (rx*) ═══════════ */
 
 
+        /* ═══════════════════════════════════════════════════════════════════
+           INICIO · MÓDULO ÍNDICE LETAL  (prefijo il* / IL_*)
+           ═══════════════════════════════════════════════════════════════════
+
+           QUÉ ES
+           Octava vista. Coropletas nacional de violencia letal por entidad, en
+           tasa por cada 100 mil habitantes, con selector de componente y de año.
+           Tres bloques en este orden fijo: tabla dinámica, mapa, tabla de
+           totales acumulados.
+
+           CÓMO SE ELIMINA
+           Borrando desde este comentario hasta el de cierre «FIN · MÓDULO
+           ÍNDICE LETAL». No hay nada que quitar en ningún otro punto del
+           archivo: el módulo se autoinyecta. El botón de pestaña, el
+           contenedor de la vista, el CSS y la entrada del registro los crea él
+           mismo en tiempo de ejecución.
+
+           DE QUÉ DEPENDE  (no borrar estas piezas creyendo que solo las usa su
+           módulo de origen)
+             Homicidios Dolosos → HD_SVG, HD_ID_NOMBRE, HD_CENTROIDES
+             Utilidades         → parseCSV, dsNorm, esc
+             Navegación         → VISTAS, registrarCargador, dsMostrarVista
+             Ingesta            → SHEET_ID
+
+           EL MAPA NO ES NUEVO
+           Es el MISMO SVG de Simplemaps que ya está incrustado para la vista de
+           Homicidios Dolosos: 32 polígonos sobre un lienzo de 1000 × 630, sin
+           Leaflet, sin zoom y sin capa base. No añade un solo byte de
+           geometría. Se clona con el patrón que ya usa `gmMontaLocalizador`:
+           los `id` se convierten en `data-e` y se borra el `id` del SVG raíz,
+           porque dos elementos con el mismo `id` es marcado inválido y
+           rompería el `getElementById('hdSvgNac')` de la vista de Homicidios.
+           Las etiquetas de cifra llevan clase propia `il-etq`, así que la
+           limpieza que hace `hdPintaMapa` sobre `text.hd-etq` nunca las toca.
+
+           TRES DECISIONES METODOLÓGICAS QUE NO SE PUEDEN REVERTIR SIN AVISO
+           1. La escala de color es FIJA POR COMPONENTE: el máximo se calcula
+              sobre los tres años a la vez, no sobre el año en pantalla. Es lo
+              que permite comparar 2015 con 2026 mirando el color. La leyenda
+              declara el rango.
+           2. «Sin dato» NO es cero. El componente «otros delitos contra la
+              vida y la integridad corporal» no existe para todas las entidades.
+              Esas se pintan en gris con trazo discontinuo y rótulo «s/d», y se
+              excluyen de los promedios y de los ordenamientos. Imputar cero las
+              haría parecer mejores de lo que la fuente permite afirmar.
+           3. Las columnas de variación llegan como PROPORCIÓN (-0.012), no como
+              porcentaje. Se multiplican por 100 al mostrarlas. Queda declarado
+              al pie de la tabla.
+           ═══════════════════════════════════════════════════════════════════ */
+        (function () {
+            'use strict';
+
+            /* El gid vive AQUÍ y no en `SHEETS`: así el módulo se borra de un
+               tajo sin dejar residuo en la configuración global. */
+            const IL_GID = '211630240';
+            const IL_URL = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
+                           '/export?format=csv&gid=' + IL_GID;
+
+            /* Misma paleta azul de seis tonos que el mapa de Homicidios. Se
+               copia en vez de llamar a `hdColorRel` porque aquí los valores son
+               tasas con decimales y el reparto es distinto. */
+            const IL_RAMPA     = ['#C6DBEF', '#9ECAE1', '#6BAED6', '#4292C6', '#2171B5', '#084594'];
+            const IL_GRIS_CERO = '#E0E0E0';
+            const IL_GRIS_SD   = '#B9C0C9';
+            const IL_NS        = 'http://www.w3.org/2000/svg';
+
+            /* Orden de presentación y rótulo corto. El agregado va primero
+               porque es la capa por omisión del mapa. Si la hoja trae un
+               indicador que no esté aquí, NO se descarta: se añade al final con
+               su propio nombre y se anota en la auditoría. */
+            const IL_CATALOGO = [
+                { k: 'VIOLENCIA LETAL',                                        et: 'Índice letal (agregado)' },
+                { k: 'HOMICIDIO DOLOSO',                                       et: 'Homicidio doloso' },
+                { k: 'FEMINICIDIO',                                            et: 'Feminicidio' },
+                { k: 'HOMICIDIO CULPOSO',                                      et: 'Homicidio culposo' },
+                { k: 'OTROS DELITOS CONTRA LA VIDA Y LA INTEGRIDAD CORPORAL',  et: 'Otros delitos contra la vida' },
+                { k: 'PERSONAS DESAPARECIDAS Y NO LOCALIZADAS',                et: 'Desaparecidas y no localizadas' }
+            ];
+
+            /* Las dos filas de referencia de la hoja. NO son entidades: no van
+               al mapa, no entran al ordenamiento y no cuentan para el máximo. */
+            const IL_FILAS_REF = { 'PROMEDIO ESTATAL': 'prom', 'TASA NACIONAL': 'nac' };
+
+            /* Entidades de superficie pequeña en el lienzo: la cifra con decimal
+               no cabe al tamaño normal y se sale del polígono. */
+            const IL_CHICAS = ['MXTLA', 'MXMOR', 'MXCMX', 'MXAGU', 'MXQUE', 'MXCOL'];
+
+            const il = {
+                pedido: false, listo: false, error: null,
+                anios: [], inds: [], datos: {}, unidad: '',
+                totales: null, sinCasar: [], montado: false,
+                ind: null, anio: null
+            };
+
+            const ilEl = id => document.getElementById(id);
+
+            /* ---------- Casado de nombres ----------
+               Por diccionario exacto, NUNCA por prefijo: «Baja California» es
+               prefijo de «Baja California Sur» y un emparejamiento laxo las
+               fundiría. Es la misma trampa que costó verificaciones con
+               «Tlaquepaque» y «Ciudad Guzmán» en el coropletas municipal. */
+            const IL_NOM_ID = {};
+            Object.keys(HD_ID_NOMBRE).forEach(id => { IL_NOM_ID[dsNorm(HD_ID_NOMBRE[id])] = id; });
+            const IL_ALIAS = {
+                'MEXICO': 'MXMEX', 'EDO. DE MEXICO': 'MXMEX', 'EDO DE MEXICO': 'MXMEX',
+                'EDOMEX': 'MXMEX', 'ESTADO DE MEXICO': 'MXMEX',
+                'DISTRITO FEDERAL': 'MXCMX', 'CDMX': 'MXCMX',
+                'COAHUILA DE ZARAGOZA': 'MXCOA', 'MICHOACAN DE OCAMPO': 'MXMIC',
+                'VERACRUZ DE IGNACIO DE LA LLAVE': 'MXVER', 'VERACRUZ LLAVE': 'MXVER',
+                'QUERETARO DE ARTEAGA': 'MXQUE', 'NUEVO LEON': 'MXNLE',
+                'SAN LUIS POTOSI': 'MXSLP', 'QUINTANA ROO': 'MXROO'
+            };
+            function ilId(nombre) {
+                const n = dsNorm(nombre);
+                if (!n) return null;
+                return IL_NOM_ID[n] || IL_ALIAS[n] || null;
+            }
+
+            /* ---------- Formato ---------- */
+            const ilN1 = v => (Number.isFinite(+v) ? +v : 0)
+                .toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+            const ilNlibre = v => (v === null || v === undefined) ? '—'
+                : (Math.abs(v % 1) < 1e-9
+                    ? Math.round(v).toLocaleString('es-MX')
+                    : v.toLocaleString('es-MX', { maximumFractionDigits: 1 }));
+            /* La fuente entrega la variación como proporción: -0.012 es -1.2 %. */
+            const ilPct = v => (v === null || v === undefined) ? '—'
+                : (v > 0 ? '+' : '') +
+                  (v * 100).toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+            const ilTinta = hex => (hex === '#2171B5' || hex === '#084594') ? '#FFFFFF' : '#111111';
+
+            function ilNum(v) {
+                if (v === null || v === undefined) return null;
+                let s = String(v).trim().replace(/\s|%/g, '');
+                if (!s || s === '-' || s === '—') return null;
+                const n0 = dsNorm(s);
+                if (n0 === 'ND' || n0 === 'NA' || n0 === 'SD' || n0 === 'NULL') return null;
+                if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s = s.replace(/,/g, '');
+                else if (s.indexOf('.') < 0) s = s.replace(',', '.');
+                const n = parseFloat(s);
+                return Number.isFinite(n) ? n : null;
+            }
+
+            /* =================================================================
+               PARSER
+               =================================================================
+               La pestaña trae DOS bloques independientes, lado a lado, con
+               estructuras distintas y periodos distintos. Se localizan por su
+               ENCABEZADO, no por número de fila ni por letra de columna: basta
+               insertar una fila o una columna en la hoja para que un rango fijo
+               apunte a otra cosa sin avisar. */
+            function ilParse(txt) {
+                const filas = parseCSV(txt);
+                const out = { anios: [], inds: [], datos: {}, unidad: '', totales: null, sinCasar: [] };
+
+                /* ---- Bloque A · formato largo ---- */
+                let hA = -1, cA = null;
+                for (let i = 0; i < Math.min(filas.length, 40) && hA < 0; i++) {
+                    const f = filas[i] || [];
+                    for (let c = 0; c < f.length; c++) {
+                        if (dsNorm(f[c]) !== 'INDICADOR') continue;
+                        const ix = { ind: c };
+                        for (let d = c + 1; d < f.length; d++) {
+                            const n = dsNorm(f[d]);
+                            if (!n) continue;
+                            if (n === 'ENTIDAD' && ix.ent === undefined) ix.ent = d;
+                            else if ((n === 'ANO' || n === 'ANIO') && ix.anio === undefined) ix.anio = d;
+                            else if (n === 'VALOR' && ix.val === undefined) ix.val = d;
+                            else if (n === 'UNIDAD' && ix.uni === undefined) ix.uni = d;
+                            else if (n.indexOf('VARIACION') === 0 && n.indexOf('2025') > 0 && ix.v25 === undefined) ix.v25 = d;
+                            else if (n.indexOf('VARIACION') === 0 && n.indexOf('2015') > 0 && ix.v15 === undefined) ix.v15 = d;
+                        }
+                        if (ix.ent !== undefined && ix.anio !== undefined && ix.val !== undefined) { hA = i; cA = ix; }
+                        break;
+                    }
+                }
+                if (hA < 0) throw new Error('no se encontró el encabezado del bloque de indicadores (Indicador · Entidad · Año · Valor)');
+
+                const vistos = {}, aniosSet = {}, noCasadas = {};
+                for (let i = hA + 1; i < filas.length; i++) {
+                    const f = filas[i] || [];
+                    const ind = String(f[cA.ind] || '').trim();
+                    const ent = String(f[cA.ent] || '').trim();
+                    if (!ind || !ent) continue;
+                    const anio = parseInt(String(f[cA.anio] || '').replace(/\D/g, ''), 10);
+                    const val = ilNum(f[cA.val]);
+                    if (!Number.isFinite(anio) || val === null) continue;
+
+                    const k = dsNorm(ind);
+                    if (!vistos[k]) vistos[k] = ind;
+                    if (cA.uni !== undefined && !out.unidad && f[cA.uni]) out.unidad = String(f[cA.uni]).trim();
+                    aniosSet[anio] = true;
+
+                    out.datos[k] = out.datos[k] || {};
+                    const capa = out.datos[k][anio] = out.datos[k][anio] || { ent: {}, ref: {} };
+                    const reg = {
+                        v: val,
+                        v25: cA.v25 !== undefined ? ilNum(f[cA.v25]) : null,
+                        v15: cA.v15 !== undefined ? ilNum(f[cA.v15]) : null,
+                        nom: ent
+                    };
+                    const rol = IL_FILAS_REF[dsNorm(ent)];
+                    if (rol) { capa.ref[rol] = reg; continue; }
+                    const id = ilId(ent);
+                    if (!id) { noCasadas[ent] = true; continue; }
+                    capa.ent[id] = reg;
+                }
+                out.sinCasar = Object.keys(noCasadas);
+                out.anios = Object.keys(aniosSet).map(Number).sort((a, b) => a - b);
+
+                /* Catálogo en orden fijo; lo que la hoja traiga y no esté
+                   previsto se añade al final con su nombre original. */
+                IL_CATALOGO.forEach(c => { if (vistos[c.k]) out.inds.push({ k: c.k, et: c.et }); });
+                Object.keys(vistos).forEach(k => {
+                    if (!out.inds.some(x => x.k === k)) out.inds.push({ k: k, et: vistos[k] });
+                });
+                if (!out.inds.length) throw new Error('el bloque de indicadores no trajo ninguna fila utilizable');
+
+                /* ---- Bloque B · formato ancho, cifras absolutas ----
+                   Se identifica por «Entidad» SEGUIDO de «Homicidios»: la
+                   palabra «Entidad» sola también encabeza una columna del
+                   bloque A y bastaría para confundir los dos bloques. */
+                let hB = -1, cB = -1, colsB = [];
+                for (let i = 0; i < Math.min(filas.length, 60) && hB < 0; i++) {
+                    const f = filas[i] || [];
+                    for (let c = 0; c < f.length; c++) {
+                        if (dsNorm(f[c]) !== 'ENTIDAD') continue;
+                        if (dsNorm(f[c + 1] || '').indexOf('HOMICIDIO') !== 0) continue;
+                        const cols = [];
+                        for (let d = c + 1; d < f.length && String(f[d] || '').trim(); d++) {
+                            cols.push({ c: d, et: String(f[d]).trim() });
+                        }
+                        if (cols.length >= 2) { hB = i; cB = c; colsB = cols; }
+                        break;
+                    }
+                }
+                if (hB >= 0) {
+                    const fil = [];
+                    for (let i = hB + 1; i < filas.length; i++) {
+                        const f = filas[i] || [];
+                        const nom = String(f[cB] || '').trim();
+                        if (!nom) continue;
+                        const id = ilId(nom);
+                        if (!id) continue;                        // descarta la nota al pie
+                        fil.push({ id: id, nom: HD_ID_NOMBRE[id], vals: colsB.map(x => ilNum(f[x.c])) });
+                    }
+                    if (fil.length) out.totales = { cols: colsB.map(x => x.et), filas: fil };
+                }
+                return out;
+            }
+
+            /* ---------- Consultas sobre el modelo ---------- */
+            function ilCapa() {
+                const d = il.datos[il.ind];
+                return (d && d[il.anio]) || { ent: {}, ref: {} };
+            }
+            /* Máximo del componente sobre TODOS los años: es lo que hace fija la
+               escala y comparables los cortes entre sí. */
+            function ilMaxComp() {
+                const d = il.datos[il.ind] || {};
+                let m = 0;
+                Object.keys(d).forEach(a => {
+                    const e = d[a].ent;
+                    Object.keys(e).forEach(id => { if (e[id].v > m) m = e[id].v; });
+                });
+                return m > 0 ? m : 1;
+            }
+            function ilColor(v, max) {
+                if (v === null || v === undefined) return IL_GRIS_SD;
+                if (v <= 0) return IL_GRIS_CERO;
+                const paso = max / IL_RAMPA.length;
+                return IL_RAMPA[Math.min(IL_RAMPA.length - 1, Math.floor(v / paso))];
+            }
+
+            /* =================================================================
+               CSS · nodo propio, se va con el módulo
+               =================================================================
+               Las reglas del mapa se CLONAN de las de Homicidios en vez de
+               reutilizar `.hd-svg-caja` y `.hd-escala*`: el módulo queda
+               independiente y borrarlo no deja selectores huérfanos. */
+            function ilEstilos() {
+                const s = document.createElement('style');
+                s.id = 'ilEstilos';
+                s.textContent = `
+                .il-barra { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:14px; }
+                .il-barra label { font-size:10px; font-weight:700; letter-spacing:.06em;
+                    text-transform:uppercase; color:var(--muted); }
+                .il-barra select { padding:7px 10px; border-radius:var(--r-sm,6px);
+                    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+                    font-family:inherit; font-size:12.5px; min-width:230px; }
+                .il-anios { display:inline-flex; border:1px solid var(--line);
+                    border-radius:var(--r-sm,6px); overflow:hidden; }
+                .il-anios button { border:0; background:var(--surface); color:var(--muted);
+                    padding:7px 15px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
+                .il-anios button + button { border-left:1px solid var(--line); }
+                .il-anios button[aria-pressed="true"] { background:var(--accent); color:#fff; }
+
+                .il-svg-caja { border:1px solid var(--line); border-radius:var(--r-md);
+                    background:#FFFFFF; padding:8px; overflow:hidden; }
+                .il-svg-caja svg { width:100%; height:auto; display:block; }
+                .il-svg-caja .il-estado { stroke:#333333; stroke-width:1; cursor:default;
+                    transition:opacity .16s ease, stroke-width .16s ease; }
+                .il-svg-caja .il-estado:hover { opacity:.82; stroke-width:2.2; stroke:#000; }
+                .il-svg-caja .il-estado.il-sd { stroke:#6E7784; stroke-dasharray:3 2; }
+                .il-svg-caja text.il-etq { pointer-events:none; font-family:Arial, sans-serif; }
+                [data-tema="oscuro"] .il-svg-caja { background:#E9EFF6; }
+
+                .il-escala-t { font-size:var(--fs-xs); color:var(--muted); margin-top:12px; font-weight:600; }
+                .il-escala { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; }
+                .il-escala-i { flex:1; min-width:62px; text-align:center; }
+                .il-escala-c { height:22px; border-radius:4px; border:1px solid #333; }
+                .il-escala-c.il-tramo-sd { border-style:dashed; border-color:#6E7784; }
+                .il-escala-l { font-size:10px; color:var(--muted); font-weight:600; margin-top:3px; }
+
+                .il-ref { margin-top:14px; }
+                .il-ref-pista { position:relative; height:10px; border-radius:5px;
+                    border:1px solid var(--line);
+                    background:linear-gradient(to right,#C6DBEF,#9ECAE1,#6BAED6,#4292C6,#2171B5,#084594); }
+                .il-ref-m { position:absolute; top:-5px; width:2px; height:20px; background:var(--ink); }
+                .il-ref-m::after { content:attr(data-et); position:absolute; top:21px; left:50%;
+                    transform:translateX(-50%); white-space:nowrap; font-size:9.5px;
+                    font-weight:700; color:var(--ink); }
+                .il-ref-pie { margin-top:26px; font-size:var(--fs-xs); color:var(--muted); }
+
+                .il-tabla td.il-num, .il-tabla th.il-num { text-align:right; }
+                .il-tabla td.il-ent, .il-tabla th.il-ent { text-align:left; }
+                .il-tabla .il-pos { color:var(--muted); font-variant-numeric:tabular-nums; width:34px; }
+                .il-tabla .il-sd-t { color:var(--muted); font-style:italic; }
+                .il-tabla .il-sube { color:#C0392B; font-weight:600; }
+                .il-tabla .il-baja { color:#1E8449; font-weight:600; }
+                .il-tabla tr.il-fila-ref td { background:var(--chip); font-weight:700; }
+                .il-tabla tr.il-jal td { background:color-mix(in srgb, var(--accent) 14%, transparent); }
+                .il-pie { margin-top:10px; font-size:var(--fs-xs); color:var(--muted); line-height:1.55; }
+                .il-edo { display:inline-block; padding:8px 12px; border-radius:var(--r-sm,6px);
+                    background:var(--chip); color:var(--muted); font-size:12.5px; }
+                .il-edo.falla { background:color-mix(in srgb,#C0392B 12%,transparent); color:#C0392B; }
+                @media (max-width: 768px) {
+                    .il-barra select { min-width:0; width:100%; }
+                }`;
+                document.head.appendChild(s);
+            }
+
+            /* =================================================================
+               MAQUETADO · botón, contenedor y registro
+               ================================================================= */
+            function ilMonta() {
+                if (il.montado) return;
+                il.montado = true;
+                ilEstilos();
+
+                const barra = document.querySelector('nav.tabs');
+                const btn = document.createElement('button');
+                btn.className = 'btn-nav btn-nav-off';
+                btn.id = 'navIlBtn';
+                btn.textContent = 'Índice Letal';
+                if (barra) barra.appendChild(btn);
+
+                const cont = document.createElement('div');
+                cont.id = 'vistaIndiceLetal';
+                cont.style.display = 'none';
+                cont.innerHTML = `
+                  <section id="ilControles">
+                    <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                        <span class="h2-marca"></span><h2>Índice letal por entidad federativa</h2>
+                        <span class="panel-nota">Tasa por cada 100 mil habitantes · enero–junio</span>
+                        <span class="panel-toggle">▾</span>
+                    </div>
+                    <div class="panel-cuerpo">
+                        <div class="mun-intro">
+                            <span class="mun-kicker">Violencia letal · comparativo nacional</span>
+                            <p>El componente seleccionado gobierna el color del mapa y el orden de la
+                               primera tabla. La tabla de resultados acumulados es un anexo de referencia
+                               con otro periodo y otras unidades: <b>no es comparable</b> con las tasas.</p>
+                        </div>
+                        <div class="il-barra">
+                            <label for="ilSelInd">Componente</label>
+                            <select id="ilSelInd"></select>
+                            <label>Año</label>
+                            <div class="il-anios" id="ilAnios" role="group" aria-label="Año de corte"></div>
+                            <span class="panel-nota" style="margin-left:auto" id="ilResumen">—</span>
+                        </div>
+                    </div>
+                  </section>
+
+                  <section id="ilTablaDin">
+                    <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                        <span class="h2-marca"></span><h2>Tabla del componente seleccionado</h2>
+                        <span class="panel-nota">Ordenada de mayor a menor</span>
+                        <span class="panel-toggle">▾</span>
+                    </div>
+                    <div class="panel-cuerpo" id="ilTablaDinCuerpo">
+                        <span class="il-edo">Cargando…</span>
+                    </div>
+                  </section>
+
+                  <section id="ilMapa">
+                    <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                        <span class="h2-marca"></span><h2>Mapa nacional</h2>
+                        <span class="panel-nota">Escala fija por componente: los tres años son comparables entre sí</span>
+                        <span class="panel-toggle">▾</span>
+                    </div>
+                    <div class="panel-cuerpo" id="ilMapaCuerpo">
+                        <span class="il-edo">Cargando el mapa…</span>
+                    </div>
+                  </section>
+
+                  <section id="ilTablaTot">
+                    <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                        <span class="h2-marca"></span><h2>Datos totales acumulados por entidad</h2>
+                        <span class="panel-nota">Cifras absolutas de resultados operativos · orden de la fuente</span>
+                        <span class="panel-toggle">▾</span>
+                    </div>
+                    <div class="panel-cuerpo" id="ilTablaTotCuerpo">
+                        <span class="il-edo">Cargando…</span>
+                    </div>
+                  </section>`;
+                const main = document.querySelector('main');
+                if (main) main.appendChild(cont);
+
+                /* `push`, no `unshift`: el tablero debe seguir abriendo en el
+                   Resumen Ejecutivo, que es VISTAS[0]. */
+                VISTAS.push({ id: 'indiceletal', div: 'vistaIndiceLetal', btn: 'navIlBtn', hash: 'IndiceLetal' });
+
+                /* El `VISTAS.forEach` que reparte los oyentes de navegación ya
+                   corrió antes de este punto y nunca vio este botón. */
+                btn.addEventListener('click', () => dsMostrarVista('indiceletal'));
+
+                registrarCargador('indiceletal', () => setTimeout(ilCargar, 400));
+            }
+
+            /* ---------- Controles ---------- */
+            function ilMontaControles() {
+                const sel = ilEl('ilSelInd');
+                if (sel) {
+                    sel.innerHTML = il.inds.map(i =>
+                        `<option value="${esc(i.k)}"${i.k === il.ind ? ' selected' : ''}>${esc(i.et)}</option>`).join('');
+                    sel.onchange = () => { il.ind = sel.value; ilPinta(); };
+                }
+                const caja = ilEl('ilAnios');
+                if (caja) {
+                    caja.innerHTML = il.anios.map(a =>
+                        `<button type="button" data-anio="${a}" aria-pressed="${a === il.anio}">${a}</button>`).join('');
+                    caja.querySelectorAll('button').forEach(b => {
+                        b.addEventListener('click', () => {
+                            il.anio = +b.getAttribute('data-anio');
+                            caja.querySelectorAll('button').forEach(x =>
+                                x.setAttribute('aria-pressed', String(+x.getAttribute('data-anio') === il.anio)));
+                            ilPinta();
+                        });
+                    });
+                }
+            }
+
+            /* ---------- Mapa ---------- */
+            function ilMontaMapa() {
+                const cuerpo = ilEl('ilMapaCuerpo');
+                if (!cuerpo || cuerpo.querySelector('#ilSvgCaja')) return;
+                if (typeof HD_SVG === 'undefined') {
+                    cuerpo.innerHTML = '<span class="il-edo falla">El mapa base no está disponible en este archivo.</span>';
+                    return;
+                }
+                cuerpo.innerHTML = `
+                    <div class="il-svg-caja" id="ilSvgCaja"></div>
+                    <div class="il-escala-t" id="ilEscalaT">—</div>
+                    <div class="il-escala" id="ilEscala"></div>
+                    <div class="il-ref">
+                        <div class="il-ref-pista" id="ilRefPista"></div>
+                        <div class="il-ref-pie" id="ilRefPie">—</div>
+                    </div>
+                    <div class="mun-lectura" id="ilLectura">—</div>`;
+                /* Clon del SVG de Homicidios: los `id` pasan a `data-e` y se
+                   quita el del SVG raíz. Dos elementos con el mismo `id` es
+                   marcado inválido y rompería la vista de Homicidios. */
+                ilEl('ilSvgCaja').innerHTML = HD_SVG
+                    .replace(/\sid="(MX[A-Z]{3})"/g, ' data-e="$1"')
+                    .replace(/\sid="hdSvgNac"/, '');
+                const svg = ilEl('ilSvgCaja').querySelector('svg');
+                if (svg) { svg.removeAttribute('width'); svg.removeAttribute('height'); }
+            }
+
+            function ilPintaMapa() {
+                const svg = ilEl('ilSvgCaja') && ilEl('ilSvgCaja').querySelector('svg');
+                if (!svg) return;
+                svg.querySelectorAll('text.il-etq').forEach(t => t.remove());
+
+                const cap = ilCapa(), max = ilMaxComp();
+                Object.keys(HD_ID_NOMBRE).forEach(id => {
+                    const p = svg.querySelector('[data-e="' + id + '"]');
+                    if (!p) return;
+                    const r = cap.ent[id];
+                    const v = r ? r.v : null;
+                    const sd = (v === null || v === undefined);
+                    const relleno = ilColor(v, max);
+                    p.setAttribute('class', 'il-estado' + (sd ? ' il-sd' : ''));
+                    p.setAttribute('fill', relleno);
+                    p.setAttribute('data-nom', HD_ID_NOMBRE[id]);
+                    let t = p.querySelector('title');
+                    if (!t) { t = document.createElementNS(IL_NS, 'title'); p.appendChild(t); }
+                    t.textContent = HD_ID_NOMBRE[id] + ': ' + (sd ? 'sin dato' : ilN1(v) + ' por 100 mil');
+
+                    const c = HD_CENTROIDES[id];
+                    if (!c) return;
+                    const txt = document.createElementNS(IL_NS, 'text');
+                    txt.setAttribute('class', 'il-etq');
+                    txt.setAttribute('x', c.x); txt.setAttribute('y', c.y);
+                    txt.setAttribute('text-anchor', 'middle');
+                    txt.setAttribute('dominant-baseline', 'central');
+                    txt.setAttribute('font-size', IL_CHICAS.indexOf(id) >= 0 ? '9' : '11');
+                    txt.setAttribute('font-weight', sd ? '400' : '700');
+                    txt.setAttribute('fill', sd ? '#5A6472' : ilTinta(relleno));
+                    txt.setAttribute('pointer-events', 'none');
+                    txt.textContent = sd ? 's/d' : ilN1(v);
+                    svg.appendChild(txt);
+                });
+
+                /* Leyenda: seis tramos calculados sobre el máximo del
+                   componente, más los dos grises, que NO significan lo mismo. */
+                const paso = max / IL_RAMPA.length;
+                const et = ilEl('ilEscalaT');
+                if (et) et.textContent =
+                    'Escala fija del componente, repartida entre 0 y ' + ilN1(max) +
+                    ' por 100 mil (máximo de los años ' + il.anios.join(', ') + ')';
+                const esc0 = ilEl('ilEscala');
+                if (esc0) {
+                    esc0.innerHTML =
+                        `<div class="il-escala-i"><div class="il-escala-c" style="background:${IL_GRIS_CERO}"></div>
+                         <div class="il-escala-l">0.0</div></div>` +
+                        IL_RAMPA.map((c, i) =>
+                            `<div class="il-escala-i"><div class="il-escala-c" style="background:${c}"></div>
+                             <div class="il-escala-l">${ilN1(i * paso)}–${ilN1((i + 1) * paso)}</div></div>`).join('') +
+                        `<div class="il-escala-i"><div class="il-escala-c il-tramo-sd" style="background:${IL_GRIS_SD}"></div>
+                         <div class="il-escala-l">sin dato</div></div>`;
+                }
+
+                /* Banda de referencia: promedio estatal y tasa nacional
+                   colocados sobre la misma rampa que colorea el mapa. */
+                const pista = ilEl('ilRefPista'), pie = ilEl('ilRefPie');
+                if (pista) {
+                    const marca = (r, et2) => {
+                        if (!r || r.v === null) return '';
+                        const p = Math.max(0, Math.min(100, r.v / max * 100));
+                        return `<i class="il-ref-m" style="left:${p}%" data-et="${esc(et2)} ${ilN1(r.v)}"></i>`;
+                    };
+                    pista.innerHTML = marca(cap.ref.prom, 'Promedio estatal') + marca(cap.ref.nac, 'Tasa nacional');
+                }
+                if (pie) {
+                    const p = cap.ref.prom, n = cap.ref.nac;
+                    pie.innerHTML = 'Referencias de la fuente para ' + il.anio + ': ' +
+                        'promedio estatal <b>' + (p ? ilN1(p.v) : '—') + '</b> · ' +
+                        'tasa nacional <b>' + (n ? ilN1(n.v) : '—') + '</b>. ' +
+                        'Ninguna de las dos es una entidad: no se pintan en el mapa ni entran al ordenamiento.';
+                }
+
+                const lec = ilEl('ilLectura');
+                if (lec) {
+                    const arr = Object.keys(cap.ent).map(id => ({ id: id, v: cap.ent[id].v }))
+                                      .sort((a, b) => b.v - a.v);
+                    const t3 = arr.slice(0, 3);
+                    const nSd = 32 - arr.length;
+                    lec.innerHTML = arr.length
+                        ? `<b>${esc(ilEt(il.ind))}</b> en ${il.anio}. Encabezan ` +
+                          t3.map(x => `<b>${esc(HD_ID_NOMBRE[x.id])}</b> (${ilN1(x.v)})`).join(', ') + '. ' +
+                          (nSd ? `${nSd} ${nSd === 1 ? 'entidad no tiene' : 'entidades no tienen'} dato para este componente y aparecen en gris.` : '')
+                        : 'No hay datos de este componente para el año seleccionado.';
+                }
+            }
+
+            const ilEt = k => { const i = il.inds.find(x => x.k === k); return i ? i.et : k; };
+
+            /* ---------- Tabla dinámica ---------- */
+            function ilPintaTablaDin() {
+                const c = ilEl('ilTablaDinCuerpo');
+                if (!c) return;
+                const cap = ilCapa();
+                const con = [], sin = [];
+                Object.keys(HD_ID_NOMBRE).forEach(id => {
+                    const r = cap.ent[id];
+                    if (r && r.v !== null) con.push({ id: id, r: r }); else sin.push({ id: id });
+                });
+                if (!con.length && !sin.length) { c.innerHTML = '<span class="il-edo">Sin datos para esta combinación.</span>'; return; }
+
+                /* Ordenada de MAYOR a MENOR por el componente seleccionado. Las
+                   entidades sin dato van al final, sin número de posición: no
+                   valen cero, no tienen lugar en el ordenamiento. */
+                con.sort((a, b) => b.r.v - a.r.v);
+
+                const varia = v => v === null || v === undefined
+                    ? '<span class="il-sd-t">—</span>'
+                    : `<span class="${v > 0 ? 'il-sube' : (v < 0 ? 'il-baja' : '')}">${ilPct(v)}</span>`;
+
+                const filas = con.map((x, i) =>
+                    `<tr${x.id === 'MXJAL' ? ' class="il-jal"' : ''}>
+                        <td class="il-pos">${i + 1}</td>
+                        <td class="il-ent">${esc(HD_ID_NOMBRE[x.id])}</td>
+                        <td class="il-num"><b>${ilN1(x.r.v)}</b></td>
+                        <td class="il-num">${varia(x.r.v25)}</td>
+                        <td class="il-num">${varia(x.r.v15)}</td>
+                     </tr>`).join('') +
+                    sin.map(x =>
+                    `<tr${x.id === 'MXJAL' ? ' class="il-jal"' : ''}>
+                        <td class="il-pos">—</td>
+                        <td class="il-ent">${esc(HD_ID_NOMBRE[x.id])}</td>
+                        <td class="il-num il-sd-t">sin dato</td>
+                        <td class="il-num il-sd-t">—</td>
+                        <td class="il-num il-sd-t">—</td>
+                     </tr>`).join('');
+
+                const ref = ['prom', 'nac'].map(k => {
+                    const r = cap.ref[k];
+                    if (!r) return '';
+                    return `<tr class="il-fila-ref">
+                        <td class="il-pos"></td>
+                        <td class="il-ent">${esc(r.nom)}</td>
+                        <td class="il-num">${ilN1(r.v)}</td>
+                        <td class="il-num">${varia(r.v25)}</td>
+                        <td class="il-num">${varia(r.v15)}</td></tr>`;
+                }).join('');
+
+                c.innerHTML = `
+                    <div class="table-wrapper">
+                        <table class="data-table data-table-compacta il-tabla">
+                            <thead><tr>
+                                <th class="il-pos">#</th>
+                                <th class="il-ent">Entidad</th>
+                                <th class="il-num">${esc(ilEt(il.ind))}<br><small>${il.anio} · por 100 mil</small></th>
+                                <th class="il-num">Var. 2026 vs 2025</th>
+                                <th class="il-num">Var. 2026 vs 2015</th>
+                            </tr></thead>
+                            <tbody>${filas}${ref}</tbody>
+                        </table>
+                    </div>
+                    <div class="il-pie">
+                        Unidad: ${esc(il.unidad || 'tasa por cada 100 mil habitantes')}. Periodo enero–junio.
+                        Las dos últimas filas son referencias de la fuente, no entidades, y quedan fuera del ordenamiento.
+                        Las variaciones vienen en la hoja como proporción y aquí se expresan en por ciento.
+                        «Sin dato» no equivale a cero: la fuente no publica ese componente para esas entidades
+                        y no se imputa ningún valor.
+                    </div>`;
+            }
+
+            /* ---------- Tabla de totales acumulados ---------- */
+            function ilPintaTablaTot() {
+                const c = ilEl('ilTablaTotCuerpo');
+                if (!c) return;
+                const t = il.totales;
+                if (!t) {
+                    c.innerHTML = '<span class="il-edo">El bloque de datos acumulados no se encontró en la hoja.</span>';
+                    return;
+                }
+                /* Orden de la fuente, sin ordenar: es un anexo de referencia. */
+                const cuerpo = t.filas.map(f =>
+                    `<tr${f.id === 'MXJAL' ? ' class="il-jal"' : ''}>
+                        <td class="il-ent">${esc(f.nom)}</td>` +
+                     f.vals.map(v => `<td class="il-num">${ilNlibre(v)}</td>`).join('') +
+                    `</tr>`).join('');
+
+                const suma = t.cols.map((_, i) => {
+                    let s = null;
+                    t.filas.forEach(f => { if (f.vals[i] !== null) s = (s === null ? 0 : s) + f.vals[i]; });
+                    return s;
+                });
+
+                c.innerHTML = `
+                    <div class="table-wrapper">
+                        <table class="data-table data-table-compacta il-tabla">
+                            <thead><tr><th class="il-ent">Entidad</th>` +
+                            t.cols.map(x => `<th class="il-num">${esc(x)}</th>`).join('') +
+                            `</tr></thead>
+                            <tbody>${cuerpo}
+                                <tr class="il-fila-ref"><td class="il-ent">Suma nacional</td>` +
+                                suma.map(v => `<td class="il-num">${ilNlibre(v)}</td>`).join('') +
+                                `</tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="il-pie">
+                        Cifras absolutas de resultados operativos, no tasas, y con un periodo distinto al de
+                        las tablas de arriba: <b>no son comparables entre sí</b>. Se presentan en el orden de
+                        la fuente y no responden al selector de componente ni al de año.
+                        La fila «Suma nacional» es un cálculo del tablero, no un dato de la hoja.
+                        Fuente: elaboración con datos del SESNSP, Conapo y comunicados de la SSPC.
+                    </div>`;
+            }
+
+            /* ---------- Orquestación ---------- */
+            function ilPinta() {
+                if (!il.listo) return;
+                const r = ilEl('ilResumen');
+                if (r) r.textContent = ilEt(il.ind) + ' · ' + il.anio +
+                    (il.sinCasar.length ? ' · ' + il.sinCasar.length + ' fila(s) sin casar con el mapa' : '');
+                ilMontaMapa();
+                ilPintaTablaDin();
+                ilPintaMapa();
+                ilPintaTablaTot();
+            }
+
+            function ilFalla(msg) {
+                il.error = msg;
+                ['ilTablaDinCuerpo', 'ilMapaCuerpo', 'ilTablaTotCuerpo'].forEach(id => {
+                    const e = ilEl(id);
+                    if (e) e.innerHTML = '<span class="il-edo falla">Fuente no disponible: ' + esc(msg) + '</span>';
+                });
+                console.error('[Índice Letal]', msg);
+            }
+
+            function ilCargar() {
+                if (il.pedido) { ilPinta(); return; }
+                il.pedido = true;
+                fetch(IL_URL)
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+                    .then(txt => {
+                        const d = ilParse(txt);
+                        il.anios = d.anios; il.inds = d.inds; il.datos = d.datos;
+                        il.unidad = d.unidad; il.totales = d.totales; il.sinCasar = d.sinCasar;
+                        il.ind = il.inds[0].k;                       // el agregado, por omisión
+                        il.anio = il.anios[il.anios.length - 1];     // el corte más reciente
+                        il.listo = true;
+                        if (d.sinCasar.length) console.warn('[Índice Letal] entidades sin casar:', d.sinCasar);
+                        ilMontaControles();
+                        ilPinta();
+                    })
+                    .catch(err => ilFalla(err.message || String(err)));
+            }
+
+            ilMonta();
+        })();
+        /* ═══════════ FIN · MÓDULO ÍNDICE LETAL (il*) ═══════════ */
+
     </script>
 </body>
 </html>
