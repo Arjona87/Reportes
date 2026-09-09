@@ -1647,19 +1647,12 @@
         </nav>
     </header>
 
-    <!-- =====================================================================
-         CINTA DE ESTADO OPERATIVO
-         ===================================================================== -->
-    <div class="cinta">
-        <div class="cinta-in" role="status" aria-live="polite">
-            <span class="cinta-punto esperando" id="cintaPunto"></span>
-            <span id="cintaEstado">Conectando con la fuente…</span>
-            <span class="cinta-sep"></span>
-            <span>Corte: <b id="cintaCorte">—</b></span>
-            <span>Serie: <b id="cintaSerie">—</b></span>
-            <span>Fuente: <b>Fiscalía del Estado de Jalisco</b></span>
-        </div>
-    </div>
+    <!-- La CINTA DE ESTADO OPERATIVO se eliminó por instrucción del 8-sep-2026.
+         Informaba del corte y la serie del Reporte Semanal, pero era global a las
+         ocho vistas y en las demás desinformaba. `marcarEstado` (L. ~3013),
+         `ajustarCinta` (L. ~5362) y los rótulos de corte y serie van guardados
+         contra ausencia, así que siguen funcionando sin ella. El CSS `.cinta*`
+         se conserva para no tocar nada fuera de lo autorizado. -->
 
     <main>
       <!-- =================================================================
@@ -5371,7 +5364,12 @@
         // desplazamiento de cero quedaba oculta tras él en cuanto se hacía scroll.
         function ajustarCinta() {
             const h = document.querySelector('header');
-            const c = document.querySelector('.cinta');
+            /* `:not([id])` acota la búsqueda a la cinta global, que era la única
+               sin `id`. Al eliminarla (8-sep-2026), un `.cinta` a secas pasaba a
+               enganchar la PRIMERA del documento, que hoy es `#munCinta`, y le
+               imponía un desplazamiento que nadie pidió. Con el filtro, esta
+               función queda inerte, que es lo correcto. */
+            const c = document.querySelector('.cinta:not([id])');
             if (!h || !c) return;
             // En móvil el encabezado deja de estar fijo (regla de CSS), así que
             // imponerle un desplazamiento a la cinta la despegaría sin motivo.
@@ -13974,9 +13972,9 @@
               Esas se pintan en gris con trazo discontinuo y rótulo «s/d», y se
               excluyen de los promedios y de los ordenamientos. Imputar cero las
               haría parecer mejores de lo que la fuente permite afirmar.
-           3. Las columnas de variación llegan como PROPORCIÓN (-0.012), no como
-              porcentaje. Se multiplican por 100 al mostrarlas. Queda declarado
-              al pie de la tabla.
+           3. Las columnas de variación llegan de la hoja YA EN POR CIENTO. No se
+              reescalan. Multiplicarlas por 100 —como decía el traspaso— producía
+              cifras cien veces mayores que las de la propia hoja.
            ═══════════════════════════════════════════════════════════════════ */
         (function () {
             'use strict';
@@ -14054,10 +14052,15 @@
                 : (Math.abs(v % 1) < 1e-9
                     ? Math.round(v).toLocaleString('es-MX')
                     : v.toLocaleString('es-MX', { maximumFractionDigits: 1 }));
-            /* La fuente entrega la variación como proporción: -0.012 es -1.2 %. */
+            /* La fuente entrega la variación YA EN POR CIENTO. NO se multiplica
+               por 100: hacerlo daba -360 % donde la hoja dice -3.6 % y
+               +679,070 % donde dice +6,790.7 %. El documento de traspaso
+               afirmaba que venían como proporción y estaba equivocado; la vista
+               propia de la hoja lo desmiente. No revertir sin comprobarlo
+               contra la fuente. */
             const ilPct = v => (v === null || v === undefined) ? '—'
                 : (v > 0 ? '+' : '') +
-                  (v * 100).toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+                  v.toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
             const ilTinta = hex => (hex === '#2171B5' || hex === '#084594') ? '#FFFFFF' : '#111111';
 
             function ilNum(v) {
@@ -14213,21 +14216,26 @@
                 const s = document.createElement('style');
                 s.id = 'ilEstilos';
                 s.textContent = `
-                .il-barra { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-bottom:14px; }
+                .il-barra { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:10px; }
                 .il-barra label { font-size:10px; font-weight:700; letter-spacing:.06em;
                     text-transform:uppercase; color:var(--muted); }
-                .il-barra select { padding:7px 10px; border-radius:var(--r-sm,6px);
+                .il-barra select { padding:5px 9px; border-radius:var(--r-sm,6px);
                     border:1px solid var(--line); background:var(--surface); color:var(--ink);
-                    font-family:inherit; font-size:12.5px; min-width:230px; }
+                    font-family:inherit; font-size:12px; min-width:220px; }
                 .il-anios { display:inline-flex; border:1px solid var(--line);
                     border-radius:var(--r-sm,6px); overflow:hidden; }
                 .il-anios button { border:0; background:var(--surface); color:var(--muted);
-                    padding:7px 15px; font-family:inherit; font-size:12.5px; font-weight:600; cursor:pointer; }
+                    padding:5px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; }
                 .il-anios button + button { border-left:1px solid var(--line); }
                 .il-anios button[aria-pressed="true"] { background:var(--accent); color:#fff; }
 
+                /* El mapa a la izquierda con ancho ACOTADO y la leyenda a la
+                   derecha. A ancho completo el lienzo de 1000 x 630 se dibujaba
+                   de 745 px de alto y obligaba a desplazarse para verlo. */
+                .il-mapa-grid { display:grid; grid-template-columns:minmax(0,600px) 1fr;
+                    gap:18px; align-items:start; }
                 .il-svg-caja { border:1px solid var(--line); border-radius:var(--r-md);
-                    background:#FFFFFF; padding:8px; overflow:hidden; }
+                    background:#FFFFFF; padding:6px; overflow:hidden; }
                 .il-svg-caja svg { width:100%; height:auto; display:block; }
                 .il-svg-caja .il-estado { stroke:#333333; stroke-width:1; cursor:default;
                     transition:opacity .16s ease, stroke-width .16s ease; }
@@ -14236,14 +14244,19 @@
                 .il-svg-caja text.il-etq { pointer-events:none; font-family:Arial, sans-serif; }
                 [data-tema="oscuro"] .il-svg-caja { background:#E9EFF6; }
 
-                .il-escala-t { font-size:var(--fs-xs); color:var(--muted); margin-top:12px; font-weight:600; }
-                .il-escala { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; }
-                .il-escala-i { flex:1; min-width:62px; text-align:center; }
-                .il-escala-c { height:22px; border-radius:4px; border:1px solid #333; }
+                /* Leyenda en columna: al costado del mapa no caben ocho tramos
+                   en fila. */
+                .il-escala-t { font-size:var(--fs-xs); color:var(--muted); font-weight:600;
+                    line-height:1.4; margin-bottom:8px; }
+                .il-escala { display:flex; flex-direction:column; gap:4px; }
+                .il-escala-i { display:flex; align-items:center; gap:8px; }
+                .il-escala-c { width:26px; height:14px; border-radius:3px; border:1px solid #333;
+                    flex:0 0 auto; }
                 .il-escala-c.il-tramo-sd { border-style:dashed; border-color:#6E7784; }
-                .il-escala-l { font-size:10px; color:var(--muted); font-weight:600; margin-top:3px; }
+                .il-escala-l { font-size:10.5px; color:var(--muted); font-weight:600;
+                    font-variant-numeric:tabular-nums; }
 
-                .il-ref { margin-top:14px; }
+                .il-ref { margin-top:16px; }
                 .il-ref-pista { position:relative; height:10px; border-radius:5px;
                     border:1px solid var(--line);
                     background:linear-gradient(to right,#C6DBEF,#9ECAE1,#6BAED6,#4292C6,#2171B5,#084594); }
@@ -14251,20 +14264,40 @@
                 .il-ref-m::after { content:attr(data-et); position:absolute; top:21px; left:50%;
                     transform:translateX(-50%); white-space:nowrap; font-size:9.5px;
                     font-weight:700; color:var(--ink); }
-                .il-ref-pie { margin-top:26px; font-size:var(--fs-xs); color:var(--muted); }
+                .il-ref-pie { margin-top:26px; font-size:var(--fs-xs); color:var(--muted); line-height:1.5; }
 
-                .il-tabla td.il-num, .il-tabla th.il-num { text-align:right; }
-                .il-tabla td.il-ent, .il-tabla th.il-ent { text-align:left; }
-                .il-tabla .il-pos { color:var(--muted); font-variant-numeric:tabular-nums; width:34px; }
+                /* Tablas densas: 34 filas tienen que caber sin desplazamiento
+                   interno. Misma densidad que .hd-tabla-nac en Homicidios. */
+                .il-tabla { font-size:11.5px; }
+                .il-tabla thead th { position:static; padding:6px 7px; font-size:9px; line-height:1.25; }
+                .il-tabla thead th small { display:block; font-size:8px; opacity:.8;
+                    text-transform:none; letter-spacing:0; }
+                .il-tabla tbody td { padding:3px 7px; }
+                .il-tabla td.il-num, .il-tabla th.il-num { text-align:right;
+                    font-variant-numeric:tabular-nums; }
+                .il-tabla td.il-ent, .il-tabla th.il-ent { text-align:left; max-width:190px;
+                    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+                .il-tabla td.il-pos, .il-tabla th.il-pos { text-align:right; width:30px;
+                    color:var(--muted); font-variant-numeric:tabular-nums; }
                 .il-tabla .il-sd-t { color:var(--muted); font-style:italic; }
                 .il-tabla .il-sube { color:#C0392B; font-weight:600; }
                 .il-tabla .il-baja { color:#1E8449; font-weight:600; }
-                .il-tabla tr.il-fila-ref td { background:var(--chip); font-weight:700; }
-                .il-tabla tr.il-jal td { background:color-mix(in srgb, var(--accent) 14%, transparent); }
-                .il-pie { margin-top:10px; font-size:var(--fs-xs); color:var(--muted); line-height:1.55; }
+                /* Columna del año seleccionado: es la que ordena la tabla. */
+                .il-tabla th.il-act { background:#12305A; }
+                .il-tabla td.il-act { background:color-mix(in srgb, var(--accent) 9%, transparent);
+                    font-weight:700; }
+                .il-tabla th.il-var { background:#7B2430; }
+                .il-tabla tr.il-fila-ref td { background:#FDE9C8; color:#4A3208; font-weight:700; }
+                .il-tabla tr.il-jal td { background:color-mix(in srgb, var(--accent) 16%, transparent); }
+                .il-tabla tr.il-jal td.il-act { background:color-mix(in srgb, var(--accent) 24%, transparent); }
+                .il-pie { margin-top:8px; font-size:var(--fs-xs); color:var(--muted); line-height:1.5; }
                 .il-edo { display:inline-block; padding:8px 12px; border-radius:var(--r-sm,6px);
                     background:var(--chip); color:var(--muted); font-size:12.5px; }
                 .il-edo.falla { background:color-mix(in srgb,#C0392B 12%,transparent); color:#C0392B; }
+                @media (max-width: 980px) {
+                    .il-mapa-grid { grid-template-columns:1fr; }
+                    .il-escala { flex-direction:row; flex-wrap:wrap; }
+                }
                 @media (max-width: 768px) {
                     .il-barra select { min-width:0; width:100%; }
                 }`;
@@ -14290,37 +14323,21 @@
                 cont.id = 'vistaIndiceLetal';
                 cont.style.display = 'none';
                 cont.innerHTML = `
-                  <section id="ilControles">
+                  <section id="ilTablaDin">
                     <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
-                        <span class="h2-marca"></span><h2>Índice letal por entidad federativa</h2>
-                        <span class="panel-nota">Tasa por cada 100 mil habitantes · enero–junio</span>
+                        <span class="h2-marca"></span><h2>Ranking por entidad</h2>
+                        <span class="panel-nota">Tasa por cada 100 mil habitantes de violencia letal · primer semestre, todos los años</span>
                         <span class="panel-toggle">▾</span>
                     </div>
                     <div class="panel-cuerpo">
-                        <div class="mun-intro">
-                            <span class="mun-kicker">Violencia letal · comparativo nacional</span>
-                            <p>El componente seleccionado gobierna el color del mapa y el orden de la
-                               primera tabla. La tabla de resultados acumulados es un anexo de referencia
-                               con otro periodo y otras unidades: <b>no es comparable</b> con las tasas.</p>
-                        </div>
                         <div class="il-barra">
                             <label for="ilSelInd">Componente</label>
                             <select id="ilSelInd"></select>
-                            <label>Año</label>
+                            <label>Año que ordena y colorea</label>
                             <div class="il-anios" id="ilAnios" role="group" aria-label="Año de corte"></div>
                             <span class="panel-nota" style="margin-left:auto" id="ilResumen">—</span>
                         </div>
-                    </div>
-                  </section>
-
-                  <section id="ilTablaDin">
-                    <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
-                        <span class="h2-marca"></span><h2>Tabla del componente seleccionado</h2>
-                        <span class="panel-nota">Ordenada de mayor a menor</span>
-                        <span class="panel-toggle">▾</span>
-                    </div>
-                    <div class="panel-cuerpo" id="ilTablaDinCuerpo">
-                        <span class="il-edo">Cargando…</span>
+                        <div id="ilTablaDinTabla"><span class="il-edo">Cargando…</span></div>
                     </div>
                   </section>
 
@@ -14391,12 +14408,16 @@
                     return;
                 }
                 cuerpo.innerHTML = `
-                    <div class="il-svg-caja" id="ilSvgCaja"></div>
-                    <div class="il-escala-t" id="ilEscalaT">—</div>
-                    <div class="il-escala" id="ilEscala"></div>
-                    <div class="il-ref">
-                        <div class="il-ref-pista" id="ilRefPista"></div>
-                        <div class="il-ref-pie" id="ilRefPie">—</div>
+                    <div class="il-mapa-grid">
+                        <div class="il-svg-caja" id="ilSvgCaja"></div>
+                        <div>
+                            <div class="il-escala-t" id="ilEscalaT">—</div>
+                            <div class="il-escala" id="ilEscala"></div>
+                            <div class="il-ref">
+                                <div class="il-ref-pista" id="ilRefPista"></div>
+                                <div class="il-ref-pie" id="ilRefPie">—</div>
+                            </div>
+                        </div>
                     </div>
                     <div class="mun-lectura" id="ilLectura">—</div>`;
                 /* Clon del SVG de Homicidios: los `id` pasan a `data-e` y se
@@ -14436,7 +14457,10 @@
                     txt.setAttribute('x', c.x); txt.setAttribute('y', c.y);
                     txt.setAttribute('text-anchor', 'middle');
                     txt.setAttribute('dominant-baseline', 'central');
-                    txt.setAttribute('font-size', IL_CHICAS.indexOf(id) >= 0 ? '9' : '11');
+                    /* Tipo sobre el lienzo de 1000 x 630. Con el mapa acotado a
+                       600 px de ancho, 15 px de lienzo rinden como 9 px reales;
+                       con los 11 anteriores quedaban en 6.6 px, ilegibles. */
+                    txt.setAttribute('font-size', IL_CHICAS.indexOf(id) >= 0 ? '13' : '15');
                     txt.setAttribute('font-weight', sd ? '400' : '700');
                     txt.setAttribute('fill', sd ? '#5A6472' : ilTinta(relleno));
                     txt.setAttribute('pointer-events', 'none');
@@ -14498,73 +14522,110 @@
 
             const ilEt = k => { const i = il.inds.find(x => x.k === k); return i ? i.et : k; };
 
-            /* ---------- Tabla dinámica ---------- */
+            /* ---------- Tabla dinámica · ranking por entidad ----------
+               Una fila por entidad y UNA COLUMNA POR AÑO, en paralelo. Con una
+               sola columna del año seleccionado no había forma de comparar
+               2015 con 2026 sin cambiar de año y recordar cifras: la tabla no
+               tenía uso. El conmutador de año gobierna qué columna ordena y
+               qué capa colorea el mapa, no qué años se ven. */
             function ilPintaTablaDin() {
-                const c = ilEl('ilTablaDinCuerpo');
+                const c = ilEl('ilTablaDinTabla');
                 if (!c) return;
-                const cap = ilCapa();
+                const anios = il.anios;
+                const capas = {};
+                anios.forEach(a => { capas[a] = (il.datos[il.ind] || {})[a] || { ent: {}, ref: {} }; });
+
+                /* Las variaciones viven en las filas del año más reciente. Se
+                   recorre en orden ascendente y se queda la última no nula. */
+                function juntaVar(saca) {
+                    let v25 = null, v15 = null;
+                    anios.forEach(a => {
+                        const r = saca(capas[a]);
+                        if (!r) return;
+                        if (r.v25 !== null && r.v25 !== undefined) v25 = r.v25;
+                        if (r.v15 !== null && r.v15 !== undefined) v15 = r.v15;
+                    });
+                    return { v25: v25, v15: v15 };
+                }
+
                 const con = [], sin = [];
                 Object.keys(HD_ID_NOMBRE).forEach(id => {
-                    const r = cap.ent[id];
-                    if (r && r.v !== null) con.push({ id: id, r: r }); else sin.push({ id: id });
+                    const f = { id: id, v: {} };
+                    anios.forEach(a => { const r = capas[a].ent[id]; f.v[a] = r ? r.v : null; });
+                    const vr = juntaVar(cap => cap.ent[id]);
+                    f.v25 = vr.v25; f.v15 = vr.v15;
+                    (f.v[il.anio] === null ? sin : con).push(f);
                 });
-                if (!con.length && !sin.length) { c.innerHTML = '<span class="il-edo">Sin datos para esta combinación.</span>'; return; }
+                if (!con.length && !sin.length) {
+                    c.innerHTML = '<span class="il-edo">Sin datos para esta combinación.</span>'; return;
+                }
 
-                /* Ordenada de MAYOR a MENOR por el componente seleccionado. Las
-                   entidades sin dato van al final, sin número de posición: no
-                   valen cero, no tienen lugar en el ordenamiento. */
-                con.sort((a, b) => b.r.v - a.r.v);
+                /* De MAYOR a MENOR por el año seleccionado. Las entidades sin
+                   dato en ese año van al final y sin posición: no valen cero. */
+                con.sort((a, b) => b.v[il.anio] - a.v[il.anio]);
 
-                const varia = v => v === null || v === undefined
+                const varia = v => (v === null || v === undefined)
                     ? '<span class="il-sd-t">—</span>'
                     : `<span class="${v > 0 ? 'il-sube' : (v < 0 ? 'il-baja' : '')}">${ilPct(v)}</span>`;
+                const celda = (v, a) => `<td class="il-num${a === il.anio ? ' il-act' : ''}${v === null ? ' il-sd-t' : ''}">`
+                    + (v === null ? 's/d' : (a === il.anio ? '<b>' + ilN1(v) + '</b>' : ilN1(v))) + '</td>';
 
-                const filas = con.map((x, i) =>
-                    `<tr${x.id === 'MXJAL' ? ' class="il-jal"' : ''}>
+                const cuerpo = con.map((f, i) =>
+                    `<tr${f.id === 'MXJAL' ? ' class="il-jal"' : ''}>
                         <td class="il-pos">${i + 1}</td>
-                        <td class="il-ent">${esc(HD_ID_NOMBRE[x.id])}</td>
-                        <td class="il-num"><b>${ilN1(x.r.v)}</b></td>
-                        <td class="il-num">${varia(x.r.v25)}</td>
-                        <td class="il-num">${varia(x.r.v15)}</td>
-                     </tr>`).join('') +
-                    sin.map(x =>
-                    `<tr${x.id === 'MXJAL' ? ' class="il-jal"' : ''}>
+                        <td class="il-ent">${esc(HD_ID_NOMBRE[f.id])}</td>` +
+                     anios.map(a => celda(f.v[a], a)).join('') +
+                    `<td class="il-num">${varia(f.v25)}</td>
+                     <td class="il-num">${varia(f.v15)}</td></tr>`).join('') +
+                    sin.map(f =>
+                    `<tr${f.id === 'MXJAL' ? ' class="il-jal"' : ''}>
                         <td class="il-pos">—</td>
-                        <td class="il-ent">${esc(HD_ID_NOMBRE[x.id])}</td>
-                        <td class="il-num il-sd-t">sin dato</td>
-                        <td class="il-num il-sd-t">—</td>
-                        <td class="il-num il-sd-t">—</td>
-                     </tr>`).join('');
+                        <td class="il-ent">${esc(HD_ID_NOMBRE[f.id])}</td>` +
+                     anios.map(a => celda(f.v[a], a)).join('') +
+                    `<td class="il-num il-sd-t">—</td>
+                     <td class="il-num il-sd-t">—</td></tr>`).join('');
 
-                const ref = ['prom', 'nac'].map(k => {
-                    const r = cap.ref[k];
-                    if (!r) return '';
+                /* Referencias de la fuente al pie, en ámbar y fuera del orden. */
+                const ref = ['nac', 'prom'].map(k => {
+                    const pres = anios.map(a => capas[a].ref[k]).filter(Boolean);
+                    if (!pres.length) return '';
+                    const vr = juntaVar(cap => cap.ref[k]);
                     return `<tr class="il-fila-ref">
                         <td class="il-pos"></td>
-                        <td class="il-ent">${esc(r.nom)}</td>
-                        <td class="il-num">${ilN1(r.v)}</td>
-                        <td class="il-num">${varia(r.v25)}</td>
-                        <td class="il-num">${varia(r.v15)}</td></tr>`;
+                        <td class="il-ent">${esc(pres[pres.length - 1].nom)}</td>` +
+                        anios.map(a => {
+                            const r = capas[a].ref[k];
+                            return `<td class="il-num${a === il.anio ? ' il-act' : ''}">${r ? ilN1(r.v) : '—'}</td>`;
+                        }).join('') +
+                        `<td class="il-num">${varia(vr.v25)}</td>
+                         <td class="il-num">${varia(vr.v15)}</td></tr>`;
                 }).join('');
+
+                /* Rótulos de las dos columnas de variación deducidos de los años
+                   presentes, no escritos a mano: si la hoja agrega un corte, la
+                   cabecera lo sigue. */
+                const ult = anios[anios.length - 1];
+                const pen = anios.length > 1 ? anios[anios.length - 2] : null;
+                const pri = anios[0];
 
                 c.innerHTML = `
                     <div class="table-wrapper">
                         <table class="data-table data-table-compacta il-tabla">
                             <thead><tr>
                                 <th class="il-pos">#</th>
-                                <th class="il-ent">Entidad</th>
-                                <th class="il-num">${esc(ilEt(il.ind))}<br><small>${il.anio} · por 100 mil</small></th>
-                                <th class="il-num">Var. 2026 vs 2025</th>
-                                <th class="il-num">Var. 2026 vs 2015</th>
+                                <th class="il-ent">Entidad</th>` +
+                                anios.map(a => `<th class="il-num${a === il.anio ? ' il-act' : ''}">${a}</th>`).join('') +
+                                `<th class="il-num il-var">${ult}<small>vs ${pen === null ? '—' : pen}</small></th>
+                                <th class="il-num il-var">${ult}<small>vs ${pri}</small></th>
                             </tr></thead>
-                            <tbody>${filas}${ref}</tbody>
+                            <tbody>${cuerpo}${ref}</tbody>
                         </table>
                     </div>
                     <div class="il-pie">
-                        Unidad: ${esc(il.unidad || 'tasa por cada 100 mil habitantes')}. Periodo enero–junio.
+                        ${esc(ilEt(il.ind))} · ${esc(il.unidad || 'tasa por cada 100 mil habitantes')} · primer semestre.
+                        La columna resaltada es la que ordena la tabla y colorea el mapa.
                         Las dos últimas filas son referencias de la fuente, no entidades, y quedan fuera del ordenamiento.
-                        Las variaciones vienen en la hoja como proporción y aquí se expresan en por ciento.
-                        «Sin dato» no equivale a cero: la fuente no publica ese componente para esas entidades
+                        «s/d» no equivale a cero: la fuente no publica ese componente para esa entidad en ese año
                         y no se imputa ningún valor.
                     </div>`;
             }
@@ -14627,7 +14688,7 @@
 
             function ilFalla(msg) {
                 il.error = msg;
-                ['ilTablaDinCuerpo', 'ilMapaCuerpo', 'ilTablaTotCuerpo'].forEach(id => {
+                ['ilTablaDinTabla', 'ilMapaCuerpo', 'ilTablaTotCuerpo'].forEach(id => {
                     const e = ilEl(id);
                     if (e) e.innerHTML = '<span class="il-edo falla">Fuente no disponible: ' + esc(msg) + '</span>';
                 });
