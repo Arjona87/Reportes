@@ -936,6 +936,62 @@
             #hdMapaLeaflet { height: 400px; }
         }
 
+        /* ═══════════ INICIO · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════
+           Réplica de la lámina oficial «Homicidio doloso por entidad
+           federativa». Los hexadecimales NO son tokens del tablero: se
+           muestrearon píxel a píxel de la lámina de origen, porque el punto
+           de esta sección es que se vea igual que el documento impreso
+           aunque rompa con la paleta del resto de la página.
+
+           Reglas ADITIVAS. Ninguna toca clases existentes. Borrar desde este
+           comentario hasta «FIN · SUBMÓDULO LÁMINA SESNSP» no afecta nada
+           más. Aquí viven además el aviso de cierre mensual y la casilla de
+           leyenda de los ajustes negativos, que pertenecen al mapa nacional
+           pero comparten la misma tanda. */
+        .hdLam-lamina { background: #fff; border: 1px solid var(--line);
+            border-radius: var(--r-md); padding: 20px 24px 14px; }
+        .hdLam-cab { display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+        .hdLam-tit-col { flex: 1 1 380px; min-width: 0; }
+        .hdLam-tit { font-family: Arial, Helvetica, sans-serif; font-size: 30px;
+            font-weight: 900; color: #2F4F52; line-height: 1.02; margin: 0;
+            letter-spacing: -.4px; text-transform: uppercase; }
+        .hdLam-sub { font-family: Arial, Helvetica, sans-serif; font-size: 20px;
+            font-weight: 400; color: #99813B; margin-top: 7px; }
+        .hdLam-caja { flex: 0 1 430px; border: 2px dashed #99813B; border-radius: 2px;
+            padding: 13px 18px; text-align: center; font-family: Arial, Helvetica, sans-serif;
+            font-size: 15px; color: #2F4F52; line-height: 1.45; }
+        .hdLam-n { font-size: 26px; font-weight: 800; color: #99813B; }
+        .hdLam-pct { display: block; margin: 1px 0 2px; font-size: 38px;
+            font-weight: 800; color: #99813B; line-height: 1.05; }
+        .hdLam-pct small { font-size: 17px; font-weight: 700; }
+        .hdLam-box { position: relative; height: 480px; margin-top: 12px; }
+        .hdLam-pie { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 7px;
+            font-family: Arial, Helvetica, sans-serif; font-size: 10.5px;
+            color: var(--muted); line-height: 1.5; text-align: center; }
+        /* La lámina se imprime sobre blanco. En tema oscuro se conserva el
+           lienzo claro —como ya hace `munComp-lamina`— porque el azul petróleo
+           y el guinda del documento son ilegibles sobre fondo oscuro. */
+        [data-tema="oscuro"] .hdLam-lamina { background: #F4F7FA; }
+        [data-tema="oscuro"] .hdLam-pie { color: #55627A; }
+        @media (max-width: 1080px) {
+            .hdLam-caja { flex: 1 1 100%; }
+            .hdLam-tit { font-size: 24px; }
+            .hdLam-sub { font-size: 17px; }
+            .hdLam-box { height: 430px; }
+        }
+
+        /* Aviso de los días de cierre mensual en el mapa nacional. */
+        .hd-aviso-audit { display: none; background: #FFF6E0; border: 1px solid #E0B44A;
+            border-left: 4px solid #C98A12; border-radius: var(--r-sm);
+            padding: 10px 14px; font-size: 13px; color: #6B4A05;
+            line-height: 1.5; margin-bottom: 12px; }
+        .hd-aviso-audit.on { display: block; }
+        /* Los ajustes negativos no son un tramo más de la escala azul: son otra
+           categoría. Gris azulado y borde punteado, para que no se confundan
+           ni con el cero ni con «1–2». */
+        .hd-cneg { background: #8FA3B5; border: 1.5px dashed #4A6B85; }
+        /* ═══════════ FIN · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════ */
+
         /* =====================================================================
            BLOQUE `munComp-*` — CSS de las láminas de Gráficas Mensuales
 
@@ -2304,6 +2360,25 @@
                 <div class="hd-vacio">Cargando el mapa nacional…</div>
             </div>
         </section>
+
+        <!-- ═══════════ INICIO · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════
+             Réplica de la lámina oficial, alimentada por el MISMO acumulado
+             que la columna «Acumulado» del mapa de arriba: se redibuja desde
+             `hdPintaMapa`, así que sigue el deslizador de fecha y se actualiza
+             sola conforme se capturan días en la hoja.
+             Borrar desde este comentario hasta el de cierre no afecta al resto
+             de la vista. -->
+        <section id="hdLamina">
+            <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
+                <span class="h2-marca"></span><h2>Homicidio doloso por entidad federativa</h2>
+                <span class="panel-nota">Réplica de lámina SESNSP · acumulado al día seleccionado</span>
+                <span class="panel-toggle">▾</span>
+            </div>
+            <div class="panel-cuerpo" id="hdLaminaCuerpo">
+                <div class="hd-vacio">Cargando…</div>
+            </div>
+        </section>
+        <!-- ═══════════ FIN · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════ -->
 
         <section id="hdDiario">
             <div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">
@@ -9836,6 +9911,275 @@
         }
         const hdTinta = hex => (hex === '#2171B5' || hex === '#084594') ? '#FFFFFF' : '#111111';
 
+        /* ═══════════ INICIO · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════
+           Réplica de la lámina oficial «Homicidio doloso por entidad
+           federativa» y tratamiento de los días de cierre mensual.
+
+           Se declara ANTES de `hdPintaMapa` a propósito: esa función usa
+           `HD_LAM_NEG` y `hdEsAuditoria`, y con `const` un `typeof` no protege
+           de la zona muerta temporal. Declarado arriba, el orden queda
+           garantizado sin registro diferido.
+
+           Dependencias hacia fuera, todas de solo lectura: `hdEstado`,
+           `hdValores()`, `hdNf`, `hdPanel`, `HD_MESES` y `Chart`.
+           Nada de este bloque lo consume otro módulo: se borra entero
+           —junto con su CSS, su `<section>` y las tres líneas de enganche
+           señaladas en `hdPintaMapa` y `hdRenderNacional`— sin efectos.
+           ═══════════════════════════════════════════════════════════════ */
+
+        /* Hexadecimales muestreados píxel a píxel de la lámina de origen. No
+           son tokens del tablero y no deben sustituirse por ellos: el encargo
+           es que la sección se vea igual que el documento impreso. */
+        const HD_LAM = {
+            TINTA:  '#2F4F52',   // azul petróleo del título
+            ORO:    '#99813B',   // subtítulo, recuadro y rótulo del promedio
+            OSCURA: '#531935',   // barras del grupo concentrador
+            GUINDA: '#842B4A',   // resto de las barras
+            ROSA:   '#E9D7E1',   // franja tras el grupo concentrador
+            BEIGE:  '#EFF0E0',   // zona por debajo del promedio
+            OLIVA:  '#ADA474'    // línea discontinua del promedio
+        };
+        /* Gris azulado de los ajustes de auditoría en el mapa. Fuera de la
+           escala azul a propósito: un negativo no es «menos incidencia», es
+           otra categoría. */
+        const HD_LAM_NEG = '#8FA3B5';
+
+        let hdLamGraf = null;
+
+        /* Día de cierre mensual. Dos criterios, en OR:
+             a) es la última fecha capturada de su mes Y existe un mes
+                posterior en la serie —así el último día del mes en curso,
+                que aún no se audita, no se marca por error—;
+             b) ya venía marcado por la heurística de `hdParseNacional`
+                (mediana × 2.5 del total nacional diario).
+           El cálculo se cachea en el propio objeto `diario`: se recorre en
+           cada movimiento del deslizador y la serie llega a cientos de días. */
+        function hdEsAuditoria(i) {
+            const d = hdEstado.nac && hdEstado.nac.diario;
+            if (!d || !d.fechas.length) return false;
+            if (!d.auditoria || d.auditoria.length !== d.fechas.length) {
+                const ultimo = {};                       // clave «año-mes» → índice
+                d.fechas.forEach((f, k) => { ultimo[f.getFullYear() + '-' + f.getMonth()] = k; });
+                const claves = Object.keys(ultimo);
+                const finSerie = ultimo[claves[claves.length - 1]];
+                d.auditoria = d.fechas.map((f, k) =>
+                    (ultimo[f.getFullYear() + '-' + f.getMonth()] === k && k !== finSerie) ||
+                    !!(d.conciliacion && d.conciliacion[k]));
+            }
+            return !!d.auditoria[i];
+        }
+
+        /* Franja rosa, zona bajo el promedio y línea discontinua. Van DETRÁS
+           de las barras, como en la lámina: sobre las barras altas la línea
+           del promedio queda oculta y eso es lo que muestra el original. */
+        const hdLamFondo = { id: 'hdLamFondo', beforeDatasetsDraw(ch, args, o) {
+            if (!o || !ch.chartArea) return;
+            const ctx = ch.ctx, ca = ch.chartArea;
+            const yProm = ch.scales.y.getPixelForValue(o.prom);
+
+            if (yProm > ca.top && yProm < ca.bottom) {
+                ctx.save();
+                ctx.fillStyle = HD_LAM.BEIGE;
+                ctx.fillRect(ca.left, yProm, ca.right - ca.left, ca.bottom - yProm);
+                ctx.restore();
+            }
+            if (o.nConc > 0) {
+                const m = ch.getDatasetMeta(0);
+                const b0 = m.data[0], b1 = m.data[o.nConc - 1];
+                if (b0 && b1) {
+                    const hw = ((b0.width || 12) / 2) + 3;
+                    ctx.save();
+                    ctx.fillStyle = HD_LAM.ROSA;
+                    ctx.fillRect(b0.x - hw, ca.top, (b1.x + hw) - (b0.x - hw), ca.bottom - ca.top);
+                    ctx.restore();
+                }
+            }
+            ctx.save();
+            ctx.strokeStyle = HD_LAM.OLIVA;
+            ctx.lineWidth = 1.6;
+            ctx.setLineDash([7, 5]);
+            ctx.beginPath();
+            ctx.moveTo(ca.left, yProm); ctx.lineTo(ca.right, yProm);
+            ctx.stroke();
+            ctx.restore();
+        } };
+
+        /* Rótulo vertical «8.5% (983)» sobre cada barra y el del promedio.
+           El porcentaje va en negrita y el conteo en peso normal, así que son
+           dos `fillText`: el segundo arranca donde termina el primero, medido
+           con `measureText`. */
+        const hdLamEtq = { id: 'hdLamEtq', afterDatasetsDraw(ch, args, o) {
+            if (!o || !ch.chartArea) return;
+            const ctx = ch.ctx, ca = ch.chartArea;
+            const datos = ch.data.datasets[0].data;
+            ctx.save();
+            ch.getDatasetMeta(0).data.forEach((bar, i) => {
+                const v = datos[i];
+                if (v === null || v === undefined) return;
+                /* En una barra negativa `bar.y` es el extremo inferior; el
+                   rótulo se ancla sobre el cero para que quede en el hueco. */
+                const base = (typeof bar.base === 'number') ? bar.base : bar.y;
+                const tope = Math.min(bar.y, base);
+                const pct = o.total ? (v / o.total * 100).toFixed(1) : '0.0';
+                ctx.save();
+                ctx.translate(bar.x, tope - 5);
+                ctx.rotate(-Math.PI / 2);
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#1B1B1B';
+                ctx.font = '700 ' + o.fs + 'px Arial, Helvetica, sans-serif';
+                const a = pct + '%';
+                ctx.fillText(a, 0, 0);
+                ctx.font = '400 ' + o.fs + 'px Arial, Helvetica, sans-serif';
+                ctx.fillText(' (' + hdNf(v) + ')', ctx.measureText(a).width + 2, 0);
+                ctx.restore();
+            });
+            const yProm = ch.scales.y.getPixelForValue(o.prom);
+            ctx.font = '700 14px Arial, Helvetica, sans-serif';
+            ctx.fillStyle = HD_LAM.ORO;
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(o.rotuloProm, ca.right, Math.max(ca.top + 16, yProm - 10));
+            ctx.restore();
+        } };
+
+        function hdLamMonta() {
+            hdPanel('hdLaminaCuerpo', `
+                <div class="hdLam-lamina">
+                    <div class="hdLam-cab">
+                        <div class="hdLam-tit-col">
+                            <h3 class="hdLam-tit">Homicidio doloso por entidad federativa</h3>
+                            <div class="hdLam-sub" id="hdLamSub">—</div>
+                        </div>
+                        <div class="hdLam-caja" id="hdLamCaja">—</div>
+                    </div>
+                    <div class="hdLam-box"><canvas id="hdLamCanvas"></canvas></div>
+                    <div class="hdLam-pie">
+                        Las entidades sombreadas indican aquellas que representan el cincuenta
+                        porciento o más del total nacional o por debajo del promedio nacional.<br>
+                        Fuente: SESNSP con información reportada por las Procuradurías Generales
+                        de Justicia o Fiscalías Generales de las 32 entidades federativas.
+                    </div>
+                </div>`);
+        }
+
+        /* Se llama desde el final de `hdPintaMapa`: la lámina lee el MISMO
+           acumulado que la columna «Acumulado» de la tabla del mapa, así que
+           sigue el deslizador y se actualiza sola conforme se capturan días.
+           El grupo concentrador es el prefijo más largo cuyo acumulado NO
+           rebasa el 50 %, que es la regla que reproduce la cifra de la lámina
+           oficial (7 entidades = 49.3 %), no la redacción de su nota al pie. */
+        function hdLamPinta() {
+            /* El montaje se comprueba con el subtítulo y no con el lienzo: la
+               cabecera y el recuadro se llenan aunque Chart.js no haya cargado
+               —el tablero ya contempla esa caída—, así la lámina informa la
+               cifra de concentración en vez de quedarse en un guion. */
+            const sub = document.getElementById('hdLamSub');
+            if (!sub) return;
+
+            const { acum, fecha } = hdValores();
+            const filas = Object.entries(acum).sort((a, b) => b[1] - a[1]);
+            if (!filas.length) return;
+
+            const total = filas.reduce((a, f) => a + f[1], 0);
+            const n = filas.length;
+            const prom = total / n;
+
+            /* La primera entidad entra siempre —si hay casos—, aunque ella
+               sola rebase el 50 %. Ocurre en los primeros días de enero, con
+               pocos registros: aplicar la regla a secas devolvería «0
+               entidades concentran el 0 %», que es peor que decir que una sola
+               concentra el 64 %. A partir de la segunda manda el umbral. */
+            let nConc = 0, sumaConc = 0;
+            if (total > 0) {
+                for (let k = 0; k < filas.length; k++) {
+                    const v = filas[k][1];
+                    if (v <= 0) break;
+                    if (k > 0 && (sumaConc + v) / total > 0.5) break;
+                    sumaConc += v; nConc++;
+                }
+            }
+
+            if (fecha) sub.textContent =
+                `De enero a ${HD_MESES[fecha.getMonth()].toLowerCase()} ${fecha.getFullYear()}`;
+
+            const cj = document.getElementById('hdLamCaja');
+            if (cj) cj.innerHTML =
+                `<span class="hdLam-n">${nConc}</span> entidad(es) federativa(s) concentran el ` +
+                `<span class="hdLam-pct">${total ? (sumaConc / total * 100).toFixed(1) : '0.0'}%` +
+                ` <small>(${hdNf(sumaConc)})</small></span> ` +
+                `del total de casos de homicidio doloso`;
+
+            const cv = document.getElementById('hdLamCanvas');
+            if (!cv || typeof Chart === 'undefined') return;
+
+            const cfg = {
+                prom: prom, nConc: nConc, total: total, fs: n > 26 ? 10 : 11.5,
+                rotuloProm: `Prom. nacional: ${prom.toFixed(2)}`
+            };
+            const etiquetas = filas.map(f => f[0]);
+            const valores = filas.map(f => f[1]);
+            const colores = filas.map((_, i) => i < nConc ? HD_LAM.OSCURA : HD_LAM.GUINDA);
+
+            if (hdLamGraf && hdLamGraf.canvas !== cv) { hdLamGraf.destroy(); hdLamGraf = null; }
+
+            if (hdLamGraf) {
+                hdLamGraf.data.labels = etiquetas;
+                hdLamGraf.data.datasets[0].data = valores;
+                hdLamGraf.data.datasets[0].backgroundColor = colores;
+                hdLamGraf.options.plugins.hdLamFondo = cfg;
+                hdLamGraf.options.plugins.hdLamEtq = cfg;
+                hdLamGraf.update('none');
+                return;
+            }
+
+            hdLamGraf = new Chart(cv, {
+                type: 'bar',
+                data: { labels: etiquetas,
+                        datasets: [{ data: valores, backgroundColor: colores,
+                                     borderWidth: 0, categoryPercentage: .82, barPercentage: .94 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    /* Sin animación: se redibuja en cada paso del deslizador y
+                       durante la reproducción automática, a 320 ms por día. */
+                    animation: false,
+                    /* Hueco superior para los rótulos verticales. */
+                    layout: { padding: { top: 74, right: 6 } },
+                    scales: {
+                        y: { beginAtZero: true,
+                             title: { display: true, text: 'Núm. de víctimas',
+                                      color: '#4A4A4A', font: { size: 11, family: 'Arial' } },
+                             /* Pocas marcas, como en la lámina impresa (0, 500,
+                                1,000, 1,500). Con `maxTicksLimit` el paso se
+                                adapta solo a los acumulados pequeños de enero
+                                y a los de cierre de año. */
+                             ticks: { color: '#4A4A4A', font: { size: 11, family: 'Arial' },
+                                      maxTicksLimit: 5, callback: v => hdNf(v) },
+                             grid: { color: 'rgba(0,0,0,.07)', drawBorder: false } },
+                        x: { ticks: { color: '#1B1B1B', autoSkip: false,
+                                      minRotation: 90, maxRotation: 90,
+                                      font: { size: 10.5, weight: '700', family: 'Arial' } },
+                             grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        hdLamFondo: cfg, hdLamEtq: cfg,
+                        /* Lee el total desde las opciones vivas de la gráfica y
+                           no desde `cfg`: al actualizar se sustituye el objeto,
+                           y una clausura sobre el original dejaría los
+                           porcentajes congelados en los del primer día. */
+                        tooltip: { callbacks: { label: c => {
+                            const t = ((c.chart.options.plugins || {}).hdLamEtq || {}).total || 0;
+                            return ` ${hdNf(c.parsed.y)} víctimas · ` +
+                                   `${t ? (c.parsed.y / t * 100).toFixed(1) : '0.0'}%`;
+                        } } }
+                    }
+                },
+                plugins: [hdLamFondo, hdLamEtq]
+            });
+        }
+        /* ═══════════ FIN · SUBMÓDULO LÁMINA SESNSP (hdLam*) ═══════════ */
+
         /* =====================================================================
            COROPLETA · estilo y rótulo compartidos
            =====================================================================
@@ -9915,13 +10259,31 @@
                     if (!p) return;
                     const k = hdBusca(HD_ID_NOMBRE[id], vals);
                     const v = k ? vals[k] : 0;
-                    const relleno = rel ? hdColorRel(v, max) : hdColor(v);
+                    /* Los ajustes de auditoría llegan en negativo. `hdColor`
+                       los metería en el tramo «1–2» y `hdColorRel` devolvería
+                       `undefined` (índice negativo del arreglo de tonos), que
+                       el navegador pinta como relleno inválido. Se resuelve
+                       AQUÍ y no dentro de esas dos funciones: `hdColorRel` la
+                       comparten Fiscalía, Gráficas Mensuales y el mapa de
+                       Jalisco, y cambiarla alteraría tres vistas ajenas. */
+                    const neg = v < 0;
+                    const relleno = neg ? HD_LAM_NEG : (rel ? hdColorRel(v, max) : hdColor(v));
                     p.setAttribute('class', 'hd-estado');
                     p.setAttribute('fill', relleno);
+                    if (neg) {
+                        p.setAttribute('stroke', '#4A6B85');
+                        p.setAttribute('stroke-width', '1.6');
+                        p.setAttribute('stroke-dasharray', '5 3');
+                    } else {
+                        p.removeAttribute('stroke-dasharray');
+                        p.removeAttribute('stroke');
+                        p.removeAttribute('stroke-width');
+                    }
                     p.setAttribute('data-nom', HD_ID_NOMBRE[id]);
                     let t = p.querySelector('title');
                     if (!t) { t = document.createElementNS('http://www.w3.org/2000/svg', 'title'); p.appendChild(t); }
-                    t.textContent = `${HD_ID_NOMBRE[id]}: ${hdNf(v)}`;
+                    t.textContent = `${HD_ID_NOMBRE[id]}: ${hdNf(v)}` +
+                        (neg ? ' · ajuste de auditoría mensual' : '');
 
                     /* Cifra sobre el centroide, siempre visible incluso en
                        cero: es lo que permite leer el mapa sin recorrerlo
@@ -9934,8 +10296,10 @@
                     txt.setAttribute('text-anchor', 'middle');
                     txt.setAttribute('dominant-baseline', 'central');
                     txt.setAttribute('font-size', rel ? '11' : '12.5');
-                    txt.setAttribute('font-weight', v > 0 ? '700' : '400');
-                    txt.setAttribute('fill', v > 0 ? hdTinta(relleno) : '#7A8595');
+                    /* El cero sigue en gris y peso normal; el ajuste negativo
+                       es un dato como cualquier otro y se rotula en negrita. */
+                    txt.setAttribute('font-weight', v !== 0 ? '700' : '400');
+                    txt.setAttribute('fill', v !== 0 ? hdTinta(relleno) : '#7A8595');
                     txt.setAttribute('pointer-events', 'none');
                     txt.textContent = hdNf(v);
                     svg.appendChild(txt);
@@ -9975,6 +10339,13 @@
                   `<b>${hdNf(total)}</b> víctimas. Encabezan ` +
                   t3.map(x => `<b>${esc(x[0])}</b> (${hdNf(x[1])})`).join(', ') + '.'
                 : 'No hay registros para la fecha seleccionada.';
+
+            /* Cierre mensual: el día se muestra igual que cualquier otro, pero
+               con el aviso encendido. Antes no se podía ni llegar a él. */
+            const av = document.getElementById('hdAvisoAuditoria');
+            if (av) av.classList.toggle('on', hdEsAuditoria(hdEstado.mapaNac.idx));
+
+            hdLamPinta();
         }
 
 
@@ -9985,6 +10356,10 @@
            ===================================================================== */
         function hdMontaMapaNac() {
             hdPanel('hdMapaNacCuerpo', `
+                <div class="hd-aviso-audit" id="hdAvisoAuditoria">
+                    ⚠️ <b>Cierre mensual.</b> Cantidad actualizada del mes: puede incluir valores
+                    negativos derivados de la auditoría mensual contra el corte oficial del SESNSP.
+                </div>
                 <div class="mun-barra-filtros" style="margin-bottom:14px">
                     <label class="mun-et" for="hdFecha">Fecha</label>
                     <button class="btn-sec" id="hdDiaPrev" title="Día anterior">◀</button>
@@ -10017,6 +10392,7 @@
                             <div class="hd-escala-i"><div class="hd-escala-c hd-c4"></div><div class="hd-escala-l">7–8</div></div>
                             <div class="hd-escala-i"><div class="hd-escala-c hd-c5"></div><div class="hd-escala-l">9–10</div></div>
                             <div class="hd-escala-i"><div class="hd-escala-c hd-c6"></div><div class="hd-escala-l">11+</div></div>
+                            <div class="hd-escala-i"><div class="hd-escala-c hd-cneg"></div><div class="hd-escala-l">Ajuste (negativo)</div></div>
                         </div>
                         <div class="mun-lectura" id="hdLecturaMapa">—</div>
                     </div>
@@ -10425,20 +10801,20 @@
             const sl = document.getElementById('hdFecha');
             if (!sl) return;
 
-            /* El deslizador salta los días de cierre mensual: en esas fechas el
-               mapa del día mostraría cifras infladas por el ajuste, no por lo
-               ocurrido. `dir` indica hacia dónde se avanza. */
-            const salta = (i, dir) => {
+            /* El deslizador SOLÍA saltar los días de cierre mensual, por temor
+               a que el ajuste contra el corte oficial se leyera como víctimas
+               de esa fecha. El efecto colateral era peor: esos días quedaban
+               fuera de alcance y parecían no existir. Ahora se muestran como
+               cualquier otro, con el aviso `#hdAvisoAuditoria` encendido y los
+               valores negativos con color propio.
+
+               La función se conserva —ya solo acota el índice al rango— para
+               no tocar `irA` ni los cuatro escuchadores que la invocan.
+               `dir` queda sin uso y se documenta como tal. */
+            const salta = (i, _dir) => {
                 const c = hdEstado.nac && hdEstado.nac.diario.conciliacion;
-                if (!c || !c.length) return i;
-                const max = c.length - 1;
-                let j = Math.max(0, Math.min(max, i)), v = 0;
-                while (c[j] && v <= max) {
-                    j += dir; v++;
-                    if (j < 0) j = max;
-                    if (j > max) j = 0;
-                }
-                return j;
+                const max = (c && c.length ? c.length : 1) - 1;
+                return Math.max(0, Math.min(max, i));
             };
             const irA = (i, dir) => {
                 hdEstado.mapaNac.idx = salta(i, dir || 1);
@@ -10537,7 +10913,7 @@
             const nac = hdEstado.nac;
             if (!nac) return;
 
-            hdMontaMapaNac(); hdMontaDiario(); hdMontaFosas(); hdMontaHistorico();
+            hdMontaMapaNac(); hdLamMonta(); hdMontaDiario(); hdMontaFosas(); hdMontaHistorico();
 
             const d = nac.diario;
             const sl = document.getElementById('hdFecha');
@@ -10545,12 +10921,15 @@
                 sl.max = d.fechas.length - 1;
                 /* Arranca en el último día CON captura: los días finales llegan
                    en cero porque aún no se han capturado, no porque no hubiera
-                   víctimas. Abrir ahí mostraría el mapa entero en cero. Además
-                   se evita caer en un cierre mensual. */
+                   víctimas. Abrir ahí mostraría el mapa entero en cero.
+                   Ya NO se esquiva el cierre mensual: si el último día con
+                   captura es un día de auditoría, ahí se abre y el aviso lo
+                   explica. Un total negativo también cuenta como captura, por
+                   eso la condición compara contra cero en vez de usar `!tot[i]`. */
                 const tot = d.fechas.map((_, i) =>
                     d.estados.reduce((a, e) => a + ((d.datos[e] || [])[i] || 0), 0));
                 let i = d.fechas.length - 1;
-                while (i > 0 && (tot[i] === 0 || d.conciliacion[i])) i--;
+                while (i > 0 && tot[i] === 0) i--;
                 hdEstado.mapaNac.idx = i;
                 sl.value = i;
             }
@@ -10575,6 +10954,7 @@
 
             observeReveal(document.getElementById('hdKpis'));
             observeReveal(document.getElementById('hdMapaNac'));
+            observeReveal(document.getElementById('hdLamina'));
             observeReveal(document.getElementById('hdDiario'));
         }
 
