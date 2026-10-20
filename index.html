@@ -15213,6 +15213,12 @@
                            aplicarPanelesGuardados (opcional, con guarda typeof)
              Tema        → tokens CSS del tablero y html[data-tema]
              Librería    → Chart.js 4 ya cargado por el tablero
+             Mapa        → hdGeoJalisco() (cartografía INEGI de Homicidios D.)
+             Láminas     → GM_FONDO_PORTADA / _CGES / _LAMINA (Gráficas Mensuales);
+                           PptxGenJS 3.12.0 (se carga sólo al exportar)
+             Reporte     → LOGO_CGES_B64 (logotipo incrustado)
+           Todas con guarda `typeof`: si faltan, la vista sigue funcionando y la
+           pieza correspondiente se degrada (sin mapa, láminas sin fondo, logo por URL).
 
            FUENTE
            Google Sheet 15ryC1n0drurOdKMel8tBXwNqJUef1U9e5XLCNOd6oS4, pestaña
@@ -15232,6 +15238,12 @@
            3. El reporte descargable se abre como documento aparte, siempre en
               claro y con Poppins; sus clases internas (hoja, barra, n, …) viven
               en esa ventana y no tocan el tablero.
+           4. Violencia / sin violencia: si algún encabezado de la pestaña contiene
+              «VIOLENCIA», la gráfica se construye sola; si no, se declara faltante.
+              La población (personas que continúan desaparecidas) es inferida de la
+              referencia documental del sitio y está marcada «por verificar».
+           5. Mapa: cruce por NOMBRE de municipio (sin acentos, con equivalencias de
+              grafía). Lo que no casa se lista en pantalla; no se descarta en silencio.
 
            Elaboración: CGES/DGAPP/AA
            ═══════════════════════════════════════════════════════════════════ */
@@ -15263,10 +15275,11 @@
 
         const C = Object.assign({}, PALETA_CLARA);
         const AGE_COLORS = EDAD_CLARA.slice();
-        const TEMA = { ink:'#0F1E33', muted:'#64748B', grid:'rgba(15,30,51,.08)' };
+        const TEMA = { ink:'#0F1E33', muted:'#64748B', grid:'rgba(15,30,51,.08)', surface:'#FFFFFF' };
 
         let ROWS = [], CUT_TEXT = '';
         let FILTRO_LIGADO = false;
+        let VIOL_IX = -1;                       // columna «violencia» de la fuente, si existe
 
         /* =======================================================================
            UTILIDADES DEL MÓDULO
@@ -15283,6 +15296,7 @@
           TEMA.ink   = v('--ink',   '#0F1E33');
           TEMA.muted = v('--muted', '#64748B');
           TEMA.grid  = v('--grid-line', 'rgba(15,30,51,.08)');
+          TEMA.surface = v('--surface', '#FFFFFF');
           Object.assign(C, esOscuro() ? PALETA_OSCURA : PALETA_CLARA);
           AGE_COLORS.splice(0, AGE_COLORS.length, ...(esOscuro() ? EDAD_OSCURA : EDAD_CLARA));
         }
@@ -15417,8 +15431,13 @@
             }
 
             AD('loader-sub').textContent = 'Descargando registros del REPD…';
-            const d = await jsonp(`${base}&range=A${HEADER_ROW}:R&headers=1`, 'cbData');
+            /* Se piden columnas de más (hasta AF): si la pestaña de la Vicefiscalía
+               trae variables adicionales —en particular violencia / sin violencia—
+               se aprovechan sin mover la lectura posicional de A–R. */
+            const d = await jsonp(`${base}&range=A${HEADER_ROW}:AF&headers=1`, 'cbData');
             const avisoCols = revisarColumnas(d.table.cols || []);
+            MAPA.cols = d.table.cols || [];
+            VIOL_IX = MAPA.cols.findIndex(c => c && /VIOLENCIA/.test(normTxt(c.label)));
 
             ROWS = d.table.rows.filter(r => r.c && r.c[0] && r.c[0].v).map(r => ({
               sexo:     cell(r,1),
@@ -15431,7 +15450,8 @@
               condLoc:  cell(r,10),
               clasLoc:  cell(r,11),
               tipoCierre: cell(r,15),
-              carpeta:  cell(r,17).toUpperCase()
+              carpeta:  cell(r,17).toUpperCase(),
+              violencia: VIOL_IX >= 0 ? normTxt(cell(r, VIOL_IX)) : ''
             }));
 
             if (!ROWS.length) throw new Error('El Sheet respondió pero no devolvió registros.');
@@ -15941,6 +15961,7 @@
                 '<td class="Audit-Desap-num">' + fmt(m.locV) + '</td><td class="Audit-Desap-num">' + fmt(m.locT) + '</td>' +
                 '<td class="Audit-Desap-num">' + m.pct.toFixed(1) + '%</td></tr>').join('')
             : '<tr><td colspan="6" class="Audit-Desap-empty">Ningún municipio coincide con el periodo y el texto buscados.</td></tr>';
+          renderMapa();
         }
 
         /* =======================================================================
@@ -16318,7 +16339,7 @@
           '</style></head><body>' +
           '<div class="tools"><button onclick="window.print()">Imprimir / Guardar como PDF</button></div>' +
           '<div class="hoja">' +
-            '<div class="masthead"><img src="https://arjona87.github.io/TODOS/CGES_logo.png" alt="CGES">' +
+            '<div class="masthead"><img src="' + (typeof LOGO_CGES_B64 !== 'undefined' ? LOGO_CGES_B64 : 'https://arjona87.github.io/TODOS/CGES_logo.png') + '" alt="CGES">' +
               '<div class="mt"><b>Reporte de Personas Desaparecidas</b>' +
               '<span>Coordinación General Estratégica de Seguridad · Gobierno de Jalisco</span></div></div>' +
             '<div class="barra"><div><b>Fecha:</b> ' + fechaLarga + '</div><div><b>Fuente:</b> REPD · COBUPEJ</div>' +
@@ -16385,6 +16406,7 @@
         function render(){
           leeTema();
           AD('cut-date').textContent = CUT_TEXT || '—';
+          RAIZ().querySelectorAll('.Audit-Desap-fuente-corte').forEach(e => e.textContent = CUT_TEXT || 'vigente');
           AD('rec-count').textContent = fmt(ROWS.length);
 
           initFiltro();
@@ -16528,8 +16550,13 @@
             flag:'Excluir los registros con estatus «CIERRE» parece razonable —el glosario los describe como registros cerrados por duplicidad o falta de competencia— y además reproduce la cifra del boletín de prensa. Pero <b>no</b> reproduce la del sitio oficial, que es la fuente a la que se alinea este tablero. Se verificó por dos vías independientes: la ventana enero–agosto de 2026 y la nota al pie de las desapariciones previas a 2019.'
           });
 
-          /* ---------- No disponible: violencia ---------- */
-          auditPanel('a-violencia',{
+          /* ---------- Violencia / sin violencia ----------
+             Si la pestaña trae la variable, se grafica; si no, se declara faltante
+             exactamente como en el tablero de origen. */
+          AD('viol-no').style.display = VIOL_IX >= 0 ? 'none' : '';
+          AD('viol-si').style.display = VIOL_IX >= 0 ? '' : 'none';
+          if (VIOL_IX >= 0) renderViolencia(DES);
+          else auditPanel('a-violencia',{
             cols:['— ninguna columna disponible —'],
             filtro:'No aplicable. La variable requerida no está publicada en la descarga abierta.',
             pasos:[
@@ -16736,6 +16763,532 @@
 
 
         /* =======================================================================
+           VIOLENCIA / SIN VIOLENCIA — sólo si la pestaña fuente trae la variable
+           Base: personas que continúan desaparecidas, por año de desaparición y
+           sexo, igual que la referencia documental del sitio oficial (que desglosa
+           mujeres/hombres con y sin violencia hasta el 31-dic-2018).
+           ======================================================================= */
+        function categoriasViolencia(set){
+          const vistos = {};
+          set.forEach(r => { vistos[r.violencia || 'SIN DATO'] = 1; });
+          const rango = v => /^CON\b|CON VIOLENCIA/.test(v) ? 0 : /^SIN VIOLENCIA|^SIN\b/.test(v) && v !== 'SIN DATO' ? 1 : v === 'SIN DATO' ? 3 : 2;
+          return Object.keys(vistos).sort((a, b) => rango(a) - rango(b) || a.localeCompare(b, 'es'));
+        }
+        const capTxt = t => t.charAt(0) + t.slice(1).toLowerCase();
+
+        function renderViolencia(DES){
+          const cats = categoriasViolencia(DES);
+          const tonos = { MUJER: [C.salmon, C.salmonLight, C.grey, '#C9CED8'], HOMBRE: [C.teal, C.tealLight, C.gold, '#B9C2CF'] };
+          const ds = [];
+          ['MUJER','HOMBRE'].forEach(sexo => cats.forEach((cat, i) => ds.push({
+            label: (sexo === 'MUJER' ? 'Mujeres' : 'Hombres') + ' · ' + capTxt(cat),
+            backgroundColor: tonos[sexo][Math.min(i, 3)], borderRadius: 3, stack: 'des',
+            data: YEARS.map(y => DES.filter(r => r.sexo === sexo && r.fDes && r.fDes.y === y && (r.violencia || 'SIN DATO') === cat).length)
+          })));
+          mkChart('c-violencia', { type:'bar', data:{ labels:YEARS, datasets:ds }, options: barOpts(true,true,false) });
+
+          const pre = DES.filter(r => r.fDes && r.fDes.y <= 2018);
+          const det = [];
+          ['MUJER','HOMBRE'].forEach(sexo => cats.forEach(cat => {
+            const n = pre.filter(r => r.sexo === sexo && (r.violencia || 'SIN DATO') === cat).length;
+            det.push((sexo === 'MUJER' ? 'mujeres' : 'hombres') + ' ' + cat.toLowerCase() + ': <b>' + fmt(n) + '</b>');
+          }));
+          AD('n-violencia').innerHTML = 'Se muestran sólo las desapariciones ocurridas a partir del 1 de enero de 2019. Hasta el 31 de diciembre ' +
+            'de 2018 se tiene registro de <b>' + fmt(pre.length) + '</b> personas que continúan desaparecidas: ' + det.join(' · ') + '.';
+
+          const etq = (MAPA.cols[VIOL_IX] && MAPA.cols[VIOL_IX].label) || 'VIOLENCIA';
+          const enRangoGraf = ds.reduce((a, d) => a + d.data.reduce((x, y) => x + y, 0), 0);
+          auditPanel('a-violencia',{
+            cols:['ESTATUS','FECHA DESAPARICION','SEXO', etq],
+            filtro:'<code>ESTATUS = "PERSONA DESAPARECIDA"</code> &nbsp;Y&nbsp; año de <code>FECHA DESAPARICION</code> entre 2019 y 2026, ' +
+                   'separando por <code>SEXO</code> y por <code>' + etq + '</code> (columna ' + String.fromCharCode(65 + VIOL_IX) + ').',
+            pasos:[
+              'Filtra <b>ESTATUS</b> dejando solo <code>PERSONA DESAPARECIDA</code>.',
+              'Extrae el año de <b>FECHA DESAPARICION</b> con <code>=VALOR(DERECHA(F2,4))</code> y quédate con 2019 a 2026.',
+              'Tabla dinámica: año en filas; <b>SEXO</b> y <b>' + etq + '</b> en columnas; conteo de folios en valores.',
+              'Valores distintos encontrados en la columna: ' + cats.map(c => '<code>' + c + '</code>').join(', ') +
+                '. Las celdas vacías se cuentan como <code>SIN DATO</code>: no se reparten ni se eliminan.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",\n                      AnioDesap,2026,\n                      Sexo,"MUJER",\n                      Violencia,"' + (cats[0] || 'CON VIOLENCIA') + '")',
+            check:'Suma de todos los segmentos 2019–2026 (<b>' + fmt(enRangoGraf) + '</b>) + las ' + fmt(pre.length) +
+                  ' personas previas a 2019 = <b>' + fmt(enRangoGraf + pre.length) + '</b>; debe igualar el total de personas desaparecidas ' +
+                  'con año de desaparición legible.',
+            flag:'Definición inferida, por verificar: el sitio oficial no publica la base de esta gráfica. Se usa la misma población que ' +
+                 'las demás gráficas de la sección (personas que continúan desaparecidas), porque la referencia documental del sitio ' +
+                 '—hasta el 31-dic-2018— desglosa mujeres y hombres desaparecidos con y sin violencia. Contrasta los totales de 2019 en ' +
+                 'adelante contra el sitio antes de citarlos.'
+          });
+        }
+
+        /* =======================================================================
+           MAPA MUNICIPAL — cartografía INEGI que el tablero ya trae incrustada
+           (hdGeoJalisco). Cruce por nombre de municipio, sin coordenadas del REPD.
+           ======================================================================= */
+        const MAPA = { metrica: 'des', geo: null, cols: [], nombres: {} };
+        const normTxt = t => String(t || '').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const ALIAS_MUN = { 'TLAQUEPAQUE':'SAN PEDRO TLAQUEPAQUE', 'CIUDAD GUZMAN':'ZAPOTLAN EL GRANDE',
+                            'MANZANILLA DE LA PAZ':'LA MANZANILLA DE LA PAZ', 'TLAJOMULCO':'TLAJOMULCO DE ZUNIGA' };
+        const claveMun = m => { const k = normTxt(m); return ALIAS_MUN[k] || k; };
+        const AMG_CLAVES = AMG.map(claveMun);
+        const AMG_CORTO = { 'GUADALAJARA':'Guadalajara', 'ZAPOPAN':'Zapopan', 'SAN PEDRO TLAQUEPAQUE':'Tlaquepaque', 'TONALA':'Tonalá',
+                            'TLAJOMULCO DE ZUNIGA':'Tlajomulco', 'EL SALTO':'El Salto', 'JUANACATLAN':'Juanacatlán',
+                            'IXTLAHUACAN DE LOS MEMBRILLOS':'Ixtlahuacán M.', 'ZAPOTLANEJO':'Zapotlanejo' };
+        const AZULES = ['#C6DBEF','#9ECAE1','#6BAED6','#4292C6','#2171B5','#084594'];   // misma escala que el tablero (hdColorRel)
+        const VERDES = ['#E5F5E0','#C7E9C0','#A1D99B','#74C476','#31A354','#006D2C'];
+        const PCT_CORTES = [25, 50, 75, 90];                                             // fijos: comparables entre periodos
+        const METRICAS = {
+          des: { txt:'Continúan desaparecidas', meta:'Personas que continúan desaparecidas al corte, por municipio de desaparición · no responde al filtro' },
+          n:   { txt:'Casos en el periodo',     meta:'Registros del periodo activo del filtro, por municipio de desaparición' },
+          pct: { txt:'% de localización del periodo', meta:'Localizadas dentro del periodo ÷ casos del periodo × 100 · escala fija' }
+        };
+
+        /** Proyección equirectangular corregida por la latitud media de Jalisco. */
+        function geoMapa(){
+          if (MAPA.geo) return MAPA.geo;
+          const g = typeof hdGeoJalisco === 'function' ? hdGeoJalisco() : null;
+          if (!g || !g.features || !g.features.length) return null;
+          const k = Math.cos(20.8 * Math.PI / 180);
+          const anillos = f => f.geometry.type === 'Polygon' ? f.geometry.coordinates
+                             : f.geometry.type === 'MultiPolygon' ? [].concat(...f.geometry.coordinates) : [];
+          const caja = feats => {
+            let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+            feats.forEach(f => anillos(f).forEach(a => a.forEach(([lo, la]) => {
+              const x = lo * k, y = -la; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; })));
+            return { x0, y0, x1, y1 };
+          };
+          const proyecta = (feats, W) => {
+            const b = caja(feats), s = W / (b.x1 - b.x0), H = Math.round((b.y1 - b.y0) * s);
+            const p = ([lo, la]) => [(lo * k - b.x0) * s, (-la - b.y0) * s];
+            return { W, H, feats: feats.map(f => {
+              let sx = 0, sy = 0, n = 0;
+              const d = anillos(f).map(a => 'M' + a.map(c => { const q = p(c); sx += q[0]; sy += q[1]; n++; return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join('L') + 'Z').join('');
+              return { clave: claveMun(f.properties.nom), nom: f.properties.nom, d, cx: sx / n, cy: sy / n };
+            }) };
+          };
+          const todos = g.features;
+          const amg = todos.filter(f => AMG_CLAVES.includes(claveMun(f.properties.nom)));
+          MAPA.geo = { edo: proyecta(todos, 1000), amg: proyecta(amg, 520), claves: todos.map(f => claveMun(f.properties.nom)) };
+          return MAPA.geo;
+        }
+
+        /** Valores por municipio: saldo al corte (fijo) y métricas del periodo activo. */
+        function valoresMapa(){
+          const v = {};
+          const toma = k => v[k] || (v[k] = { des:0, n:0, locV:0, pct:null, crudo:null });
+          ROWS.forEach(r => {
+            if (!r.munDes || r.munDes === 'SE IGNORA') return;
+            const o = toma(claveMun(r.munDes)); o.crudo = r.munDes;
+            if (esDesaparecida(r)) o.des++;
+          });
+          baseSet().forEach(r => {
+            if (!r.munDes || r.munDes === 'SE IGNORA') return;
+            const o = toma(claveMun(r.munDes)); o.crudo = r.munDes;
+            o.n++; if (enRango(r.fLoc)) o.locV++;
+          });
+          Object.values(v).forEach(o => { o.pct = o.n ? o.locV / o.n * 100 : null; });
+          return v;
+        }
+
+        /** Cortes «redondos» por cuantiles de los valores positivos (5 clases máx.). */
+        function cortesRedondos(vals){
+          const pos = vals.filter(x => x > 0).sort((a, b) => a - b);
+          if (!pos.length) return [];
+          const redondo = x => { if (x <= 5) return Math.ceil(x); const e = Math.pow(10, Math.floor(Math.log10(x)));
+            const m = x / e; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * e; };
+          const cortes = [];
+          [.2, .4, .6, .8].forEach(q => {
+            const c = redondo(pos[Math.min(pos.length - 1, Math.floor(q * pos.length))]);
+            if (c > 1 && c <= pos[pos.length - 1] && (!cortes.length || c > cortes[cortes.length - 1])) cortes.push(c);
+          });
+          return cortes;                    // clases: [1,c1) [c1,c2) … [cN, ∞)
+        }
+
+        /** Clase y color de un valor según la métrica activa. */
+        function escalaMapa(metrica, vals){
+          if (metrica === 'pct'){
+            const cls = PCT_CORTES;
+            return { cortes: cls, paleta: VERDES.slice(0, cls.length + 1), pct: true,
+              color: x => x === null ? null : VERDES[cls.filter(c => x >= c).length],
+              etiquetas: ['Menos de 25%', '25% a menos de 50%', '50% a menos de 75%', '75% a menos de 90%', '90% o más'] };
+          }
+          const cls = cortesRedondos(vals);
+          const pal = AZULES.slice(AZULES.length - (cls.length + 1));
+          const et = [];
+          const lim = [1].concat(cls);
+          lim.forEach((a, i) => {
+            const b = cls[i];
+            et.push(b === undefined ? fmt(a) + ' o más' : (b - 1 === a ? fmt(a) : fmt(a) + ' a ' + fmt(b - 1)));
+          });
+          return { cortes: cls, paleta: pal, pct: false, etiquetas: et,
+            color: x => !x ? 0 : pal[cls.filter(c => x >= c).length] };
+        }
+
+        /** Clases del mapa y número de municipios en cada una (para la leyenda). */
+        function clasesMapa(metrica, V, col){
+          const G = geoMapa();
+          const valor = k => { const o = V[k]; if (metrica === 'pct') return o ? o.pct : null; return o ? o[metrica] : 0; };
+          const E = escalaMapa(metrica, G.claves.map(k => valor(k) || 0));
+          const relleno = k => {
+            const x = valor(k);
+            if (metrica === 'pct') return x === null ? 'url(#Audit-Desap-raya)' : E.color(x);
+            return x ? E.color(x) : col.cero;
+          };
+          const cuenta = {};
+          G.claves.forEach(k => { const c = relleno(k); cuenta[c] = (cuenta[c] || 0) + 1; });
+          const items = E.paleta.map((c, i) => [c, E.etiquetas[i]]);
+          if (metrica === 'pct') items.push(['url(#Audit-Desap-raya)', 'Sin casos en el periodo']);
+          else items.unshift([col.cero, '0']);
+          return { relleno, items: items.map(([c, t]) => [c, t, cuenta[c] || 0]) };
+        }
+
+        /** SVG del mapa (estado + recuadro AMG; leyenda sólo en la lámina). `col`
+            define colores explícitos: en pantalla siguen el tema; en la lámina,
+            siempre en claro. */
+        function svgMapa(metrica, V, col, conLeyenda){
+          const G = geoMapa();
+          if (!G) return '';
+          const K = clasesMapa(metrica, V, col), relleno = K.relleno;
+          const q = (AD('q-muni') && AD('q-muni').value || '').trim().toUpperCase();
+          const marca = k => q && V[k] && V[k].crudo && V[k].crudo.indexOf(q) !== -1;
+          const paths = P_ => P_.feats.map(f =>
+            '<path class="Audit-Desap-mun" data-k="' + f.clave + '" d="' + f.d + '" fill="' + relleno(f.clave) + '" stroke="' +
+            (marca(f.clave) ? col.marca : col.borde) + '" stroke-width="' + (marca(f.clave) ? 2.4 : .6) + '" vector-effect="non-scaling-stroke"></path>').join('');
+          const W1 = G.edo.W, H1 = G.edo.H, W2 = G.amg.W, H2 = G.amg.H;
+          const gap = 36, esc2 = 0.85, Wt = Math.round(W1 + gap + W2 * esc2);
+          const hLey = conLeyenda ? 96 : 0, Ht = Math.round(Math.max(H1, H2 * esc2 + 50)) + hLey;
+          let ley = '';
+          if (conLeyenda){
+            const y = Ht - hLey + 52, paso = Wt / K.items.length;
+            ley = '<text x="0" y="' + (y - 16) + '" font-size="24" font-weight="700" fill="' + col.texto + '">' + METRICAS[metrica].txt +
+                  ' · entre paréntesis, número de municipios</text>' +
+              K.items.map(([c, t, n], i) => '<rect x="' + (i * paso).toFixed(0) + '" y="' + y + '" width="34" height="24" rx="4" fill="' + c + '" stroke="#9AA4B5"></rect>' +
+                '<text x="' + (i * paso + 42).toFixed(0) + '" y="' + (y + 19) + '" font-size="22" fill="' + col.texto + '">' + t + ' (' + n + ')</text>').join('');
+          }
+          const etiquetas = G.amg.feats.map(f => '<text x="' + f.cx.toFixed(1) + '" y="' + f.cy.toFixed(1) + '" text-anchor="middle" ' +
+            'font-size="' + (19 / esc2).toFixed(1) + '" font-weight="600" fill="' + col.etiqueta + '" stroke="' + col.halo + '" stroke-width="' + (4 / esc2).toFixed(1) +
+            '" paint-order="stroke" pointer-events="none">' + (AMG_CORTO[f.clave] || f.nom) + '</text>').join('');
+          return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + Wt + ' ' + Ht + '" width="100%" role="img" ' +
+            'aria-label="Mapa municipal de Jalisco: ' + METRICAS[metrica].txt + '" font-family="' + col.fuente + '">' +
+            '<defs><pattern id="Audit-Desap-raya" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">' +
+              '<rect width="7" height="7" fill="' + col.fondoRaya + '"></rect><line x1="0" y1="0" x2="0" y2="7" stroke="' + col.raya + '" stroke-width="2.4"></line></pattern></defs>' +
+            '<g>' + paths(G.edo) + '</g>' +
+            '<text x="' + (W1 + gap) + '" y="26" font-size="26" font-weight="700" fill="' + col.texto + '">AMG (ampliada)</text>' +
+            '<g transform="translate(' + (W1 + gap) + ',46) scale(' + esc2 + ')">' +
+              '<rect x="-8" y="-8" width="' + (W2 + 16) + '" height="' + (H2 + 16) + '" fill="none" stroke="' + col.texto + '" stroke-opacity=".35" stroke-dasharray="6 5"></rect>' +
+              paths(G.amg) + etiquetas + '</g>' +
+            ley + '</svg>';
+        }
+
+        /** Leyenda en HTML para la pantalla (legible a cualquier ancho). */
+        function leyendaMapa(metrica, V, col){
+          const K = clasesMapa(metrica, V, col);
+          const muestra = c => c.indexOf('url(') === 0
+            ? 'background:repeating-linear-gradient(45deg,' + col.raya + ' 0 2px,' + col.fondoRaya + ' 2px 5px)' : 'background:' + c;
+          return '<span class="Audit-Desap-ley-tit">' + METRICAS[metrica].txt + ' · municipios por clase</span>' +
+            K.items.map(([c, t, n]) => '<span class="Audit-Desap-ley-item"><i style="' + muestra(c) + '"></i>' + t + ' <b>(' + n + ')</b></span>').join('');
+        }
+
+        function coloresMapa(paraLamina){
+          if (paraLamina) return { cero:'#E0E0E0', borde:'#FFFFFF', marca:'#F08013', texto:'#1C2333', etiqueta:'#0F1E33',
+                                   halo:'#FFFFFF', fondoRaya:'#FFFFFF', raya:'#B8C2D0', fuente:'Arial, sans-serif' };
+          const o = esOscuro();
+          return { cero: o ? '#2B3B55' : '#E0E0E0', borde: TEMA.surface, marca:'#F08013', texto: TEMA.ink,
+                   etiqueta:'#0F1E33', halo:'rgba(255,255,255,.85)', fondoRaya: o ? '#16243D' : '#FFFFFF', raya: o ? '#4A5D7A' : '#B8C2D0',
+                   fuente:"'Poppins', sans-serif" };
+        }
+
+        function renderMapa(){
+          const caja = AD('mapa');
+          if (!caja || !ROWS.length) return;
+          const G = geoMapa();
+          if (!G){
+            caja.innerHTML = '<div class="Audit-Desap-unavail"><h4>Cartografía no disponible</h4><p>El tablero no expone la geometría municipal ' +
+              '(<code>hdGeoJalisco</code>). La distribución territorial sigue disponible en la gráfica y la tabla de esta sección.</p></div>';
+            return;
+          }
+          const V = valoresMapa(), m = MAPA.metrica;
+          const colM = coloresMapa(false);
+          caja.innerHTML = svgMapa(m, V, colM, false);
+          AD('ley-mapa').innerHTML = leyendaMapa(m, V, colM);
+          RAIZ().querySelectorAll('[data-metrica]').forEach(b => b.classList.toggle(P + 'solid', b.getAttribute('data-metrica') === m));
+          const per = etiqIx(FILTRO.a) + ' – ' + etiqIx(FILTRO.b) + ' · ' + MODO_TXT[FILTRO.modo];
+          AD('m-mapa').textContent = METRICAS[m].meta + (m === 'des' ? '' : ' · ' + per);
+
+          /* Lectura: líder, municipios con valor y los que no casan con la cartografía. */
+          const geoSet = new Set(G.claves);
+          const sinCasar = Object.keys(V).filter(k => !geoSet.has(k));
+          const valor = k => m === 'pct' ? (V[k] && V[k].n >= 5 ? V[k].pct : null) : (V[k] ? V[k][m] : 0);
+          const orden = G.claves.filter(k => valor(k) !== null && valor(k) > 0).sort((a, b) => valor(b) - valor(a));
+          const nom = k => capMun(V[k] && V[k].crudo || k);
+          const fv = x => m === 'pct' ? x.toFixed(1) + '%' : fmt(x);
+          let t = '';
+          if (orden.length){
+            t = (m === 'pct' ? 'Mayor % de localización (municipios con 5 casos o más): ' : 'Mayor valor: ') +
+                orden.slice(0, 3).map(k => '<b>' + nom(k) + '</b> (' + fv(valor(k)) + ')').join(', ') + '. ';
+          }
+          t += fmt(orden.length) + ' de 125 municipios con valor mayor que cero' + (m === 'pct' ? ' y al menos 5 casos' : '') + '.';
+          if (m === 'pct') t += ' Municipios sin casos en el periodo: rayados (sin dato, no cero).';
+          if (sinCasar.length) t += ' <b>Sin casar con la cartografía (' + sinCasar.length + '):</b> ' + sinCasar.map(k => capMun(V[k].crudo)).join(', ') +
+                                    '; se cuentan en la tabla, no en el mapa.';
+          AD('l-mapa').innerHTML = t;
+
+          auditPanel('a-mapa',{
+            cols:['MUNICIPIO DESAPARICION','ESTATUS','FECHA REPORTE','FECHA DESAPARICION','FECHA DE LOCALIZACION'],
+            filtro: m === 'des' ? '<code>ESTATUS = "PERSONA DESAPARECIDA"</code>, agrupado por <code>MUNICIPIO DESAPARICION</code>. No depende del filtro.'
+                  : 'Base activa del filtro (<code>' + per + '</code>), agrupada por <code>MUNICIPIO DESAPARICION</code>.',
+            pasos:[
+              'Agrupa con una tabla dinámica por <b>MUNICIPIO DESAPARICION</b>, igual que en la tabla de detalle municipal.',
+              'El cruce con la cartografía es por <b>nombre</b>: mayúsculas, sin acentos (Ñ = N) y con equivalencias de grafía ' +
+                '(«Tlaquepaque» = San Pedro Tlaquepaque; «Ciudad Guzmán» = Zapotlán el Grande).',
+              '<code>SE IGNORA</code> no tiene polígono: queda fuera del mapa y dentro de la tabla.',
+              m === 'pct' ? 'Clases fijas (25, 50, 75 y 90%) para comparar periodos entre sí; un municipio sin casos en el periodo no tiene porcentaje: se raya.'
+                          : 'Clases por cuantiles de los municipios con valor, redondeadas; el cero va en gris, aparte de la escala.',
+              'Geometría: límites municipales del INEGI que el tablero ya incrusta (125 municipios). No se usan coordenadas del REPD, que no las publica.'
+            ],
+            formula: m === 'pct'
+              ? '=SI(Casos=0,"sin dato", Localizadas_en_periodo / Casos * 100)'
+              : (m === 'des' ? '=CONTAR.SI.CONJUNTO(MunicipioDesap,"ZAPOPAN", Estatus,"PERSONA DESAPARECIDA")'
+                             : '=CONTAR.SI.CONJUNTO(MunicipioDesap,"ZAPOPAN", IndiceRep,"&gt;=' + FILTRO.a + '", IndiceRep,"&lt;=' + FILTRO.b + '")'),
+            check: 'Los valores del mapa son los mismos de la columna «' + (m === 'des' ? 'Continúan desaparecidas' : m === 'n' ? 'Casos en el periodo' : '% localización') +
+                   '» de la tabla de detalle municipal' + (m === 'des' ? ' con el filtro en «toda la temporalidad»' : '') + '.',
+            flag: m === 'pct' ? 'En municipios con pocos casos el porcentaje es muy volátil: la lectura sólo considera municipios con 5 casos o más.' : null
+          });
+
+          /* Ventana emergente y clic → filtra la tabla de detalle municipal. */
+          const tip = AD('tip');
+          caja.querySelectorAll('.Audit-Desap-mun').forEach(el => {
+            const k = el.getAttribute('data-k');
+            el.addEventListener('mousemove', e => {
+              const o = V[k] || { des:0, n:0, locV:0, pct:null };
+              const f = G.edo.feats.find(x => x.clave === k);
+              tip.innerHTML = '<b>' + (f ? f.nom : k) + '</b>' +
+                '<div>Continúan desaparecidas: <b>' + fmt(o.des) + '</b></div>' +
+                '<div>Casos en el periodo: <b>' + fmt(o.n) + '</b></div>' +
+                '<div>Localizadas en el periodo: <b>' + fmt(o.locV) + '</b></div>' +
+                '<div>% localización: <b>' + (o.pct === null ? 'sin dato' : o.pct.toFixed(1) + '%') + '</b></div>' +
+                '<div class="Audit-Desap-mini">Clic: filtrar la tabla municipal</div>';
+              const r = caja.getBoundingClientRect();
+              let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+              tip.style.display = 'block';
+              if (x + tip.offsetWidth > r.width) x = e.clientX - r.left - tip.offsetWidth - 14;
+              tip.style.left = x + 'px'; tip.style.top = y + 'px';
+            });
+            el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+            el.addEventListener('click', () => {
+              const crudo = (V[k] && V[k].crudo) || k;
+              const inp = AD('q-muni');
+              inp.value = inp.value.trim().toUpperCase() === crudo ? '' : crudo;
+              tip.style.display = 'none';
+              renderTablaMuni();
+            });
+          });
+        }
+
+        /** PNG del mapa en claro para la lámina (svg → canvas). */
+        function mapaPNG(metrica){
+          return new Promise(res => {
+            const svg = svgMapa(metrica, valoresMapa(), coloresMapa(true), true).replace('width="100%"', 'width="2000"');
+            if (!svg) return res(null);
+            const img = new Image();
+            img.onload = () => {
+              const k = 2000 / img.width, cv = document.createElement('canvas');
+              cv.width = 2000; cv.height = Math.round(img.height * k);
+              const x = cv.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, cv.width, cv.height);
+              x.drawImage(img, 0, 0, cv.width, cv.height);
+              res({ data: cv.toDataURL('image/png'), ratio: cv.height / cv.width });
+            };
+            img.onerror = () => res(null);
+            img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+          });
+        }
+
+        /* =======================================================================
+           LÁMINAS PPTX — mismo lienzo, fondos y pie que «Gráficas Mensuales»
+           (GM_FONDO_*, 10 × 5.625 in). Gráficas nativas de PowerPoint; el mapa
+           va como imagen. Cifras calculadas en vivo con los mismos predicados.
+           ======================================================================= */
+        const PPTX_URL = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+        function cargaPptx(){
+          if (window.PptxGenJS) return Promise.resolve();
+          return new Promise((res, rej) => {
+            const s = document.createElement('script');
+            s.src = PPTX_URL; s.onload = () => res(); s.onerror = () => rej(new Error('No se pudo cargar la librería de PowerPoint.'));
+            document.head.appendChild(s);
+          });
+        }
+
+        async function exportarPptx(){
+          const btn = AD('btn-pptx'), rotulo = btn.textContent;
+          btn.disabled = true; btn.textContent = 'Generando…';
+          try {
+            await cargaPptx();
+            if (typeof PptxGenJS === 'undefined') throw new Error('No se pudo cargar la librería de PowerPoint.');
+            const fondoP = typeof GM_FONDO_PORTADA !== 'undefined' ? GM_FONDO_PORTADA : null;
+            const fondoC = typeof GM_FONDO_CGES   !== 'undefined' ? GM_FONDO_CGES   : null;
+            const fondoL = typeof GM_FONDO_LAMINA !== 'undefined' ? GM_FONDO_LAMINA : null;
+            const AZ = '18345D', NAR = 'F08013', MUJ = 'E4636C', HOM = '1B6C74', VER = '00B050', GRIS = '595959';
+            const F = 'Arial';
+            const corte = CUT_TEXT || 'vigente';
+
+            const pptx = new PptxGenJS();
+            pptx.defineLayout({ name: 'CGES', width: 10, height: 5.625 });
+            pptx.layout = 'CGES';
+            pptx.author = 'CGES/DGAPP/AA';
+            pptx.company = 'Coordinación General Estratégica de Seguridad · Gobierno de Jalisco';
+            pptx.title = 'Auditoría Desaparecidos · Vice fiscalía - Desaparecidos';
+
+            const fondo = (sl, img) => { if (img) sl.addImage({ data: img, x: 0, y: 0, w: 10, h: 5.625 }); };
+            /* El fondo oficial ya trae la franja gris y el logotipo: sólo texto encima. */
+            const pie = sl => {
+              sl.addText('Fuente: COBUPEJ, Versión Pública del Registro Estatal de Personas Desaparecidas, corte al ' + corte +
+                '. Réplica auditable; no sustituye a la fuente oficial.', { x: -0.02, y: 5.36, w: 8.3, h: 0.22, fontSize: 7, color: 'FFFFFF', fontFace: F, valign: 'top' });
+              sl.addText('CGES/DGAPP/AA', { x: 8.4, y: 5.40, w: 1.5, h: 0.2, fontSize: 7, color: 'FFFFFF', align: 'right', fontFace: F });
+            };
+            const cabeza = (sl, titulo, sub) => {
+              sl.addText(titulo, { x: 0.25, y: 0.14, w: 7.3, h: 0.5, fontSize: 20, bold: true, color: '000000', fontFace: F, fit: 'shrink' });
+              if (sub) sl.addText(sub, { x: 0.27, y: 0.62, w: 7.2, h: 0.32, fontSize: 12, color: AZ, fontFace: F });
+            };
+            const lamina = (titulo, sub, notas) => {
+              const sl = pptx.addSlide(); fondo(sl, fondoL); cabeza(sl, titulo, sub); pie(sl);
+              if (notas) sl.addNotes(notas);
+              return sl;
+            };
+            const ejes = { catAxisLabelFontFace: F, catAxisLabelFontSize: 10, valAxisLabelFontFace: F, valAxisLabelFontSize: 9,
+                           valGridLine: { color: 'E5E8EF', size: 0.5 }, legendFontFace: F, legendFontSize: 10, dataLabelFontFace: F };
+            const pctV = (a, b) => b ? ((a - b) / b * 100) : null;
+            const flecha = p => p === null ? 'sin base de comparación' : (p > 0 ? '▲ +' : p < 0 ? '▼ ' : '') + p.toFixed(1) + '%';
+
+            /* ---------- cifras: mismos predicados que las gráficas en pantalla ---------- */
+            const DES = ROWS.filter(esDesaparecida);
+            const LOC = ROWS.filter(r => esLocalizada(r) && locDesdeDic18(r));
+            const conCI = DES.filter(r => r.carpeta === 'SÍ' || r.carpeta === 'SI').length;
+            const sinCI = DES.filter(r => r.carpeta === 'NO').length;
+            const desM = YEARS.map(y => DES.filter(r => r.fDes && r.fDes.y === y && r.sexo === 'MUJER').length);
+            const desH = YEARS.map(y => DES.filter(r => r.fDes && r.fDes.y === y && r.sexo === 'HOMBRE').length);
+            const incM = YEARS.map(y => ROWS.filter(r => incidenciaEneJul(r, y) && r.sexo === 'MUJER').length);
+            const incH = YEARS.map(y => ROWS.filter(r => incidenciaEneJul(r, y) && r.sexo === 'HOMBRE').length);
+            const pctEJ = YEARS.map(y => {
+              const den = ROWS.filter(r => incidenciaEneJul(r, y));
+              const num = den.filter(r => r.fLoc && r.fLoc.y === y && r.fLoc.m <= CUT_MONTH).length;
+              return den.length ? +(num / den.length * 100).toFixed(2) : 0;
+            });
+            const uY = YEARS[YEARS.length - 1], n = YEARS.length - 1;
+            const etqY = YEARS.map(String);
+
+            // 1 · portada y 2 · lámina institucional
+            const s0 = pptx.addSlide(); fondo(s0, fondoP);
+            const s1 = pptx.addSlide(); fondo(s1, fondoC);
+            s1.addText([{ text: 'Auditoría Desaparecidos\n', options: { fontSize: 24, bold: true } },
+                        { text: 'Vice fiscalía - Desaparecidos\n', options: { fontSize: 18, bold: true } },
+                        { text: 'Corte al ' + corte, options: { fontSize: 15 } }],
+              { x: 2.0, y: 3.75, w: 6, h: 1.25, color: '152595', align: 'center', valign: 'top', fontFace: F });
+
+            // 3 · resumen general con KPI
+            const s2 = lamina('Jalisco registra ' + fmt(DES.length) + ' personas desaparecidas al corte',
+              'Resumen general · REPD, corte al ' + corte,
+              'Personas desaparecidas: ESTATUS = "PERSONA DESAPARECIDA". Carpeta: columna CARPETA DE INVESTIGACIÓN (Sí / NO). ' +
+              'Localizadas: ESTATUS = "PERSONA LOCALIZADA" con FECHA DE LOCALIZACION desde 12/2018. % de localización enero–agosto: ' +
+              'localizadas en la ventana ÷ desapariciones ocurridas y reportadas en la ventana, cierres incluidos (criterio del sitio oficial).');
+            const kpis = [['Personas desaparecidas', fmt(DES.length)], ['Con carpeta de investigación', fmt(conCI)],
+                          ['Sin carpeta de investigación', fmt(sinCI)], ['Localizadas desde dic-2018', fmt(LOC.length)],
+                          ['% localización ene–ago ' + uY, pctEJ[n].toFixed(2) + '%']];
+            const kw = 1.78, kx = 0.25, ksep = 0.105;
+            kpis.forEach(([lbl, val], i) => {
+              const x = kx + i * (kw + ksep);
+              s2.addShape(pptx.ShapeType.roundRect, { x, y: 1.05, w: kw, h: 0.82, rectRadius: 0.08, line: { color: AZ, width: 1.5 }, fill: { type: 'none' } });
+              s2.addText(val, { x, y: 1.09, w: kw, h: 0.45, fontSize: 20, bold: true, color: AZ, align: 'center', fontFace: F });
+              s2.addText(lbl, { x, y: 1.52, w: kw, h: 0.3, fontSize: 9, color: GRIS, align: 'center', fontFace: F });
+            });
+            s2.addText('Personas que continúan desaparecidas, por año de desaparición y sexo', { x: 0.25, y: 2.0, w: 9.5, h: 0.28, fontSize: 11, bold: true, color: '000000', fontFace: F });
+            s2.addChart(pptx.ChartType.bar, [{ name: 'Mujeres', labels: etqY, values: desM }, { name: 'Hombres', labels: etqY, values: desH }],
+              Object.assign({ x: 0.25, y: 2.25, w: 9.5, h: 3.0, barDir: 'col', barGrouping: 'stacked', chartColors: [MUJ, HOM],
+                showLegend: true, legendPos: 't', showValue: true, dataLabelColor: 'FFFFFF', dataLabelFontSize: 8 }, ejes));
+
+            // 4 · incidencia enero–agosto
+            const incT = YEARS.map((y, i) => incM[i] + incH[i]);
+            lamina('Enero–agosto ' + uY + ': ' + fmt(incT[n]) + ' desapariciones, ' + flecha(pctV(incT[n], incT[n - 1])) + ' vs. ' + (uY - 1),
+              'Desapariciones ocurridas y reportadas del 1 de enero al 31 de agosto de cada año',
+              'Incidencia enero–agosto: mes de desaparición ≤ 8 y mes de reporte ≤ 8, ambos en el año analizado. Sin filtro de estatus: ' +
+              'incluye los registros con CIERRE, como el sitio oficial. El año en curso es un piso: hay reportes tardíos.')
+              .addChart(pptx.ChartType.bar, [{ name: 'Mujeres', labels: etqY, values: incM }, { name: 'Hombres', labels: etqY, values: incH }],
+                Object.assign({ x: 0.25, y: 1.05, w: 9.5, h: 4.2, barDir: 'col', barGrouping: 'stacked', chartColors: [MUJ, HOM],
+                  showLegend: true, legendPos: 't', showValue: true, dataLabelColor: 'FFFFFF', dataLabelFontSize: 9 }, ejes));
+
+            // 5 · porcentaje de localización enero–agosto
+            lamina('La localización enero–agosto ' + uY + ' es de ' + pctEJ[n].toFixed(2) + '%',
+              'Porcentaje de localización del 1 de enero al 31 de agosto, ' + YEARS[0] + '–' + uY,
+              'Numerador: de la cohorte enero–agosto, localizadas con mes de localización ≤ 8 del mismo año. Denominador: desaparición ' +
+              'y reporte dentro de la ventana, sin excluir ningún estatus. Es la ventana comparable entre años.')
+              .addChart(pptx.ChartType.bar, [{ name: '% de localización', labels: etqY, values: pctEJ }],
+                Object.assign({ x: 0.25, y: 1.05, w: 9.5, h: 4.2, barDir: 'col', varyColors: true,
+                  chartColors: YEARS.map((y, i) => i === n ? VER : '152595'), showLegend: false, showValue: true,
+                  dataLabelColor: '000000', dataLabelFontSize: 10, dataLabelFontBold: true, dataLabelFormatCode: '0.00"%"',
+                  dataLabelPosition: 'outEnd', valAxisLabelFormatCode: '0"%"', valAxisMaxVal: 100 }, ejes));
+
+            // 6 · municipios con más personas desaparecidas
+            const mm = {};
+            DES.forEach(r => { const k = r.munDes || 'SE IGNORA'; mm[k] = (mm[k] || 0) + 1; });
+            const top = Object.keys(mm).map(k => ({ k, v: mm[k] })).sort((a, b) => b.v - a.v).slice(0, 15);
+            const lider = top[0] ? top[0] : { k: '—', v: 0 };
+            lamina(capMun(lider.k) + ' concentra ' + (DES.length ? (lider.v / DES.length * 100).toFixed(1) : '0.0') + '% de las personas desaparecidas',
+              'Personas que continúan desaparecidas por municipio de desaparición · 15 principales',
+              'ESTATUS = "PERSONA DESAPARECIDA", agrupado por MUNICIPIO DESAPARICION. SE IGNORA se conserva como categoría propia.')
+              .addChart(pptx.ChartType.bar, [{ name: 'Personas desaparecidas', labels: top.map(t => capMun(t.k)).reverse(), values: top.map(t => t.v).reverse() }],
+                Object.assign({ x: 0.25, y: 1.05, w: 9.5, h: 4.2, barDir: 'bar', chartColors: [AZ], showLegend: false, showValue: true,
+                  dataLabelColor: '000000', dataLabelFontSize: 9, dataLabelPosition: 'outEnd', catAxisLabelFontSize: 9 }, ejes));
+
+            // 7 · mapa municipal
+            const img = await mapaPNG('des');
+            if (img){
+              const sl = lamina('Distribución municipal de las personas que continúan desaparecidas',
+                'Por municipio de desaparición · AMG ampliada a la derecha',
+                'Cruce por nombre de municipio con la cartografía INEGI que incrusta el tablero. SE IGNORA no tiene polígono. ' +
+                'Clases por cuantiles de los municipios con valor; el cero va en gris.');
+              const h = Math.min(4.25, 9.5 * img.ratio), w = h / img.ratio;
+              sl.addImage({ data: img.data, x: (10 - w) / 2, y: 1.0, w, h });
+            }
+
+            // 8 · violencia (sólo si la fuente trae la variable)
+            if (VIOL_IX >= 0){
+              const cats = categoriasViolencia(DES), series = [], colores = [];
+              const tonos = { MUJER: [MUJ, 'F2A9AC', '9AA4B5', 'C9CED8'], HOMBRE: [HOM, '8FC7C2', 'C9A227', 'B9C2CF'] };
+              ['MUJER', 'HOMBRE'].forEach(sx => cats.forEach((c, i) => {
+                series.push({ name: (sx === 'MUJER' ? 'Mujeres' : 'Hombres') + ' · ' + capTxt(c), labels: etqY,
+                  values: YEARS.map(y => DES.filter(r => r.sexo === sx && r.fDes && r.fDes.y === y && (r.violencia || 'SIN DATO') === c).length) });
+                colores.push(tonos[sx][Math.min(i, 3)]);
+              }));
+              lamina('Desapariciones con y sin violencia, ' + YEARS[0] + '–' + uY,
+                'Personas que continúan desaparecidas, por año de desaparición, sexo y violencia',
+                'Definición inferida, por verificar contra el sitio oficial: misma población que las demás gráficas de personas desaparecidas.')
+                .addChart(pptx.ChartType.bar, series, Object.assign({ x: 0.25, y: 1.05, w: 9.5, h: 4.2, barDir: 'col', barGrouping: 'stacked',
+                  chartColors: colores, showLegend: true, legendPos: 't', showValue: false }, ejes));
+            }
+
+            // 9 · periodo activo del filtro: municipios con más casos
+            const D = calcReporte(FILTRO.a, FILTRO.b, FILTRO.modo);
+            const cab = ['#', 'Municipio de desaparición', 'Casos', 'Localizadas en el periodo', 'Continúan desaparecidas', '% localización']
+              .map((t, i) => ({ text: t, options: { bold: true, color: 'FFFFFF', fill: { color: AZ }, align: i > 1 ? 'center' : 'left', fontSize: 10 } }));
+            const filas = D.top10.map((m, i) => [String(i + 1), capMun(m.muni), fmt(m.n), fmt(m.locV), fmt(m.des), pct1(m.locV, m.n) + '%']
+              .map((t, j) => ({ text: t, options: { align: j > 1 ? 'center' : 'left', fontSize: 10, color: '000000',
+                                                    fill: { color: i % 2 ? 'F2F5F9' : 'FFFFFF' } } })));
+            lamina(etiqIx(D.A) + ' – ' + etiqIx(D.B) + ': ' + fmt(D.base) + ' casos; ' + pct1(D.locVent, D.base) + '% localizados en el periodo',
+              'Municipios con mayor número de casos · criterio: ' + MODO_TXT[D.modo] + ' (SE IGNORA fuera del ranking)',
+              'Periodo activo del filtro de temporalidad. Localizadas en el periodo: FECHA DE LOCALIZACION dentro de la misma ventana. ' +
+              'Registros sin municipio identificado en el periodo: ' + fmt(D.ignora.n) + '.')
+              .addTable([cab].concat(filas), { x: 0.25, y: 1.05, w: 9.5, colW: [0.4, 3.3, 1.2, 1.6, 1.6, 1.4], fontFace: F,
+                border: { type: 'solid', color: 'DCE4EE', pt: 0.75 }, rowH: 0.34 });
+
+            const slug = (CUT_TEXT || 'corte').replace(/\s+de\s+/g, '-').replace(/\s+/g, '-');
+            await pptx.writeFile({ fileName: 'Auditoria_Desaparecidos_' + slug + '.pptx' });
+          } catch (e) {
+            AD('err-box').innerHTML = '<div class="Audit-Desap-err"><b>No fue posible generar el PowerPoint.</b><br>' + (e.message || e) + '</div>';
+          } finally {
+            btn.disabled = false; btn.textContent = rotulo;
+          }
+        }
+
+
+        /* =======================================================================
            CSS · nodo propio, se va con el módulo. Todo acotado a #Audit-Desap-vista
            y resuelto con los tokens del tablero, así el modo oscuro se adapta solo.
            ======================================================================= */
@@ -16884,6 +17437,25 @@
           #Audit-Desap-vista .Audit-Desap-delta-down { color:var(--Audit-Desap-baja); font-weight:600; }
           #Audit-Desap-vista .Audit-Desap-delta-flat { color:var(--muted); font-weight:600; }
 
+          /* ---------- Fuente al pie, mapa y ventana emergente ---------- */
+          #Audit-Desap-vista .Audit-Desap-fuente { margin-top:12px; font-size:11px; color:var(--muted); line-height:1.5; }
+          #Audit-Desap-vista .Audit-Desap-metricas { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+          #Audit-Desap-vista .Audit-Desap-mapa-caja { position:relative; }
+          #Audit-Desap-vista .Audit-Desap-mapa svg { display:block; width:100%; height:auto; max-height:640px; margin:0 auto; }
+          #Audit-Desap-vista .Audit-Desap-leyenda { display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center; margin-top:10px;
+            font-size:12px; color:var(--ink-soft); }
+          #Audit-Desap-vista .Audit-Desap-ley-tit { width:100%; font-weight:700; color:var(--ink); font-size:12px; }
+          #Audit-Desap-vista .Audit-Desap-ley-item { display:inline-flex; align-items:center; gap:6px; }
+          #Audit-Desap-vista .Audit-Desap-ley-item i { width:18px; height:13px; border-radius:3px; border:1px solid var(--line); display:inline-block; }
+          #Audit-Desap-vista .Audit-Desap-ley-item b { color:var(--muted); font-weight:600; }
+          #Audit-Desap-vista .Audit-Desap-mun { cursor:pointer; transition:opacity .15s; }
+          #Audit-Desap-vista .Audit-Desap-mun:hover { opacity:.78; }
+          #Audit-Desap-vista .Audit-Desap-tip { display:none; position:absolute; z-index:5; pointer-events:none; min-width:210px;
+            background:var(--surface); color:var(--ink-soft); border:1px solid var(--line); border-left:3px solid var(--accent);
+            border-radius:var(--r-sm); box-shadow:var(--shadow-lift); padding:9px 12px; font-size:12px; line-height:1.55; }
+          #Audit-Desap-vista .Audit-Desap-tip b { color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-lectura { margin:10px 0 0; }
+
           /* ---------- Notas, cobertura, error y carga ---------- */
           #Audit-Desap-vista .Audit-Desap-texto { font-size:13px; color:var(--ink-soft); margin-bottom:14px; line-height:1.65; }
           #Audit-Desap-vista .Audit-Desap-texto b { color:var(--ink); }
@@ -16940,10 +17512,12 @@
                  '<span class="h2-marca"></span><h2>' + titulo + '</h2>' +
                  '<span class="panel-nota">' + nota + '</span><span class="panel-toggle">&#9662;</span></div>';
         }
+        const FUENTE = '<div class="Audit-Desap-fuente">Fuente: COBUPEJ, Versi&oacute;n P&uacute;blica del Registro Estatal de Personas Desaparecidas, ' +
+                       'corte al <span class="Audit-Desap-fuente-corte">&mdash;</span>. Elaboraci&oacute;n: CGES/DGAPP/AA.</div>';
         function tarjeta(titulo, meta, cuerpo){
           return '<div class="Audit-Desap-card"><div class="Audit-Desap-card-head"><h3>' + titulo + '</h3>' +
                  '<div class="Audit-Desap-meta"' + (meta.id ? ' id="Audit-Desap-' + meta.id + '"' : '') + '>' + (meta.txt || '&mdash;') + '</div></div>' +
-                 '<div class="Audit-Desap-card-body">' + cuerpo + '</div></div>';
+                 '<div class="Audit-Desap-card-body">' + cuerpo + FUENTE + '</div></div>';
         }
         const lienzo = (id, alto) => '<div class="Audit-Desap-chart-wrap" style="height:' + alto + 'px"><canvas id="Audit-Desap-' + id + '"></canvas></div>';
         const nota   = id => '<div class="Audit-Desap-note" id="Audit-Desap-' + id + '"></div>';
@@ -16999,6 +17573,7 @@
                 '<button type="button" class="Audit-Desap-fbtn" data-preset="anio" id="Audit-Desap-p-anio">A&ntilde;o en curso</button>' +
                 '<button type="button" class="Audit-Desap-fbtn" data-preset="12m">&Uacute;ltimos 12 meses</button>' +
                 '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-reporte">&#128196; Descargar reporte</button>' +
+                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-pptx" title="L&aacute;minas con las cifras al corte y el periodo activo">&#11015; PPTX</button>' +
               '</div>' +
             '</div>' +
             '<div class="Audit-Desap-fstate" id="Audit-Desap-f-state">&mdash;</div>' +
@@ -17060,12 +17635,15 @@
               { txt:'Incidencia del periodo: desapariciones ocurridas <i>y</i> reportadas dentro de la ventana enero&ndash;agosto de cada a&ntilde;o' },
               lienzo('c-enejul', 390) + nota('n-enejul') + auditBtn('a-enejul')) +
             tarjeta('Desapariciones con violencia y sin violencia, por a&ntilde;o de desaparici&oacute;n (2019&ndash;2026)', { txt:'Gr&aacute;fica presente en el sitio oficial' },
-              '<div class="Audit-Desap-unavail"><span class="Audit-Desap-ic">&#9888;&#65039;</span>' +
+              '<div id="Audit-Desap-viol-si" style="display:none">' + lienzo('c-violencia', 390) + nota('n-violencia') + '</div>' +
+              '<div id="Audit-Desap-viol-no"><div class="Audit-Desap-unavail"><span class="Audit-Desap-ic">&#9888;&#65039;</span>' +
                 '<h4>No reproducible con la fuente de datos de este tablero</h4>' +
                 '<p>El sitio oficial construye esta gr&aacute;fica con la variable <b>violencia / sin violencia</b>, que proviene de las carpetas de ' +
                 'investigaci&oacute;n de la Vicefiscal&iacute;a en Personas Desaparecidas. <b>Esa variable no existe en ninguna de las 18 columnas ' +
                 'publicadas en la descarga abierta del REPD</b>, que es la &uacute;nica fuente de este tablero. No se estima ni se aproxima: ' +
-                'se declara faltante. Ver el bot&oacute;n de auditor&iacute;a para el detalle de la verificaci&oacute;n.</p></div>' +
+                'se declara faltante. Ver el bot&oacute;n de auditor&iacute;a para el detalle de la verificaci&oacute;n.</p>' +
+                '<p style="margin-top:8px">Si la pesta&ntilde;a fuente incorpora una columna con &laquo;VIOLENCIA&raquo; en su encabezado, ' +
+                'esta gr&aacute;fica se construye autom&aacute;ticamente.</p></div></div>' +
               auditBtn('a-violencia', '&#128202; Por qu&eacute; no se puede auditar con esta fuente <span class="Audit-Desap-chev">&#9660;</span>')) +
             tarjeta('Mujeres desaparecidas, por a&ntilde;o de desaparici&oacute;n y rango de edad (2019&ndash;2026)', { txt:'Personas que contin&uacute;an desaparecidas' },
               lienzo('c-edad-m', 390) + nota('n-edad-m') + auditBtn('a-edad-m')) +
@@ -17101,10 +17679,21 @@
           '<section id="Audit-Desap-sec-territorio">' + cab('Distribuci&oacute;n territorial', 'Secci&oacute;n 3 &middot; municipio de desaparici&oacute;n') +
            '<div class="panel-cuerpo">' +
             '<p class="Audit-Desap-intro">El sitio oficial presenta un mapa interactivo de los 125 municipios. La descarga abierta del REPD no incluye ' +
-              'coordenadas geogr&aacute;ficas, por lo que aqu&iacute; se presenta el equivalente tabular y gr&aacute;fico por municipio de desaparici&oacute;n.</p>' +
+              'coordenadas geogr&aacute;ficas; aqu&iacute; el mapa se construye cruzando el municipio de desaparici&oacute;n con la cartograf&iacute;a ' +
+              'municipal del INEGI que el tablero ya incrusta, junto con su equivalente gr&aacute;fico y tabular.</p>' +
             tarjeta('Municipios con mayor n&uacute;mero de personas desaparecidas',
               { txt:'Personas que contin&uacute;an desaparecidas, por municipio de desaparici&oacute;n &middot; 15 principales' },
               lienzo('c-muni', 430) + auditBtn('a-muni')) +
+            tarjeta('Mapa municipal', { id:'m-mapa' },
+              '<div class="Audit-Desap-metricas" role="group" aria-label="M&eacute;trica del mapa">' +
+                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-solid" data-metrica="des">Contin&uacute;an desaparecidas</button>' +
+                '<button type="button" class="Audit-Desap-fbtn" data-metrica="n">Casos en el periodo</button>' +
+                '<button type="button" class="Audit-Desap-fbtn" data-metrica="pct">% de localizaci&oacute;n del periodo</button></div>' +
+              '<div class="Audit-Desap-mapa-caja"><div class="Audit-Desap-mapa" id="Audit-Desap-mapa"></div>' +
+                '<div class="Audit-Desap-tip" id="Audit-Desap-tip" role="tooltip"></div></div>' +
+              '<div class="Audit-Desap-leyenda" id="Audit-Desap-ley-mapa"></div>' +
+              '<p class="Audit-Desap-texto Audit-Desap-lectura" id="Audit-Desap-l-mapa"></p>' +
+              auditBtn('a-mapa', '&#128202; C&oacute;mo auditar este mapa en Excel <span class="Audit-Desap-chev">&#9660;</span>')) +
             tarjeta('Detalle municipal completo &middot; % de localizaci&oacute;n por municipio',
               { txt:'Responde al filtro de temporalidad. Haz clic en cualquier encabezado para reordenar la tabla.' },
               '<div class="Audit-Desap-tbl-tools">' +
@@ -17211,6 +17800,13 @@
           /* Carga diferida: el Sheet sólo se lee al abrir la pestaña. «Actualizar»
              del tablero vuelve a llamar a este cargador: load() es reentrante. */
           registrarCargador('auditdesap', () => setTimeout(load, 60));
+
+          /* Métrica del mapa y exportación PPTX (oyentes únicos, por delegación). */
+          cont.addEventListener('click', e => {
+            const b = e.target.closest('[data-metrica]');
+            if (b && ROWS.length){ MAPA.metrica = b.getAttribute('data-metrica'); renderMapa(); return; }
+            if (e.target.closest('#' + P + 'btn-pptx') && ROWS.length && !AD('btn-pptx').disabled) exportarPptx();
+          });
 
           /* Saltos internos: desplazan la página sin tocar el hash (el hash es de
              la navegación entre vistas). */
