@@ -15179,6 +15179,2067 @@
         })();
         /* ═══════════ FIN · MÓDULO ÍNDICE LETAL (il*) ═══════════ */
 
+        /* ═══════════════════════════════════════════════════════════════════
+           INICIO · MÓDULO AUDITORÍA DESAPARECIDOS  (prefijo Audit-Desap- / AuditDesap_)
+           ═══════════════════════════════════════════════════════════════════
+
+           QUÉ ES
+           Novena vista, «Auditoría Desaparecidos» (Vice fiscalía - Desaparecidos).
+           Réplica auditable de las estadísticas de la Versión Pública del
+           Registro Estatal de Personas Desaparecidas (REPD, COBUPEJ): cada gráfica
+           expone las columnas, el filtro, los pasos y la fórmula de Excel con que
+           se reproduce. Se integra desde el tablero independiente de Auditoría;
+           las fórmulas, cohortes y textos de auditoría se conservan sin cambios.
+
+           CÓMO SE ELIMINA
+           Borrando desde este comentario hasta el de cierre «FIN · MÓDULO
+           AUDITORÍA DESAPARECIDOS». El módulo se autoinyecta: botón de pestaña
+           (insertado justo después de «Personas desaparecidas»), contenedor,
+           CSS y entrada del registro los crea él mismo en tiempo de ejecución.
+
+           AISLAMIENTO
+           · HTML y CSS: todo id y toda clase propia llevan el prefijo
+             «Audit-Desap-»; cada regla CSS está acotada a #Audit-Desap-vista.
+           · JS: todo vive dentro de esta IIFE; nada se publica en `window`,
+             salvo las funciones de respuesta JSONP (AuditDesap_cb…_N), que
+             existen sólo mientras dura cada petición.
+           · No toca Chart.defaults: tipografía y color se fijan por gráfica.
+
+           DE QUÉ DEPENDE  (no borrar estas piezas creyendo que solo las usa su
+           módulo de origen)
+             Ingesta     → SHEET_ID (mismo libro del tablero; la pestaña va por gid)
+             Navegación  → VISTAS, registrarCargador, dsMostrarVista
+             Paneles     → .panel-cab / section (plegado delegado del tablero),
+                           aplicarPanelesGuardados (opcional, con guarda typeof)
+             Tema        → tokens CSS del tablero y html[data-tema]
+             Librería    → Chart.js 4 ya cargado por el tablero
+
+           FUENTE
+           Google Sheet 15ryC1n0drurOdKMel8tBXwNqJUef1U9e5XLCNOd6oS4, pestaña
+           gid 2071714680, vía gviz/tq + JSONP (nunca /export?format=csv: falla
+           por CORS en GitHub Pages). Estructura esperada: texto «corte del
+           DD-MM-AAAA» en A1, encabezados en la fila 13, columnas A–R. Si los
+           encabezados no coinciden con lo esperado, la vista lo avisa en pantalla
+           (autodiagnóstico de columnas) en lugar de calcular en silencio.
+
+           DECISIONES QUE NO SE PUEDEN REVERTIR SIN AVISO
+           1. AMG = 9 municipios (definición institucional CGES). El tablero de
+              origen incluía Acatlán de Juárez; aquí NO cuenta como AMG. Sólo
+              afecta la redacción del reporte descargable.
+           2. Las gráficas que replican al sitio oficial (ventana enero–agosto,
+              cohortes anuales, localizaciones desde dic-2018, cierres incluidos)
+              NO responden al filtro de temporalidad: son el objeto de la réplica.
+           3. El reporte descargable se abre como documento aparte, siempre en
+              claro y con Poppins; sus clases internas (hoja, barra, n, …) viven
+              en esa ventana y no tocan el tablero.
+
+           Elaboración: CGES/DGAPP/AA
+           ═══════════════════════════════════════════════════════════════════ */
+        (function () {
+        'use strict';
+
+        /* =======================================================================
+           CONFIGURACIÓN
+           ======================================================================= */
+        const P = 'Audit-Desap-';               // prefijo de ids y clases
+        const SHEET_GID = '2071714680';         // pestaña de la fuente dentro del libro SHEET_ID
+        const HEADER_ROW = 13;                  // los encabezados reales están en la fila 13
+        const YEARS = [2019,2020,2021,2022,2023,2024,2025,2026];
+        const CUT_MONTH = 8;                    // ventana comparable enero–agosto
+
+        /* Paleta de datos: conserva la semántica del tablero de origen (mujeres en
+           salmón, hombres en verde azulado, año en curso en azul), con variante
+           para el modo oscuro del tablero para no perder contraste. */
+        const PALETA_CLARA = {
+          blue:'#18345D', teal:'#1B6C74', tealLight:'#8FC7C2', salmon:'#E4636C',
+          salmonLight:'#F2A9AC', gold:'#C9A227', grey:'#9AA4B5', navy:'#152A5E'
+        };
+        const PALETA_OSCURA = {
+          blue:'#8FB6EE', teal:'#4FB3AE', tealLight:'#A8DCD7', salmon:'#F08A91',
+          salmonLight:'#F6BDC0', gold:'#E0BC4A', grey:'#9AA4B5', navy:'#C3D2E6'
+        };
+        const EDAD_CLARA  = ['#BFE0DC','#8FC7C2','#4E9A9E','#1B6C74','#124C52','#0A3034'];
+        const EDAD_OSCURA = ['#E0F2EF','#B5E0DA','#86C8C2','#5AAEAA','#3A9294','#2A7A80'];
+
+        const C = Object.assign({}, PALETA_CLARA);
+        const AGE_COLORS = EDAD_CLARA.slice();
+        const TEMA = { ink:'#0F1E33', muted:'#64748B', grid:'rgba(15,30,51,.08)' };
+
+        let ROWS = [], CUT_TEXT = '';
+        let FILTRO_LIGADO = false;
+
+        /* =======================================================================
+           UTILIDADES DEL MÓDULO
+           ======================================================================= */
+        const AD   = id => document.getElementById(P + id);   // id sin prefijo → elemento
+        const RAIZ = () => document.getElementById(P + 'vista') || document;
+
+        function esOscuro(){ return document.documentElement.getAttribute('data-tema') === 'oscuro'; }
+
+        /** Lee los tokens del tablero y ajusta paleta de datos al tema activo. */
+        function leeTema(){
+          const cs = getComputedStyle(document.documentElement);
+          const v = (k, d) => (cs.getPropertyValue(k) || '').trim() || d;
+          TEMA.ink   = v('--ink',   '#0F1E33');
+          TEMA.muted = v('--muted', '#64748B');
+          TEMA.grid  = v('--grid-line', 'rgba(15,30,51,.08)');
+          Object.assign(C, esOscuro() ? PALETA_OSCURA : PALETA_CLARA);
+          AGE_COLORS.splice(0, AGE_COLORS.length, ...(esOscuro() ? EDAD_OSCURA : EDAD_CLARA));
+        }
+
+        /** Tipografía (Poppins) y color de textos de UNA gráfica, sin tocar
+            Chart.defaults. Respeta los tamaños que la gráfica ya traiga. */
+        function pintaTema(o, ink, muted){
+          if (!o) return;
+          const fam = "'Poppins', sans-serif";
+          o.color = muted;
+          o.font = Object.assign({ family: fam, size: 11 }, o.font || {});
+          o.plugins = o.plugins || {};
+          const lg = o.plugins.legend = o.plugins.legend || {};
+          lg.labels = lg.labels || {};
+          lg.labels.color = ink;
+          lg.labels.font = Object.assign({ family: fam, size: 11 }, lg.labels.font || {});
+          const tt = o.plugins.tooltip = o.plugins.tooltip || {};
+          tt.titleFont = Object.assign({ family: fam }, tt.titleFont || {});
+          tt.bodyFont  = Object.assign({ family: fam }, tt.bodyFont  || {});
+          Object.keys(o.scales || {}).forEach(k => {
+            const s = o.scales[k];
+            s.ticks = s.ticks || {};
+            s.ticks.color = muted;
+            s.ticks.font = Object.assign({ family: fam, size: 11 }, s.ticks.font || {});
+          });
+        }
+
+        /** Autodiagnóstico de estructura: la lectura es por posición de columna,
+            igual que en el tablero de origen. Si la pestaña cambia de orden, aquí
+            se avisa en lugar de calcular cifras sobre columnas equivocadas. */
+        function revisarColumnas(cols){
+          const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+          const ESPERADAS = [
+            [1,  ['SEXO'],                 'SEXO'],
+            [3,  ['EDAD'],                 'RANGO DE EDAD'],
+            [4,  ['FECHA', 'REPORTE'],     'FECHA REPORTE'],
+            [5,  ['FECHA', 'DESAPAR'],     'FECHA DESAPARICION'],
+            [7,  ['MUNICIPIO', 'DESAPAR'], 'MUNICIPIO DESAPARICION'],
+            [8,  ['ESTATUS'],              'ESTATUS'],
+            [9,  ['FECHA', 'LOCALIZ'],     'FECHA DE LOCALIZACION'],
+            [10, ['CONDICION'],            'CONDICION LOCALIZACION'],
+            [11, ['CLASIFICACION'],        'CLASIFICACION LOCALIZACION'],
+            [17, ['CARPETA'],              'CARPETA DE INVESTIGACIÓN']
+          ];
+          if (!cols.length || cols.every(c => !c || !c.label)) return '';   // gviz no envió rótulos: no hay con qué comparar
+          const letra = i => String.fromCharCode(65 + i);
+          const fallas = ESPERADAS.filter(([i, toks]) => {
+            const et = norm(cols[i] && cols[i].label);
+            return !toks.every(t => et.indexOf(t) !== -1);
+          });
+          if (!fallas.length) return '';
+          return '<div class="Audit-Desap-err"><b>La estructura de la pestaña no coincide con la esperada.</b><br>' +
+            'La lectura es por posición de columna (fila ' + HEADER_ROW + ', columnas A–R). Columnas que no coinciden: ' +
+            fallas.map(([i, , esp]) => '<code>' + letra(i) + '</code> esperada «' + esp + '», recibida «' +
+              ((cols[i] && cols[i].label) || 'vacía') + '»').join(' · ') +
+            '.<br>Las cifras de las gráficas que dependen de esas columnas no son confiables hasta corregir el orden en el Sheet.</div>';
+        }
+
+
+        /* =======================================================================
+           CARGA DE DATOS — gviz/tq vía JSONP (nunca /export?format=csv: falla por CORS)
+           ======================================================================= */
+        /* Único nombre que el módulo expone en `window`, y sólo mientras dura cada
+           petición: gviz exige una función global como responseHandler. El prefijo
+           AuditDesap_ y el contador evitan choques con cualquier otra vista y entre
+           recargas sucesivas («Actualizar»). */
+        let JSONP_N = 0;
+        function jsonp(url, cbBase){
+          const cbName = 'AuditDesap_' + cbBase + '_' + (++JSONP_N);
+          return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            const limpia = () => { try { delete window[cbName]; } catch (e) { window[cbName] = undefined; } if (s.parentNode) s.parentNode.removeChild(s); };
+            window[cbName] = d => { resolve(d); limpia(); };
+            s.src = url + '&tqx=out:json;responseHandler:' + cbName;
+            s.onerror = () => { limpia(); reject(new Error('No se pudo contactar el Google Sheet.')); };
+            document.head.appendChild(s);
+            setTimeout(() => { if (window[cbName]){ limpia(); reject(new Error('Tiempo de espera agotado al leer el Sheet.')); } }, 45000);
+          });
+        }
+        /* Mismo libro que el resto del tablero (`SHEET_ID` global); la pestaña se
+           pide por su gid, no por nombre. */
+        const base = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${SHEET_GID}`;
+
+        function pad2(n){ return (n < 10 ? '0' : '') + n; }
+
+        function cell(r, i){
+          const c = r.c && r.c[i];
+          if (!c || c.v === null || c.v === undefined) return '';
+
+          // Si al pegar, Google Sheets convirtió la celda de texto "MM/AAAA" en una fecha real,
+          // la API ya no devuelve la cadena original sino un valor de fecha. Se normaliza de vuelta
+          // a "MM/AAAA" leyendo el mes y el año del propio valor, que no es ambiguo.
+          // (gviz entrega el mes con base 0: 7 = agosto.)
+          if (typeof c.v === 'string' && c.v.lastIndexOf('Date(', 0) === 0){
+            const d = c.v.match(/Date\((\d+),(\d+)/);
+            if (d) return pad2(parseInt(d[2],10) + 1) + '/' + d[1];
+          }
+          if (c.v instanceof Date){
+            return pad2(c.v.getMonth() + 1) + '/' + c.v.getFullYear();
+          }
+          return String(c.v).trim();
+        }
+        /** Devuelve {m, y} a partir de 'MM/AAAA', 'DD/MM/AAAA' o 'AAAA-MM-DD'; null si no aplica. */
+        function ym(s){
+          if (!s) return null;
+          s = String(s).trim();
+          let g = s.match(/^(\d{1,2})\/(\d{4})$/);            // MM/AAAA  (formato nativo del REPD)
+          if (g) return mk(+g[1], +g[2]);
+          g = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);     // DD/MM/AAAA
+          if (g) return mk(+g[2], +g[3]);
+          g = s.match(/^(\d{4})-(\d{1,2})/);                  // AAAA-MM-DD
+          if (g) return mk(+g[2], +g[1]);
+          return null;
+        }
+        function mk(m, y){
+          if (!m || !y || m < 1 || m > 12) return null;
+          return { m, y };
+        }
+
+        async function load(){
+          try{
+            AD('err-box').innerHTML = '';
+            AD('loader').classList.remove(P + 'hide');
+            AD('loader-sub').textContent = 'Leyendo metadatos del registro…';
+            const meta = await jsonp(`${base}&range=A1:A1&headers=0`, 'cbMeta');
+            const raw = (meta.table.rows[0] && meta.table.rows[0].c[0] && meta.table.rows[0].c[0].v) || '';
+            const mm = String(raw).match(/corte del\s*([0-9]{2}-[0-9]{2}-[0-9]{4})/i);
+            if (mm){
+              const p = mm[1].split('-');
+              const MESES = ['','enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+              CUT_TEXT = `${parseInt(p[0],10)} de ${MESES[parseInt(p[1],10)]} de ${p[2]}`;
+            }
+
+            AD('loader-sub').textContent = 'Descargando registros del REPD…';
+            const d = await jsonp(`${base}&range=A${HEADER_ROW}:R&headers=1`, 'cbData');
+            const avisoCols = revisarColumnas(d.table.cols || []);
+
+            ROWS = d.table.rows.filter(r => r.c && r.c[0] && r.c[0].v).map(r => ({
+              sexo:     cell(r,1),
+              rango:    cell(r,3),
+              fRep:     ym(cell(r,4)),
+              fDes:     ym(cell(r,5)),
+              munDes:   cell(r,7) || 'SE IGNORA',
+              estatus:  cell(r,8),
+              fLoc:     ym(cell(r,9)),
+              condLoc:  cell(r,10),
+              clasLoc:  cell(r,11),
+              tipoCierre: cell(r,15),
+              carpeta:  cell(r,17).toUpperCase()
+            }));
+
+            if (!ROWS.length) throw new Error('El Sheet respondió pero no devolvió registros.');
+
+            // Autodiagnóstico: si las columnas de fecha no se pudieron interpretar, las gráficas
+            // saldrían vacías sin ninguna señal de error. Se avisa de forma explícita.
+            const sinFecha = ROWS.filter(r => !r.fDes).length;
+            if (sinFecha / ROWS.length > 0.5){
+              AD('err-box').innerHTML =
+                `<div class="Audit-Desap-err"><b>Las columnas de fecha no se pudieron interpretar.</b><br>
+                 ${fmt(sinFecha)} de ${fmt(ROWS.length)} registros no tienen una fecha de desaparición legible,
+                 por lo que las gráficas por año aparecerán vacías.<br><br>
+                 Suele ocurrir cuando, al pegar los datos, Google Sheets convierte el texto
+                 <code>MM/AAAA</code> en un formato de fecha distinto. Solución: selecciona las columnas
+                 <b>E, F, J y O</b> en la pestaña de origen (<code>gid ${SHEET_GID}</code>), aplica
+                 <i>Formato → Número → Texto sin formato</i> y vuelve a pegar los datos.</div>`;
+            }
+
+            if (avisoCols) AD('err-box').insertAdjacentHTML('beforeend', avisoCols);
+            AD('loader-sub').textContent = 'Calculando indicadores…';
+            render();
+            AD('loader').classList.add(P + 'hide');
+          }catch(e){
+            AD('loader').classList.add(P + 'hide');
+            AD('err-box').innerHTML =
+              `<div class="Audit-Desap-err"><b>No fue posible cargar los datos.</b><br>${e.message}<br><br>
+               Verifica que el Google Sheet esté compartido como <i>«Cualquier persona con el enlace — Lector»</i>
+               y que exista la pestaña con <code>gid ${SHEET_GID}</code>.</div>`;
+          }
+        }
+
+        /* =======================================================================
+           PREDICADOS — cada uno corresponde 1:1 con un filtro auditable en Excel
+           ======================================================================= */
+        const esDesaparecida = r => r.estatus === 'PERSONA DESAPARECIDA';
+        const esLocalizada   = r => r.estatus === 'PERSONA LOCALIZADA';
+        const esCierre       = r => r.estatus === 'CIERRE';
+        /** Localización confirmada a partir del 1 de diciembre de 2018 (criterio del sitio oficial) */
+        const locDesdeDic18  = r => r.fLoc && (r.fLoc.y > 2018 || (r.fLoc.y === 2018 && r.fLoc.m === 12));
+        /** Desaparición ocurrida Y reportada dentro de enero–agosto del mismo año */
+        const incidenciaEneJul = (r,y) =>
+          r.fDes && r.fRep && r.fDes.y === y && r.fDes.m <= CUT_MONTH &&
+          r.fRep.y === y && r.fRep.m <= CUT_MONTH;
+        /** Desaparición ocurrida Y reportada dentro del mismo año calendario */
+        const incidenciaAnual = (r,y) => r.fDes && r.fRep && r.fDes.y === y && r.fRep.y === y;
+
+        /** Agrupación de rangos de edad usada por el sitio oficial.
+            NOTA VERIFICADA: 'SE IGNORA' se contabiliza dentro del grupo '50+'. */
+        const AGE_GROUPS = ['0-14','15-19','20-29','30-39','40-49','50+'];
+        function grupoEdad(rango){
+          if (['0-4','5-9','10-14'].includes(rango)) return '0-14';
+          if (rango === '15-19') return '15-19';
+          if (['20-24','25-29'].includes(rango)) return '20-29';
+          if (['30-34','35-39'].includes(rango)) return '30-39';
+          if (['40-44','45-49'].includes(rango)) return '40-49';
+          return '50+';
+        }
+        const fmt = n => n.toLocaleString('es-MX');
+
+        /* =======================================================================
+           OPCIONES DE GRÁFICA
+           ======================================================================= */
+        /* Sin Chart.defaults: tocarlo cambiaría las gráficas de TODAS las vistas
+           del tablero y chocaría con su cambio de tema. Tipografía y color se fijan
+           gráfica por gráfica en mkChart() con pintaTema(). */
+
+        function barOpts(stacked, horizontal, pct){
+          return {
+            indexAxis: horizontal ? 'y' : 'x',
+            responsive: true, maintainAspectRatio: false,
+            plugins:{
+              legend:{ display:true, position:'top', align:'start',
+                labels:{ boxWidth:11, boxHeight:11, usePointStyle:true, pointStyle:'rectRounded', padding:14 } },
+              tooltip:{ backgroundColor:'#152A5E', padding:11, cornerRadius:7, titleFont:{weight:'600'},
+                callbacks:{ label: ctx => {
+                  const v = ctx.parsed[horizontal ? 'x' : 'y'];
+                  return ` ${ctx.dataset.label}: ${pct ? v.toFixed(1)+'%' : fmt(v)}`;
+                } } }
+            },
+            scales:{
+              // En barras horizontales el eje X es el numérico y el Y el de categorías; en verticales, al revés.
+              x:{ stacked, grid:{ display:horizontal, color:TEMA.grid }, border:{display:false},
+                  ticks:{ callback: function(v){
+                    if (!horizontal) return this.getLabelForValue(v);
+                    return pct ? v + '%' : fmt(v);
+                  } } },
+              y:{ stacked, grid:{ display:!horizontal, color:TEMA.grid }, border:{display:false},
+                  ticks:{ callback: function(v){
+                    if (horizontal) return this.getLabelForValue(v);
+                    return pct ? v + '%' : fmt(v);
+                  } } }
+            }
+          };
+        }
+
+        /** Chart.js 4 requiere el elemento canvas, no su id. */
+        const CHARTS = {};
+        function mkChart(id, cfg){
+          if (CHARTS[id]) CHARTS[id].destroy();      // el filtro redibuja: evita instancias fantasma
+          pintaTema(cfg.options, TEMA.ink, TEMA.muted);
+          CHARTS[id] = new Chart(AD(id), cfg);
+          return CHARTS[id];
+        }
+
+        /* =======================================================================
+           BOTONES DE AUDITORÍA
+           ======================================================================= */
+        function auditPanel(id, cfg){
+          const el = AD(id);
+          if (!el) return;
+          el.innerHTML = `
+            <h4>Columnas del Sheet utilizadas</h4>
+            <div class="Audit-Desap-cols">${cfg.cols.map(c => `<span class="Audit-Desap-col-chip">${c}</span>`).join('')}</div>
+            <h4>Filtro que debes aplicar</h4>
+            <div class="Audit-Desap-suave">${cfg.filtro}</div>
+            <h4>Pasos en Excel</h4>
+            <ol>${cfg.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+            <h4>Fórmula de Excel</h4>
+            <div class="Audit-Desap-fx">${cfg.formula}</div>
+            ${cfg.check ? `<div class="Audit-Desap-chk">✅ <b>Verificación:</b> ${cfg.check}</div>` : ''}
+            ${cfg.flag  ? `<div class="Audit-Desap-flag">⚠️ <b>Nota crítica:</b> ${cfg.flag}</div>` : ''}`;
+        }
+        document.addEventListener('click', e => {
+          const btn = e.target.closest('.Audit-Desap-audit-btn');
+          if (!btn) return;
+          const panel = AD(btn.dataset.audit);
+          if (!panel) return;
+          btn.classList.toggle(P + 'open');
+          panel.classList.toggle(P + 'open');
+          btn.setAttribute('aria-expanded', String(panel.classList.contains(P + 'open')));
+        });
+
+        /* =======================================================================
+           FILTRO DE TEMPORALIDAD
+           Gobierna únicamente el «Explorador temporal» y la tabla de detalle
+           municipal. Las gráficas que replican al sitio oficial conservan sus
+           definiciones fijas para que la réplica siga siendo auditable.
+           ======================================================================= */
+        const MESES_NOM = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+        const MESES_AB  = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+        /* Estado del filtro. a y b son índices de mes absolutos (año*12 + mes-1). */
+        const FILTRO = { modo:'REP', a:0, b:0 };
+        let LIM = { a:0, b:0 };
+
+        const ix     = f => f ? f.y * 12 + (f.m - 1) : null;
+        const deIx   = n => ({ y: Math.floor(n / 12), m: (n % 12) + 1 });
+        const etiqIx = n => { const d = deIx(n); return MESES_AB[d.m] + ' ' + d.y; };
+        const largo  = n => { const d = deIx(n); return MESES_NOM[d.m].toLowerCase() + ' de ' + d.y; };
+        const enRango = f => { if (!f) return false; const n = ix(f); return n >= FILTRO.a && n <= FILTRO.b; };
+
+        const MODO_TXT = {
+          REP:   'fecha de reporte',
+          DES:   'fecha de desaparición',
+          AMB:   'desaparición y reporte, ambos dentro del periodo',
+          CUALQ: 'fecha de reporte o de desaparición'
+        };
+
+        /** Conjunto base: registros que caen en la ventana según el campo elegido. */
+        function baseSet(){
+          switch (FILTRO.modo){
+            case 'DES':   return ROWS.filter(r => enRango(r.fDes));
+            case 'AMB':   return ROWS.filter(r => enRango(r.fDes) && enRango(r.fRep));
+            case 'CUALQ': return ROWS.filter(r => enRango(r.fDes) || enRango(r.fRep));
+            default:      return ROWS.filter(r => enRango(r.fRep));
+          }
+        }
+        /** Fecha de referencia del modo activo, usada por las series mensuales. */
+        const fechaRef  = r => (FILTRO.modo === 'DES' || FILTRO.modo === 'AMB') ? r.fDes : r.fRep;
+        /** En modo «ambas», al comparar meses sueltos se exige el reporte en el mismo año. */
+        const cumpleModo = r => FILTRO.modo !== 'AMB' ? true : !!(r.fDes && r.fRep && r.fDes.y === r.fRep.y);
+
+        function initFiltro(){
+          let lo = Infinity, hi = -Infinity;
+          ROWS.forEach(r => [r.fRep, r.fDes].forEach(f => {
+            if (f){ const n = ix(f); if (n < lo) lo = n; if (n > hi) hi = n; }
+          }));
+          if (!isFinite(lo)){ lo = hi = new Date().getFullYear() * 12; }
+          LIM = { a:lo, b:hi };
+          FILTRO.a = lo; FILTRO.b = hi;              // por defecto: TODA la temporalidad
+
+          const yIni = deIx(lo).y, yFin = deIx(hi).y;
+          const optY = [];
+          for (let y = yFin; y >= yIni; y--) optY.push('<option value="' + y + '">' + y + '</option>');
+          const optM = MESES_NOM.slice(1).map((m,i) => '<option value="' + (i+1) + '">' + m + '</option>').join('');
+          ['f-y1','f-y2'].forEach(id => AD(id).innerHTML = optY.join(''));
+          ['f-m1','f-m2'].forEach(id => AD(id).innerHTML = optM);
+          pintarSelects();
+
+          AD('p-anio').textContent = yFin + ': enero a ' + MESES_NOM[deIx(hi).m].toLowerCase();
+          /* «Actualizar» vuelve a ejecutar la carga completa: los oyentes se ligan
+             una sola vez para no duplicar cada clic. */
+          if (FILTRO_LIGADO) return;
+          FILTRO_LIGADO = true;
+          ['f-modo','f-y1','f-m1','f-y2','f-m2'].forEach(id =>
+            AD(id).addEventListener('change', leerSelects));
+          RAIZ().querySelectorAll('[data-preset]').forEach(b =>
+            b.addEventListener('click', () => aplicarPreset(b.dataset.preset)));
+          AD('q-muni').addEventListener('input', renderTablaMuni);
+          AD('btn-reporte').addEventListener('click', generarReporte);
+          RAIZ().querySelectorAll('th.Audit-Desap-sortable').forEach(th =>
+            th.addEventListener('click', () => ordenarMuni(th.dataset.sort)));
+        }
+        function pintarSelects(){
+          const A = deIx(FILTRO.a), B = deIx(FILTRO.b);
+          AD('f-y1').value = A.y; AD('f-m1').value = A.m;
+          AD('f-y2').value = B.y; AD('f-m2').value = B.m;
+          AD('f-modo').value = FILTRO.modo;
+          RAIZ().querySelectorAll('[data-preset]').forEach(b => b.classList.remove(P + 'solid'));
+          const esTodo = FILTRO.a === LIM.a && FILTRO.b === LIM.b;
+          if (esTodo) RAIZ().querySelector('[data-preset="todo"]').classList.add(P + 'solid');
+        }
+        function leerSelects(){
+          FILTRO.modo = AD('f-modo').value;
+          let a = (+AD('f-y1').value) * 12 + (+AD('f-m1').value - 1);
+          let b = (+AD('f-y2').value) * 12 + (+AD('f-m2').value - 1);
+          if (a > b){ const t = a; a = b; b = t; }     // si el rango se invierte, se corrige solo
+          FILTRO.a = a; FILTRO.b = b;
+          pintarSelects(); renderExplorador(); renderTablaMuni();
+        }
+        function aplicarPreset(p){
+          if (p === 'todo'){ FILTRO.a = LIM.a; FILTRO.b = LIM.b; }
+          if (p === 'anio'){ FILTRO.a = deIx(LIM.b).y * 12; FILTRO.b = LIM.b; }
+          if (p === '12m'){  FILTRO.a = Math.max(LIM.a, LIM.b - 11); FILTRO.b = LIM.b; }
+          pintarSelects(); renderExplorador(); renderTablaMuni();
+        }
+
+        /** Variación porcentual con signo y color. */
+        function delta(cur, prev){
+          if (!prev) return '<span class="Audit-Desap-delta-flat">n/d</span>';
+          const d = (cur - prev) / prev * 100;
+          const cls = P + (d > 0 ? 'delta-up' : (d < 0 ? 'delta-down' : 'delta-flat'));
+          const sig = d > 0 ? '▲ +' : (d < 0 ? '▼ ' : '');
+          return '<span class="' + cls + '">' + sig + d.toFixed(1) + '%</span>';
+        }
+        /* La descarga pública escribe los municipios en mayúsculas y sin acentos.
+           Este diccionario es SÓLO de presentación: no altera ningún valor de la
+           fuente, únicamente cómo se imprime el nombre en pantalla y en el reporte. */
+        const ACENTOS = {
+          'TONALA':'Tonalá','TLAJOMULCO DE ZUÑIGA':'Tlajomulco de Zúñiga','IXTLAHUACAN DE LOS MEMBRILLOS':'Ixtlahuacán de los Membrillos',
+          'JUANACATLAN':'Juanacatlán','ACATLAN DE JUAREZ':'Acatlán de Juárez','TEPATITLAN DE MORELOS':'Tepatitlán de Morelos',
+          'ENCARNACION DE DIAZ':'Encarnación de Díaz','ZAPOTLAN EL GRANDE':'Zapotlán el Grande','OCOTLAN':'Ocotlán',
+          'AUTLAN DE NAVARRO':'Autlán de Navarro','CIHUATLAN':'Cihuatlán','TOMATLAN':'Tomatlán','JALOSTOTITLAN':'Jalostotitlán',
+          'COLOTLAN':'Colotlán','AYOTLAN':'Ayotlán','PONCITLAN':'Poncitlán','HUEJUCAR':'Huejúcar','TALPA DE ALLENDE':'Talpa de Allende',
+          'SAN JULIAN':'San Julián','TOTOTLAN':'Tototlán','SANTA MARIA DE LOS ANGELES':'Santa María de los Ángeles',
+          'VALLE DE JUAREZ':'Valle de Juárez','UNION DE TULA':'Unión de Tula','SAN DIEGO DE ALEJANDRIA':'San Diego de Alejandría',
+          'ZAPOTLAN DEL REY':'Zapotlán del Rey','ZAPOTLANEJO':'Zapotlanejo','TECOLOTLAN':'Tecolotlán','TEOCALTICHE':'Teocaltiche',
+          'AMATITAN':'Amatitán','ATEMAJAC DE BRIZUELA':'Atemajac de Brizuela','ATENGUILLO':'Atenguillo','ATOYAC':'Atoyac',
+          'CUQUIO':'Cuquío','CHIMALTITAN':'Chimaltitán','EL LIMON':'El Limón','ETZATLAN':'Etzatlán','GOMEZ FARIAS':'Gómez Farías',
+          'GUACHINANGO':'Guachinango','HOSTOTIPAQUILLO':'Hostotipaquillo','HUEJUQUILLA EL ALTO':'Huejuquilla el Alto',
+          'IXTLAHUACAN DEL RIO':'Ixtlahuacán del Río','JESUS MARIA':'Jesús María','MAGDALENA':'Magdalena','MEZQUITIC':'Mezquitic',
+          'PIHUAMO':'Pihuamo','QUITUPAN':'Quitupan','SAN CRISTOBAL DE LA BARRANCA':'San Cristóbal de la Barranca',
+          'SAN GABRIEL':'San Gabriel','SAN IGNACIO CERRO GORDO':'San Ignacio Cerro Gordo','SAN MARTIN DE BOLAÑOS':'San Martín de Bolaños',
+          'SAN MARTIN HIDALGO':'San Martín Hidalgo','SAN SEBASTIAN DEL OESTE':'San Sebastián del Oeste','TAPALPA':'Tapalpa',
+          'TECHALUTA DE MONTENEGRO':'Techaluta de Montenegro','TENAMAXTLAN':'Tenamaxtlán','TEUCHITLAN':'Teuchitlán',
+          'TIZAPAN EL ALTO':'Tizapán el Alto','TOLIMAN':'Tolimán','TONAYA':'Tonaya','TONILA':'Tonila','TUXCACUESCO':'Tuxcacuesco',
+          'TUXPAN':'Tuxpan','UNION DE SAN ANTONIO':'Unión de San Antonio','VILLA GUERRERO':'Villa Guerrero','YAHUALICA DE GONZALEZ GALLO':'Yahualica de González Gallo',
+          'ZAPOTITLAN DE VADILLO':'Zapotitlán de Vadillo','ZAPOTILTIC':'Zapotiltic','SE IGNORA':'Sin municipio identificado'
+        };
+        /** Title case respetando preposiciones: 'SAN PEDRO TLAQUEPAQUE' → 'San Pedro Tlaquepaque'. */
+        const MINUS = ['DE','DEL','LA','LAS','LOS','EL','Y'];
+        const capMun = m => ACENTOS[m] || String(m).split(' ').map((w,i) =>
+          (i && MINUS.includes(w)) ? w.toLowerCase() : w.charAt(0) + w.slice(1).toLowerCase()).join(' ');
+
+        /* =======================================================================
+           EXPLORADOR TEMPORAL — KPIs, territorio y variaciones de la ventana activa
+           ======================================================================= */
+        function renderExplorador(){
+          const S = baseSet();
+          const nMeses = FILTRO.b - FILTRO.a + 1;
+          let nDias = 0;
+          for (let n = FILTRO.a; n <= FILTRO.b; n++){ const d = deIx(n); nDias += new Date(d.y, d.m, 0).getDate(); }
+
+          const reportes  = ROWS.filter(r => enRango(r.fRep)).length;
+          const ocurridas = ROWS.filter(r => enRango(r.fDes)).length;
+          const sigueDes  = S.filter(esDesaparecida).length;
+          const locVent   = S.filter(r => enRango(r.fLoc)).length;
+          const locTot    = S.filter(esLocalizada).length;
+          const cierres   = S.filter(esCierre).length;
+          const conCI     = S.filter(r => r.carpeta === 'SÍ' || r.carpeta === 'SI').length;
+          const sinCI     = S.filter(r => r.carpeta === 'NO').length;
+          const pctLoc    = S.length ? locVent / S.length * 100 : 0;
+          const rango     = etiqIx(FILTRO.a) + ' – ' + etiqIx(FILTRO.b);
+          const esTodo    = FILTRO.a === LIM.a && FILTRO.b === LIM.b;
+
+          AD('f-state').innerHTML =
+            'Periodo activo: <b>' + largo(FILTRO.a) + '</b> a <b>' + largo(FILTRO.b) + '</b> · ' +
+            nMeses + (nMeses === 1 ? ' mes' : ' meses') + ' · Campo de fecha: <b>' + MODO_TXT[FILTRO.modo] + '</b> · ' +
+            'Registros en el periodo: <b>' + fmt(S.length) + '</b>' +
+            (esTodo ? ' <span class="Audit-Desap-mini">— sin acotar: se muestra toda la temporalidad disponible en el registro.</span>' : '');
+
+          AD('kpi-exp').innerHTML =
+            kpi('Reportes recibidos en el periodo', fmt(reportes),
+                'Promedio: ' + (reportes/nMeses).toFixed(1) + ' al mes · ' + (reportes/nDias).toFixed(2) + ' al día') +
+            kpi('Desapariciones ocurridas en el periodo', fmt(ocurridas),
+                'Promedio: ' + (ocurridas/nMeses).toFixed(1) + ' al mes · ' + (ocurridas/nDias).toFixed(2) + ' al día') +
+            kpi('Registros de la base activa', fmt(S.length), 'Criterio: ' + MODO_TXT[FILTRO.modo]) +
+            kpi('Porcentaje de localización del periodo', pctLoc.toFixed(2) + '%',
+                fmt(locVent) + ' de ' + fmt(S.length) + ' localizadas dentro del propio periodo');
+
+          AD('kpi-exp2').innerHTML =
+            kpi('Continúan desaparecidas', fmt(sigueDes), pctTxt(sigueDes, S.length) + ' de la base activa', true) +
+            kpi('Localizadas a la fecha de corte', fmt(locTot), pctTxt(locTot, S.length) + ' de la base activa', true) +
+            kpi('Con carpeta de investigación', fmt(conCI), pctTxt(conCI, S.length) + ' de la base activa', true) +
+            kpi('Sin carpeta de investigación', fmt(sinCI),
+                pctTxt(sinCI, S.length) + ' de la base activa · ' + fmt(cierres) + ' con estatus de cierre', true);
+
+          auditPanel('a-exp',{
+            cols:['FECHA REPORTE','FECHA DESAPARICION','FECHA DE LOCALIZACION','ESTATUS','CARPETA DE INVESTIGACIÓN'],
+            filtro:'Ventana activa <code>' + rango + '</code> aplicada al campo <b>' + MODO_TXT[FILTRO.modo] + '</b>.',
+            pasos:[
+              'Crea columnas auxiliares de mes y año para <b>FECHA REPORTE</b>, <b>FECHA DESAPARICION</b> y <b>FECHA DE LOCALIZACION</b>: <code>=VALOR(IZQUIERDA(E2,2))</code> y <code>=VALOR(DERECHA(E2,4))</code>.',
+              'Construye un índice de mes continuo en cada una para poder comparar rangos que cruzan de año: <code>= Año*12 + Mes - 1</code>. La ventana activa va del índice <b>' + FILTRO.a + '</b> (' + largo(FILTRO.a) + ') al <b>' + FILTRO.b + '</b> (' + largo(FILTRO.b) + ').',
+              '<b>Base activa:</b> conserva las filas cuyo índice del campo elegido cae dentro de la ventana. En modo «reporte y desaparición» deben cumplirse las dos condiciones a la vez; es el criterio que usa el sitio oficial.',
+              '<b>Localizadas en el periodo:</b> de esa base, las que además tienen el índice de <b>FECHA DE LOCALIZACION</b> dentro de la misma ventana. No basta con que el estatus sea «PERSONA LOCALIZADA»: una persona reportada en enero y localizada dos años después no cuenta como localización del periodo.',
+              '<b>Promedios:</b> el mensual divide entre ' + nMeses + ' meses; el diario entre ' + fmt(nDias) + ' días naturales, que son los que suman los meses de la ventana.',
+              'La carpeta de investigación se cuenta sobre la base activa completa. Cuidado con el acento: el valor es <code>Sí</code>.'
+            ],
+            formula:'\' Base activa (modo «fecha de reporte»)\n=CONTAR.SI.CONJUNTO(IndiceRep,"&gt;=' + FILTRO.a + '", IndiceRep,"&lt;=' + FILTRO.b + '")\n\n\' Localizadas dentro del periodo\n=CONTAR.SI.CONJUNTO(IndiceRep,"&gt;=' + FILTRO.a + '", IndiceRep,"&lt;=' + FILTRO.b + '",\n                      IndiceLoc,"&gt;=' + FILTRO.a + '", IndiceLoc,"&lt;=' + FILTRO.b + '")\n\n\' Porcentaje de localización del periodo\n= Localizadas / Base * 100',
+            check:'Con la ventana activa, la base es <b>' + fmt(S.length) + '</b> y las localizadas dentro del periodo <b>' + fmt(locVent) + '</b> → <b>' + pctLoc.toFixed(2) + '%</b>. Las tarjetas «continúan desaparecidas», «localizadas a la fecha de corte» y los cierres deben sumar exactamente la base: ' + fmt(sigueDes) + ' + ' + fmt(locTot) + ' + ' + fmt(cierres) + ' = <b>' + fmt(sigueDes + locTot + cierres) + '</b>.',
+            flag:'«Localizadas dentro del periodo» y «localizadas a la fecha de corte» miden cosas distintas y casi nunca coinciden: la primera exige que la localización haya ocurrido dentro de la ventana; la segunda sólo mira el estatus vigente, sin importar cuándo se confirmó. Para comparar periodos entre sí usa siempre la primera.'
+          });
+
+          /* ---------- Territorio de la ventana ---------- */
+          const mm = {};
+          S.forEach(r => {
+            const k = r.munDes || 'SE IGNORA';
+            if (!mm[k]) mm[k] = { muni:k, n:0, des:0, locV:0, locT:0 };
+            mm[k].n++;
+            if (esDesaparecida(r)) mm[k].des++;
+            if (enRango(r.fLoc))   mm[k].locV++;
+            if (esLocalizada(r))   mm[k].locT++;
+          });
+          const arr = Object.values(mm).sort((a,b) => b.n - a.n);
+          const top10 = arr.slice(0,10);
+
+          AD('m-top10').textContent =
+            'Diez municipios con más casos · ' + rango + ' · ' + MODO_TXT[FILTRO.modo];
+          mkChart('c-top10',{
+            type:'bar',
+            data:{ labels: top10.map(m => capMun(m.muni)),
+              datasets:[{ label:'Casos en el periodo', data: top10.map(m => m.n),
+                backgroundColor:C.blue, borderRadius:4 }] },
+            options: barOpts(false,true,false)
+          });
+          AD('tbl-top10').innerHTML = top10.length
+            ? top10.map((m,i) => '<tr><td class="Audit-Desap-num" style="text-align:left">' + (i+1) + '</td><td>' + capMun(m.muni) + '</td>' +
+                '<td class="Audit-Desap-num">' + fmt(m.n) + '</td><td class="Audit-Desap-num">' + fmt(m.locV) + '</td>' +
+                '<td class="Audit-Desap-num">' + fmt(m.des) + '</td><td class="Audit-Desap-num">' + (m.n ? (m.locV/m.n*100).toFixed(1) : '0.0') + '%</td></tr>').join('')
+            : '<tr><td colspan="6" class="Audit-Desap-empty">Sin registros en el periodo seleccionado.</td></tr>';
+          auditPanel('a-top10',{
+            cols:['MUNICIPIO DESAPARICION','FECHA REPORTE','FECHA DESAPARICION','FECHA DE LOCALIZACION','ESTATUS'],
+            filtro:'Base activa de la ventana <code>' + rango + '</code>, agrupada por <code>MUNICIPIO DESAPARICION</code>.',
+            pasos:[
+              'Parte de la base activa del filtro, no de la base completa.',
+              'Tabla dinámica con <b>MUNICIPIO DESAPARICION</b> en filas y el conteo de folios en valores; ordena de mayor a menor y conserva los diez primeros.',
+              'Para la columna de localizadas, agrega un filtro por índice de <b>FECHA DE LOCALIZACION</b> dentro de la misma ventana.',
+              'El municipio es el del <b>lugar de la desaparición</b>. Los registros con <code>SE IGNORA</code> se conservan como categoría propia: no se eliminan ni se reparten entre los demás.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(MunicipioDesap,"GUADALAJARA",\n                      IndiceRep,"&gt;=' + FILTRO.a + '", IndiceRep,"&lt;=' + FILTRO.b + '")',
+            check: top10.length ? 'El primer municipio de la tabla es <b>' + capMun(top10[0].muni) + '</b> con <b>' + fmt(top10[0].n) + '</b> casos. La suma de los diez es <b>' + fmt(top10.reduce((a,m) => a + m.n, 0)) + '</b> de ' + fmt(S.length) + ' registros del periodo.' : 'Sin registros en el periodo.',
+            flag:'El porcentaje de localización municipal de esta tabla se calcula sobre los casos del propio periodo. En municipios con pocos casos, un solo registro mueve el porcentaje varios puntos: lee siempre el absoluto junto al porcentaje.'
+          });
+
+          /* ---------- Municipios sin localizaciones ---------- */
+          const sinLoc = arr.filter(m => m.des > 0 && m.locV === 0).sort((a,b) => b.des - a.des || b.n - a.n);
+          const sinLocDes = sinLoc.reduce((a,m) => a + m.des, 0);
+          AD('m-sinloc').textContent =
+            sinLoc.length + ' municipios · ' + fmt(sinLocDes) + ' personas que continúan desaparecidas · ' + rango;
+          AD('tbl-sinloc').innerHTML = sinLoc.length
+            ? sinLoc.map(m => '<tr><td>' + capMun(m.muni) + '</td><td class="Audit-Desap-num">' + fmt(m.des) + '</td><td class="Audit-Desap-num">' + fmt(m.n) + '</td></tr>').join('')
+            : '<tr><td colspan="3" class="Audit-Desap-empty">En el periodo seleccionado no hay municipios con desapariciones y cero localizaciones.</td></tr>';
+          auditPanel('a-sinloc',{
+            cols:['MUNICIPIO DESAPARICION','ESTATUS','FECHA DE LOCALIZACION'],
+            filtro:'Municipios de la base activa con al menos una persona en estatus <code>PERSONA DESAPARECIDA</code> y <b>cero</b> localizaciones confirmadas dentro de la ventana.',
+            pasos:[
+              'Sobre la base activa, arma una tabla dinámica con <b>MUNICIPIO DESAPARICION</b> en filas y <b>ESTATUS</b> en columnas.',
+              'Agrega una columna que cuente las filas con índice de <b>FECHA DE LOCALIZACION</b> dentro de la ventana.',
+              'Conserva los municipios donde esa columna sea <b>0</b> y la de personas desaparecidas sea mayor que cero.',
+              'Ordena de mayor a menor por personas que continúan desaparecidas.'
+            ],
+            formula:'=SI(Y(CONTAR.SI.CONJUNTO(MunicipioDesap,A2,Estatus,"PERSONA DESAPARECIDA")&gt;0,\n       CONTAR.SI.CONJUNTO(MunicipioDesap,A2,IndiceLoc,"&gt;=' + FILTRO.a + '",\n                            IndiceLoc,"&lt;=' + FILTRO.b + '")=0),"Sin localizaciones","")',
+            flag:'Cero localizaciones en una ventana corta casi siempre refleja un volumen muy bajo de casos, no necesariamente una falla operativa. La lectura es distinta cuando el municipio acumula decenas de casos sin una sola localización: ésos son los que ameritan revisión.'
+          });
+
+          /* ---------- Variación mensual ---------- */
+          const cuentaMes = {};
+          ROWS.forEach(r => {
+            if (!cumpleModo(r)) return;
+            const f = fechaRef(r); if (!f) return;
+            const n = ix(f); cuentaMes[n] = (cuentaMes[n] || 0) + 1;
+          });
+          const desdeCh = Math.max(FILTRO.a, FILTRO.b - 23);
+          const meses = []; for (let n = desdeCh; n <= FILTRO.b; n++) meses.push(n);
+          const curS = meses.map(n => cuentaMes[n] || 0);
+          const preS = meses.map(n => cuentaMes[n-12] || 0);
+          const totCur = curS.reduce((a,b) => a+b, 0), totPre = preS.reduce((a,b) => a+b, 0);
+
+          AD('m-mensual').innerHTML =
+            'Campo de fecha: ' + MODO_TXT[FILTRO.modo] + ' · ' + meses.length + ' meses mostrados' +
+            (meses.length < (FILTRO.b - FILTRO.a + 1) ? ' (últimos 24 del periodo)' : '');
+          mkChart('c-mensual',{
+            type:'bar',
+            data:{ labels: meses.map(etiqIx), datasets:[
+              { label:'Periodo seleccionado', data:curS, backgroundColor:C.blue,  borderRadius:4 },
+              { label:'Mismo mes del año anterior', data:preS, backgroundColor:C.tealLight, borderRadius:4 }] },
+            options: barOpts(false,false,false)
+          });
+          AD('tbl-mensual').innerHTML = meses.map((n,i) => {
+            const d = curS[i] - preS[i];
+            return '<tr><td>' + MESES_NOM[deIx(n).m] + ' ' + deIx(n).y + '</td>' +
+              '<td class="Audit-Desap-num">' + fmt(curS[i]) + '</td><td class="Audit-Desap-num">' + fmt(preS[i]) + '</td>' +
+              '<td class="Audit-Desap-num">' + (d > 0 ? '+' : '') + fmt(d) + '</td>' +
+              '<td class="Audit-Desap-num">' + delta(curS[i], preS[i]) + '</td></tr>';
+          }).join('');
+          auditPanel('a-mensual',{
+            cols:['FECHA REPORTE','FECHA DESAPARICION'],
+            filtro:'Conteo mensual por <b>' + (FILTRO.modo === 'DES' || FILTRO.modo === 'AMB' ? 'FECHA DESAPARICION' : 'FECHA REPORTE') + '</b>' +
+                   (FILTRO.modo === 'AMB' ? ', exigiendo además que el año de <code>FECHA REPORTE</code> sea igual al de la desaparición.' : '.'),
+            pasos:[
+              'Con las columnas auxiliares de mes y año, cuenta las filas de cada mes del periodo.',
+              'Repite el conteo doce meses atrás: mismo mes, año anterior. En el índice continuo es simplemente <code>índice − 12</code>.',
+              'La diferencia es la resta directa; la variación es <code>(actual − anterior) / anterior × 100</code>.',
+              'Cuando el mes del año anterior no tiene registros, la variación se reporta como <b>n/d</b> en lugar de forzar una división entre cero.',
+              'Los meses más recientes son un piso, no una cifra cerrada: las capturas tardías siguen aumentando los meses ya publicados.'
+            ],
+            formula:'\' Mes actual\n=CONTAR.SI.CONJUNTO(AnioRep,2026, MesRep,8)\n\n\' Mismo mes del año anterior\n=CONTAR.SI.CONJUNTO(AnioRep,2025, MesRep,8)\n\n\' Variación\n= (Actual - Anterior) / Anterior * 100',
+            check:'Los ' + meses.length + ' meses mostrados suman <b>' + fmt(totCur) + '</b> registros, contra <b>' + fmt(totPre) + '</b> en los mismos meses del año previo (' + (totPre ? ((totCur-totPre)/totPre*100).toFixed(1) + '%' : 'n/d') + ').',
+            flag:'Un repunte en un solo mes no marca un cambio de tendencia. Contrástalo siempre con el acumulado del periodo, que es la gráfica siguiente.'
+          });
+
+          /* ---------- Variación del periodo acumulado ---------- */
+          const mH = deIx(FILTRO.b).m, yH = deIx(FILTRO.b).y;
+          const anios = []; for (let y = Math.max(deIx(LIM.a).y, yH - 7); y <= yH; y++) anios.push(y);
+          const perS = anios.map(y => {
+            let k = 0;
+            ROWS.forEach(r => { if (!cumpleModo(r)) return; const f = fechaRef(r); if (f && f.y === y && f.m <= mH) k++; });
+            return k;
+          });
+          AD('m-periodo').textContent =
+            'Acumulado de enero a ' + MESES_NOM[mH].toLowerCase() + ' de cada año · ' + MODO_TXT[FILTRO.modo];
+          mkChart('c-periodo',{
+            type:'bar',
+            data:{ labels:anios, datasets:[{ label:'Enero a ' + MESES_NOM[mH].toLowerCase(), data:perS,
+              backgroundColor: anios.map((y,i) => i === anios.length - 1 ? C.blue : C.teal), borderRadius:4, maxBarThickness:52 }] },
+            options: barOpts(false,false,false)
+          });
+          AD('tbl-periodo').innerHTML = anios.map((y,i) => {
+            const prev = i ? perS[i-1] : null, d = prev === null ? null : perS[i] - prev;
+            return '<tr><td>' + y + '</td><td class="Audit-Desap-num">' + fmt(perS[i]) + '</td>' +
+              '<td class="Audit-Desap-num">' + (d === null ? '—' : (d > 0 ? '+' : '') + fmt(d)) + '</td>' +
+              '<td class="Audit-Desap-num">' + (prev === null ? '—' : delta(perS[i], prev)) + '</td></tr>';
+          }).join('');
+          const ultDelta = perS.length > 1 && perS[perS.length-2]
+            ? ((perS[perS.length-1] - perS[perS.length-2]) / perS[perS.length-2] * 100).toFixed(1) + '%' : 'n/d';
+          auditPanel('a-periodo',{
+            cols:['FECHA REPORTE','FECHA DESAPARICION'],
+            filtro:'Para cada año: mes del campo de referencia <code>≤ ' + mH + '</code> (enero a ' + MESES_NOM[mH].toLowerCase() + ').',
+            pasos:[
+              'El mes de corte lo define el «hasta» del filtro: hoy es ' + MESES_NOM[mH].toLowerCase() + ', por lo que todos los años se cortan en ese mismo mes.',
+              'Cuenta, año por año, las filas cuyo mes de referencia sea menor o igual a ese corte.',
+              'Compara cada año contra el inmediato anterior. Es la única comparación limpia entre años: misma cantidad de meses transcurridos en todos.',
+              'No compares un acumulado de ocho meses contra un año completo: la diferencia sería de calendario, no de fenómeno.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(AnioRep,2026, MesRep,"&lt;=' + mH + '")\n=CONTAR.SI.CONJUNTO(AnioRep,2025, MesRep,"&lt;=' + mH + '")\n\n\' Variación\n= (2026 - 2025) / 2025 * 100',
+            check:'Enero a ' + MESES_NOM[mH].toLowerCase() + ' de ' + yH + ': <b>' + fmt(perS[perS.length-1]) + '</b> registros, una variación de <b>' + ultDelta + '</b> respecto del mismo periodo de ' + (yH-1) + '.',
+            flag:'El año en curso siempre está sujeto a revisión al alza por reportes tardíos: alrededor del 14% de los reportes de un año corresponden a desapariciones ocurridas en años previos.'
+          });
+        }
+
+        /* =======================================================================
+           TABLA DE DETALLE MUNICIPAL — responde al filtro y es ordenable
+           ======================================================================= */
+        let MUNI_SORT = { col:'n', dir:-1 };
+        function ordenarMuni(col){
+          MUNI_SORT = (MUNI_SORT.col === col) ? { col, dir: -MUNI_SORT.dir } : { col, dir: col === 'muni' ? 1 : -1 };
+          renderTablaMuni();
+        }
+        function renderTablaMuni(){
+          const S = baseSet();
+          const q = (AD('q-muni').value || '').trim().toUpperCase();
+          const mm = {};
+          S.forEach(r => {
+            const k = r.munDes || 'SE IGNORA';
+            if (!mm[k]) mm[k] = { muni:k, n:0, des:0, locV:0, locT:0 };
+            mm[k].n++;
+            if (esDesaparecida(r)) mm[k].des++;
+            if (enRango(r.fLoc))   mm[k].locV++;
+            if (esLocalizada(r))   mm[k].locT++;
+          });
+          let arr = Object.values(mm).map(m => Object.assign(m, { pct: m.n ? m.locV / m.n * 100 : 0 }));
+          if (q) arr = arr.filter(m => m.muni.indexOf(q) !== -1);
+          arr.sort((a,b) => MUNI_SORT.col === 'muni'
+            ? a.muni.localeCompare(b.muni, 'es') * MUNI_SORT.dir
+            : (a[MUNI_SORT.col] - b[MUNI_SORT.col]) * MUNI_SORT.dir);
+
+          RAIZ().querySelectorAll('th.Audit-Desap-sortable').forEach(th => {
+            const a = th.querySelector('.Audit-Desap-arw');
+            a.textContent = th.dataset.sort === MUNI_SORT.col ? (MUNI_SORT.dir === 1 ? '▲' : '▼') : '';
+          });
+          AD('m-tblmuni').innerHTML =
+            fmt(arr.length) + ' municipios · ' + etiqIx(FILTRO.a) + ' – ' + etiqIx(FILTRO.b) +
+            ' · ' + fmt(arr.reduce((a,m) => a + m.n, 0)) + ' registros' + (q ? ' · filtro de texto activo' : '');
+          AD('tbl-muni').innerHTML = arr.length
+            ? arr.map(m => '<tr><td>' + capMun(m.muni) + '</td>' +
+                '<td class="Audit-Desap-num">' + fmt(m.n) + '</td><td class="Audit-Desap-num">' + fmt(m.des) + '</td>' +
+                '<td class="Audit-Desap-num">' + fmt(m.locV) + '</td><td class="Audit-Desap-num">' + fmt(m.locT) + '</td>' +
+                '<td class="Audit-Desap-num">' + m.pct.toFixed(1) + '%</td></tr>').join('')
+            : '<tr><td colspan="6" class="Audit-Desap-empty">Ningún municipio coincide con el periodo y el texto buscados.</td></tr>';
+        }
+
+        /* =======================================================================
+           REPORTE DESCARGABLE — formato editorial, generado en vivo desde el Sheet
+           Ninguna cifra está escrita a mano: todo se recalcula al momento del clic
+           sobre ROWS y la ventana activa del filtro.
+           ======================================================================= */
+
+        /* Saldo total de personas desaparecidas en cortes anteriores del REPD.
+           El Sheet contiene únicamente el corte vigente, por lo que la comparación
+           contra el corte previo NO es calculable a partir de los datos. Se
+           documenta aquí y se agrega una línea al actualizar la base cada mes. */
+        const CORTES_PREVIOS = [
+          { corte:'31-07-2026', etiqueta:'julio de 2026', stock:16192 }
+        ];
+
+        /* Área Metropolitana de Guadalajara, con la grafía exacta de la base.
+           Definición institucional CGES: 9 municipios. Acatlán de Juárez NO es AMG
+           (el original lo incluía; corregido al integrar el módulo). */
+        const AMG = ['GUADALAJARA','ZAPOPAN','SAN PEDRO TLAQUEPAQUE','TONALA','TLAJOMULCO DE ZUÑIGA',
+                     'EL SALTO','JUANACATLAN','IXTLAHUACAN DE LOS MEMBRILLOS','ZAPOTLANEJO'];
+        const SIN_MUN = 'SE IGNORA';
+
+        const listar = a => a.length <= 1 ? (a[0] || '') : a.slice(0,-1).join(', ') + ' y ' + a[a.length-1];
+        const pct1 = (a,b) => b ? (a/b*100).toFixed(2) : '0.00';
+
+        /* -----------------------------------------------------------------------
+           CÁLCULO — una sola función pura; recibe ventana y criterio, devuelve
+           todos los indicadores del reporte.
+           ----------------------------------------------------------------------- */
+        function calcReporte(A, B, modo){
+          const inR = f => !!f && ix(f) >= A && ix(f) <= B;
+          const sel = r => modo === 'DES'   ? inR(r.fDes)
+                         : modo === 'AMB'   ? (inR(r.fDes) && inR(r.fRep))
+                         : modo === 'CUALQ' ? (inR(r.fDes) || inR(r.fRep))
+                         : inR(r.fRep);
+          const S = ROWS.filter(sel);
+          const nMeses = B - A + 1;
+          let nDias = 0;
+          for (let n = A; n <= B; n++){ const d = deIx(n); nDias += new Date(d.y, d.m, 0).getDate(); }
+
+          /* agregación municipal; SE IGNORA se aparta del conteo de municipios */
+          const mm = {};
+          S.forEach(r => {
+            const k = r.munDes || SIN_MUN;
+            if (!mm[k]) mm[k] = { muni:k, n:0, des:0, locV:0, locT:0 };
+            mm[k].n++;
+            if (esDesaparecida(r)) mm[k].des++;
+            if (inR(r.fLoc))       mm[k].locV++;
+            if (esLocalizada(r))   mm[k].locT++;
+          });
+          const ignora = mm[SIN_MUN] || { muni:SIN_MUN, n:0, des:0, locV:0, locT:0 };
+          const muni = Object.values(mm).filter(m => m.muni !== SIN_MUN).sort((a,b) => b.n - a.n);
+          const top10 = muni.slice(0,10);
+          const top3  = muni.slice(0,3);
+          const top3n = top3.reduce((a,m) => a + m.n, 0);
+          const amgResto = muni.filter(m => AMG.includes(m.muni)).slice(3);
+          const fueraAMG = muni.find(m => !AMG.includes(m.muni));
+          const sinLoc = muni.filter(m => m.des > 0 && m.locV === 0).sort((a,b) => b.des - a.des || b.n - a.n);
+
+          /* comparativos: la misma ventana desplazada k años atrás */
+          const cuenta = (a,b) => {
+            const q = f => !!f && ix(f) >= a && ix(f) <= b;
+            return ROWS.filter(r => modo === 'DES'   ? q(r.fDes)
+                                  : modo === 'AMB'   ? (q(r.fDes) && q(r.fRep))
+                                  : modo === 'CUALQ' ? (q(r.fDes) || q(r.fRep))
+                                  : q(r.fRep)).length;
+          };
+          const serieAnual = [];
+          if (nMeses <= 12){
+            for (let k = 7; k >= 0; k--){
+              const a = A - 12*k, b = B - 12*k;
+              if (a < LIM.a - 11) continue;
+              serieAnual.push({ anio: deIx(a).y, n: cuenta(a,b) });
+            }
+          }
+          const prevAnio = nMeses <= 12 ? cuenta(A-12, B-12) : cuenta(A - nMeses, B - nMeses);
+          const baseAnio = serieAnual.length ? serieAnual[0] : null;
+
+          /* serie mensual del periodo contra el mismo mes del año anterior */
+          const cuentaMes = {};
+          ROWS.forEach(r => {
+            if (modo === 'AMB' && !(r.fDes && r.fRep && r.fDes.y === r.fRep.y)) return;
+            const f = (modo === 'DES' || modo === 'AMB') ? r.fDes : r.fRep;
+            if (!f) return;
+            const n = ix(f); cuentaMes[n] = (cuentaMes[n] || 0) + 1;
+          });
+          const mensual = [];
+          for (let n = Math.max(A, B-23); n <= B; n++)
+            mensual.push({ n, cur: cuentaMes[n] || 0, pre: cuentaMes[n-12] || 0 });
+
+          return {
+            A, B, modo, nMeses, nDias, S,
+            reportes:  ROWS.filter(r => inR(r.fRep)).length,
+            ocurridas: ROWS.filter(r => inR(r.fDes)).length,
+            base: S.length,
+            faltan:  S.filter(esDesaparecida).length,
+            locVent: S.filter(r => inR(r.fLoc)).length,
+            locTot:  S.filter(esLocalizada).length,
+            cierres: S.filter(esCierre).length,
+            conCI:   S.filter(r => r.carpeta === 'SÍ' || r.carpeta === 'SI').length,
+            sinCI:   S.filter(r => r.carpeta === 'NO').length,
+            mujeres: S.filter(r => r.sexo === 'MUJER').length,
+            hombres: S.filter(r => r.sexo === 'HOMBRE').length,
+            nMuni: muni.length, ignora, muni, top10, top3, top3n, amgResto, fueraAMG, sinLoc,
+            serieAnual, prevAnio, baseAnio, mensual,
+            stockTotal: ROWS.filter(esDesaparecida).length
+          };
+        }
+
+        /* -----------------------------------------------------------------------
+           GRÁFICAS — se dibujan fuera de pantalla y se incrustan como PNG, para que
+           el documento del reporte no dependa de ninguna librería externa.
+           ----------------------------------------------------------------------- */
+        const bgBlanco = { id:'bgBlanco', beforeDraw(c){
+          const x = c.ctx; x.save(); x.globalCompositeOperation = 'destination-over';
+          x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height); x.restore();
+        } };
+        const etiqValor = { id:'etiqValor', afterDatasetsDraw(c){
+          const x = c.ctx; x.save();
+          x.font = '600 11px Poppins, sans-serif'; x.fillStyle = '#1C2333';
+          c.data.datasets.forEach((ds,di) => {
+            const meta = c.getDatasetMeta(di);
+            meta.data.forEach((el,i) => {
+              const v = ds.data[i]; if (v === null || v === undefined) return;
+              if (c.options.indexAxis === 'y'){ x.textAlign='left'; x.textBaseline='middle'; x.fillText(fmt(v), el.x + 5, el.y); }
+              else { x.textAlign='center'; x.textBaseline='bottom'; x.fillText(fmt(v), el.x, el.y - 3); }
+            });
+          });
+          x.restore();
+        } };
+        function chartPNG(cfg, w, h){
+          const wrap = AD('offscreen');
+          const cv = document.createElement('canvas');
+          cv.width = w; cv.height = h;
+          wrap.appendChild(cv);
+          cfg.plugins = (cfg.plugins || []).concat([bgBlanco, etiqValor]);
+          cfg.options = Object.assign({ responsive:false, maintainAspectRatio:false, animation:false, devicePixelRatio:2 }, cfg.options);
+          pintaTema(cfg.options, '#1C2333', '#4A5568');   // documento impreso: siempre en claro
+          const ch = new Chart(cv, cfg);
+          const url = cv.toDataURL('image/png');
+          ch.destroy(); wrap.removeChild(cv);
+          return url;
+        }
+        const ejeLimpio = extra => Object.assign({
+          plugins:{ legend:{ display:false } },
+          scales:{ x:{ grid:{ display:false }, ticks:{ font:{ size:11 } } },
+                   y:{ grid:{ color:'#E9EDF4' }, ticks:{ font:{ size:11 } }, beginAtZero:true } },
+          layout:{ padding:{ right:34, top:12 } }
+        }, extra || {});
+
+        function graficasReporte(D){
+          const g = {};
+          g.top10 = chartPNG({
+            type:'bar',
+            data:{ labels: D.top10.map(m => capMun(m.muni)),
+              datasets:[{ data: D.top10.map(m => m.n), backgroundColor:'#1F3A7F', borderRadius:3 }] },
+            options: Object.assign(ejeLimpio(), { indexAxis:'y' })
+          }, 760, 420);
+
+          g.mensual = chartPNG({
+            type:'bar',
+            data:{ labels: D.mensual.map(m => etiqIx(m.n)),
+              datasets:[
+                { label:'Periodo', data: D.mensual.map(m => m.cur), backgroundColor:'#1F3A7F', borderRadius:3 },
+                { label:'Año anterior', data: D.mensual.map(m => m.pre), backgroundColor:'#8FC7C2', borderRadius:3 }] },
+            options: ejeLimpio({ plugins:{ legend:{ display:true, position:'top', align:'start',
+              labels:{ boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded', font:{ size:11 } } } } })
+          }, 760, 330);
+
+          if (D.serieAnual.length > 1){
+            g.anual = chartPNG({
+              type:'bar',
+              data:{ labels: D.serieAnual.map(s => s.anio),
+                datasets:[{ data: D.serieAnual.map(s => s.n),
+                  backgroundColor: D.serieAnual.map((s,i) => i === D.serieAnual.length-1 ? '#1F3A7F' : '#1B6C74'),
+                  borderRadius:3, maxBarThickness:60 }] },
+              options: ejeLimpio()
+            }, 760, 320);
+          }
+
+          const desp = D.base - D.locVent - D.cierres;
+          g.comp = chartPNG({
+            type:'bar',
+            data:{ labels:['Situación de los casos del periodo'],
+              datasets:[
+                { label:'Localizadas dentro del periodo', data:[D.locVent], backgroundColor:'#1B6C74', borderRadius:3 },
+                { label:'Sin localización dentro del periodo', data:[desp], backgroundColor:'#E4636C', borderRadius:3 },
+                { label:'Registros en cierre', data:[D.cierres], backgroundColor:'#C9A227', borderRadius:3 }] },
+            options: ejeLimpio({ indexAxis:'y',
+              scales:{ x:{ stacked:true, grid:{ display:false }, ticks:{ font:{ size:11 } } },
+                       y:{ stacked:true, grid:{ display:false }, ticks:{ display:false } } },
+              plugins:{ legend:{ display:true, position:'top', align:'start',
+                labels:{ boxWidth:10, boxHeight:10, usePointStyle:true, pointStyle:'rectRounded', font:{ size:11 } } } } })
+          }, 760, 190);
+          return g;
+        }
+
+        /* -----------------------------------------------------------------------
+           REDACCIÓN — los párrafos se arman condicionalmente a partir de los datos
+           ----------------------------------------------------------------------- */
+        function prosaReporte(D){
+          const mesA = MESES_NOM[deIx(D.A).m].toLowerCase(), mesB = MESES_NOM[deIx(D.B).m].toLowerCase();
+          const yA = deIx(D.A).y, yB = deIx(D.B).y;
+          const periodo = yA === yB ? 'entre ' + mesA + ' y ' + mesB + ' de ' + yA
+                                    : 'entre ' + mesA + ' de ' + yA + ' y ' + mesB + ' de ' + yB;
+          const campo = D.modo === 'DES' ? 'fecha de desaparición'
+                      : D.modo === 'AMB' ? 'desaparición y reporte ocurridos dentro del periodo'
+                      : D.modo === 'CUALQ' ? 'fecha de reporte o de desaparición' : 'fecha de reporte';
+          const diez = Math.round(D.conCI / (D.base || 1) * 10);
+          const p = [];
+
+          p.push('En Jalisco, ' + periodo + ', las desapariciones alcanzaron a ' + fmt(D.nMuni) +
+            ' municipios, de acuerdo con el Registro Estatal de Personas Desaparecidas (REPD), actualizado por la Comisión de ' +
+            'Búsqueda de Personas del Estado de Jalisco (COBUPEJ) al corte del ' + (CUT_TEXT || 'periodo vigente') + '.');
+
+          p.push('Los datos muestran que en los ' + D.nMeses + ' meses ya incluidos en el registro hubo ' + fmt(D.base) +
+            ' reportes totales; de ellos, en ' + fmt(D.conCI) + ', es decir ' + diez + ' de cada 10, se contó con una carpeta de investigación.');
+
+          p.push('Los ' + fmt(D.base) + ' reportes en ' + D.nMeses + ' meses equivalen a ' + (D.base/D.nMeses).toFixed(0) +
+            ' casos en promedio por mes, o ' + (D.base/D.nDias).toFixed(1) + ' por día. De esa cantidad faltan por ser localizadas ' +
+            fmt(D.faltan) + ' personas, mientras que ' + fmt(D.locVent) + ' fueron localizadas dentro del mismo periodo, lo que representa ' +
+            pct1(D.locVent, D.base) + ' por ciento.');
+
+          if (D.top3.length === 3){
+            const may = D.top3n / D.base > 0.5;
+            p.push((may ? 'Más de la mitad de los reportes totales los concentran tres municipios: ' : 'Tres municipios concentran ') +
+              listar(D.top3.map(m => capMun(m.muni) + ', con ' + fmt(m.n))) + ', que agrupan ' + pct1(D.top3n, D.base) +
+              ' por ciento del total estatal.');
+          }
+          if (D.amgResto.length){
+            p.push('Otras demarcaciones que resaltan por desapariciones también están dentro del Área Metropolitana de Guadalajara (AMG). ' +
+              'Se trata de ' + listar(D.amgResto.map(m => capMun(m.muni) + ', con ' + fmt(m.n))) + '.');
+          }
+          if (D.fueraAMG){
+            p.push('Fuera del AMG, el municipio con más casos es ' + capMun(D.fueraAMG.muni) + ' al alcanzar ' + fmt(D.fueraAMG.n) + ' en total.');
+          }
+          if (D.ignora.n){
+            p.push('Adicionalmente, ' + fmt(D.ignora.n) + ' registros del periodo no tienen municipio de desaparición identificado: ' +
+              'se contabilizan en los totales, pero quedan fuera del conteo de municipios.');
+          }
+
+          /* cero efectividad */
+          const cero = [];
+          if (D.sinLoc.length){
+            cero.push('Los datos del REPD incluyen a ' + fmt(D.sinLoc.length) + ' municipios en los que ninguna de las personas ' +
+              'reportadas como desaparecidas en el periodo ha sido localizada dentro de ese mismo lapso: la totalidad de sus casos sigue abierta.');
+            const g0 = D.sinLoc[0];
+            cero.push('El caso más marcado es el de ' + capMun(g0.muni) + ', que sumó ' + fmt(g0.des) +
+              (g0.des === 1 ? ' víctima de desaparición ' : ' víctimas de desaparición ') + periodo + ', y todas ellas siguen ausentes.');
+            const grupos = {};
+            D.sinLoc.slice(1).forEach(m => { (grupos[m.des] = grupos[m.des] || []).push(capMun(m.muni)); });
+            const nums = Object.keys(grupos).map(Number).sort((a,b) => b-a);
+            const destacan = nums.filter(n => n > 1)
+              .map(n => listar(grupos[n]) + ', con ' + n + (n === 1 ? ' caso' : ' casos') + (grupos[n].length > 1 ? ' cada uno' : ''));
+            if (destacan.length) cero.push('También destacan ' + listar(destacan) + '.');
+            if (grupos[1]) cero.push('Adicionalmente se tiene un caso en cada uno de los siguientes municipios: ' + listar(grupos[1]) + '.');
+          } else {
+            cero.push('En el periodo analizado no hay municipios con casos de desaparición y cero localizaciones confirmadas.');
+          }
+
+          /* evolución */
+          const ev = [];
+          const dPrev = D.prevAnio ? (D.base - D.prevAnio) / D.prevAnio * 100 : null;
+          const dBase = D.baseAnio && D.baseAnio.n ? (D.base - D.baseAnio.n) / D.baseAnio.n * 100 : null;
+          if (dPrev !== null){
+            ev.push('La incidencia del periodo fue ' + Math.abs(dPrev).toFixed(2) + ' por ciento ' + (dPrev < 0 ? 'menor' : 'mayor') +
+              ' que en el mismo periodo del año anterior (' + fmt(D.prevAnio) + ' casos)' +
+              (dBase !== null ? ', y ' + Math.abs(dBase).toFixed(2) + ' por ciento ' + (dBase < 0 ? 'menor' : 'mayor') +
+               ' comparada con ' + D.baseAnio.anio + ' (' + fmt(D.baseAnio.n) + ' casos)' : '') + '.');
+          }
+          const prevCorte = CORTES_PREVIOS[CORTES_PREVIOS.length - 1];
+          if (prevCorte){
+            const d = D.stockTotal - prevCorte.stock;
+            ev.push('No obstante, la cifra total de personas desaparecidas en el estado ' +
+              (d > 0 ? 'continuó en incremento' : d < 0 ? 'se redujo' : 'se mantuvo sin cambio') +
+              ' al alcanzar ' + fmt(D.stockTotal) + ' casos en total, ' +
+              (d > 0 ? 'una cifra superior a los ' : d < 0 ? 'una cifra inferior a los ' : 'la misma que los ') +
+              fmt(prevCorte.stock) + ' que se contabilizaron hasta el corte de ' + prevCorte.etiqueta +
+              (d ? ' (' + (d > 0 ? '+' : '') + fmt(d) + ')' : '') + '.');
+          } else {
+            ev.push('La cifra total de personas desaparecidas en el estado al corte es de ' + fmt(D.stockTotal) + ' casos.');
+          }
+          ev.push('Del total de reportes del periodo, ' + fmt(D.mujeres) + ' corresponden a mujeres y ' + fmt(D.hombres) +
+            ' a hombres; ' + fmt(D.sinCI) + ' carecen de carpeta de investigación.');
+
+          return { p, cero, ev, periodo, campo, mesA, mesB, yA, yB };
+        }
+
+        /* -----------------------------------------------------------------------
+           DOCUMENTO — se abre en pestaña nueva, autocontenido, listo para imprimir
+           ----------------------------------------------------------------------- */
+        function generarReporte(){
+          let A = FILTRO.a, B = FILTRO.b;
+          if (A === LIM.a && B === LIM.b) A = deIx(LIM.b).y * 12;    // sin acotar → año en curso
+          const D = calcReporte(A, B, FILTRO.modo);
+          const T = prosaReporte(D);
+          const G = graficasReporte(D);
+
+          const tituloPeriodo = (D.A >= deIx(D.B).y*12 ? 'ENTRE ' + T.mesA.toUpperCase() + ' Y ' + T.mesB.toUpperCase() + ' DE ' + T.yB
+                                                       : 'DE ' + T.mesA.toUpperCase() + ' ' + T.yA + ' A ' + T.mesB.toUpperCase() + ' ' + T.yB);
+          const hoy = new Date();
+          const fechaLarga = hoy.getDate() + ' de ' + MESES_NOM[hoy.getMonth()+1].toLowerCase() + ' de ' + hoy.getFullYear();
+          const slug = 'REPD_Jalisco_Reporte_' + MESES_AB[deIx(D.A).m] + deIx(D.A).y + '-' + MESES_AB[deIx(D.B).m] + deIx(D.B).y;
+
+          const filas = (rows) => rows.join('');
+          const tblTop = filas(D.top10.map((m,i) =>
+            '<tr><td>' + (i+1) + '</td><td>' + capMun(m.muni) + '</td><td class="n">' + fmt(m.n) + '</td><td class="n">' +
+            fmt(m.locV) + '</td><td class="n">' + fmt(m.des) + '</td><td class="n">' + pct1(m.locV, m.n) + '%</td></tr>'));
+          const tblSin = D.sinLoc.length ? filas(D.sinLoc.map(m =>
+            '<tr><td>' + capMun(m.muni) + '</td><td class="n">' + fmt(m.des) + '</td><td class="n">' + fmt(m.n) + '</td></tr>'))
+            : '<tr><td colspan="3" class="vacio">Sin municipios en esta condición durante el periodo.</td></tr>';
+          const tblMes = filas(D.mensual.map(m => {
+            const d = m.cur - m.pre;
+            const v = m.pre ? ((d/m.pre*100).toFixed(1) + '%') : 'n/d';
+            return '<tr><td>' + MESES_NOM[deIx(m.n).m] + ' ' + deIx(m.n).y + '</td><td class="n">' + fmt(m.cur) +
+              '</td><td class="n">' + fmt(m.pre) + '</td><td class="n">' + (d > 0 ? '+' : '') + fmt(d) +
+              '</td><td class="n ' + (d > 0 ? 'sube' : d < 0 ? 'baja' : '') + '">' + (m.pre ? (d > 0 ? '+' : '') + v : v) + '</td></tr>';
+          }));
+          const tblAnual = D.serieAnual.length > 1 ? filas(D.serieAnual.map((s,i) => {
+            const pr = i ? D.serieAnual[i-1].n : null, d = pr === null ? null : s.n - pr;
+            return '<tr><td>' + s.anio + '</td><td class="n">' + fmt(s.n) + '</td><td class="n">' +
+              (d === null ? '—' : (d > 0 ? '+' : '') + fmt(d)) + '</td><td class="n ' + (d > 0 ? 'sube' : d < 0 ? 'baja' : '') + '">' +
+              (pr ? (d > 0 ? '+' : '') + (d/pr*100).toFixed(1) + '%' : '—') + '</td></tr>';
+          })) : '';
+
+          const html = '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+          '<title>' + slug + '</title>' +
+          '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>' +
+          '<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">' +
+          '<style>' +
+          '*{box-sizing:border-box;margin:0;padding:0}' +
+          'body{font-family:Georgia,"Times New Roman",serif;color:#12161f;background:#e9ecf2;line-height:1.5}' +
+          '.hoja{width:216mm;min-height:279mm;margin:18px auto;background:#fff;padding:16mm 15mm 14mm;box-shadow:0 6px 26px rgba(0,0,0,.16)}' +
+          '.masthead{display:flex;align-items:center;gap:14px;border-bottom:4px solid #1F3A7F;padding-bottom:10px}' +
+          '.masthead img{height:46px}' +
+          '.masthead .mt{font-family:Poppins,sans-serif}' +
+          '.masthead .mt b{display:block;font-size:1.32rem;font-weight:800;color:#1F3A7F;letter-spacing:-.02em;line-height:1.1}' +
+          '.masthead .mt span{font-size:.63rem;letter-spacing:.16em;text-transform:uppercase;color:#5b6577}' +
+          '.barra{display:flex;border:1px solid #12161f;border-top:0;font-family:Poppins,sans-serif;font-size:.72rem}' +
+          '.barra div{padding:5px 10px;border-right:1px solid #12161f;flex:1}' +
+          '.barra div:last-child{border-right:0;text-align:right}' +
+          '.barra b{font-weight:700}' +
+          'h1{font-family:Poppins,sans-serif;font-size:3.05rem;font-weight:800;line-height:.95;letter-spacing:-.035em;margin:20px 0 8px}' +
+          '.kicker{font-family:Poppins,sans-serif;font-size:.86rem;font-weight:700;color:#E2620F;letter-spacing:.04em;margin-bottom:16px}' +
+          '.top{display:flex;gap:16px;margin-bottom:16px}' +
+          '.sumario{width:31%;font-family:Poppins,sans-serif;font-size:1.02rem;line-height:1.32;color:#8d96a6;text-align:right;font-weight:600}' +
+          '.sumario b{color:#12161f;font-weight:800}' +
+          '.foto{flex:1}' +
+          '.foto img{width:100%;border:1px solid #d7dce5}' +
+          '.pie{font-size:.74rem;font-family:Poppins,sans-serif;color:#3b4354;margin-top:6px;line-height:1.45}' +
+          '.pie b{color:#12161f}' +
+          '.autor{font-family:Poppins,sans-serif;font-size:.72rem;font-weight:700;color:#fff;background:#E2620F;display:inline-block;padding:2px 9px;letter-spacing:.05em}' +
+          '.plaza{font-family:Poppins,sans-serif;font-size:.72rem;font-weight:700;border-bottom:2px solid #12161f;display:block;padding:2px 0 3px;margin-bottom:9px}' +
+          '.cuerpo{column-count:3;column-gap:16px;text-align:justify;hyphens:auto;font-size:.845rem}' +
+          '.cuerpo p{margin-bottom:8px}' +
+          '.cuerpo p.lead::first-letter{float:left;font-family:Poppins,sans-serif;font-size:3.45em;line-height:.8;font-weight:800;color:#E2620F;margin:3px 6px 0 0}' +
+          'h2.sub{font-family:Poppins,sans-serif;font-size:.95rem;font-weight:800;color:#E2620F;text-transform:uppercase;line-height:1.12;margin:12px 0 6px;break-after:avoid}' +
+          '.anexo{break-before:page;page-break-before:always;padding-top:6mm}' +
+          '.anexo h2{font-family:Poppins,sans-serif;font-size:1.15rem;color:#1F3A7F;border-bottom:2px solid #1F3A7F;padding-bottom:5px;margin-bottom:12px}' +
+          '.bloque{margin-bottom:20px;break-inside:avoid}' +
+          '.bloque h3{font-family:Poppins,sans-serif;font-size:.92rem;color:#12161f;margin-bottom:7px}' +
+          '.bloque img{width:100%;border:1px solid #e2e6ee}' +
+          'table{width:100%;border-collapse:collapse;font-family:Poppins,sans-serif;font-size:.76rem;margin-top:8px}' +
+          'th{background:#1F3A7F;color:#fff;text-align:left;padding:6px 8px;font-weight:600;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em}' +
+          'td{padding:5px 8px;border-bottom:1px solid #eceff5}' +
+          'td.n{text-align:right;font-variant-numeric:tabular-nums}' +
+          'td.sube{color:#c0392b;font-weight:600} td.baja{color:#2E7D32;font-weight:600}' +
+          'td.vacio{text-align:center;color:#8d96a6}' +
+          '.metodo{margin-top:16px;border-top:1px solid #d7dce5;padding-top:10px;font-family:Poppins,sans-serif;font-size:.7rem;color:#4A5568;line-height:1.6}' +
+          '.metodo b{color:#12161f}' +
+          '.tools{position:fixed;top:12px;right:14px;display:flex;gap:8px;z-index:9}' +
+          '.tools button{font-family:Poppins,sans-serif;font-size:.78rem;font-weight:600;padding:9px 16px;border-radius:99px;border:0;background:#1F3A7F;color:#fff;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.2)}' +
+          '@media print{body{background:#fff}.hoja{box-shadow:none;margin:0;width:auto;min-height:0;padding:0}.tools{display:none}@page{size:Letter;margin:12mm}}' +
+          '</style></head><body>' +
+          '<div class="tools"><button onclick="window.print()">Imprimir / Guardar como PDF</button></div>' +
+          '<div class="hoja">' +
+            '<div class="masthead"><img src="https://arjona87.github.io/TODOS/CGES_logo.png" alt="CGES">' +
+              '<div class="mt"><b>Reporte de Personas Desaparecidas</b>' +
+              '<span>Coordinación General Estratégica de Seguridad · Gobierno de Jalisco</span></div></div>' +
+            '<div class="barra"><div><b>Fecha:</b> ' + fechaLarga + '</div><div><b>Fuente:</b> REPD · COBUPEJ</div>' +
+              '<div><b>Corte:</b> ' + (CUT_TEXT || '—') + '</div></div>' +
+            '<h1>Desapariciones, en ' + fmt(D.nMuni) + ' municipios</h1>' +
+            '<div class="kicker">' + tituloPeriodo + '</div>' +
+            '<div class="top">' +
+              '<div class="sumario">En el periodo se registraron <b>' + fmt(D.base) + '</b> casos, de los que <b>' + fmt(D.faltan) +
+                '</b> corresponden a personas que faltan por localizar, según datos del REPD</div>' +
+              '<div class="foto"><img src="' + G.top10 + '" alt="Municipios con más casos">' +
+                '<div class="pie"><b>CONCENTRACIÓN TERRITORIAL.</b> Municipios con mayor número de casos en el periodo. ' +
+                'Jalisco suma, al corte del ' + (CUT_TEXT || '—') + ', un total de ' + fmt(D.stockTotal) + ' personas desaparecidas.</div></div>' +
+            '</div>' +
+            '<span class="autor">CGES · DGAPP</span>' +
+            '<span class="plaza">GUADALAJARA</span>' +
+            '<div class="cuerpo">' +
+              T.p.map((t,i) => '<p' + (i === 0 ? ' class="lead"' : '') + '>' + t + '</p>').join('') +
+              '<h2 class="sub">Cero localizaciones en el periodo</h2>' +
+              T.cero.map(t => '<p>' + t + '</p>').join('') +
+              '<h2 class="sub">Evolución del registro</h2>' +
+              T.ev.map(t => '<p>' + t + '</p>').join('') +
+            '</div>' +
+            '<div class="metodo"><b>Nota metodológica.</b> Todas las cifras se calcularon en vivo sobre la versión pública del ' +
+              'Registro Estatal de Personas Desaparecidas (' + fmt(ROWS.length) + ' registros, corte del ' + (CUT_TEXT || '—') + '). ' +
+              'Criterio de conteo aplicado: <b>' + T.campo + '</b>. Ventana: ' + largo(D.A) + ' a ' + largo(D.B) + ' (' + D.nMeses + ' meses, ' + fmt(D.nDias) + ' días). ' +
+              'El conteo de municipios <b>excluye</b> los registros con municipio <code>SE IGNORA</code> (' + fmt(D.ignora.n) + ' en el periodo), ' +
+              'criterio con el que se replican las cifras difundidas públicamente. «Localizadas dentro del periodo» exige que la fecha de ' +
+              'localización caiga en la misma ventana, no solo que el estatus sea de persona localizada. El saldo de cortes anteriores no es ' +
+              'calculable desde la descarga pública: se toma de la serie documentada en el propio tablero. Documento generado automáticamente ' +
+              'el ' + fechaLarga + ' a las ' + pad2(hoy.getHours()) + ':' + pad2(hoy.getMinutes()) + ' h. No sustituye a la fuente oficial.</div>' +
+          '</div>' +
+          '<div class="hoja anexo">' +
+            '<h2>Anexo estadístico · ' + largo(D.A) + ' a ' + largo(D.B) + '</h2>' +
+            '<div class="bloque"><h3>Situación de los casos del periodo</h3><img src="' + G.comp + '" alt="Situación de los casos"></div>' +
+            '<div class="bloque"><h3>Municipios con mayor número de casos</h3>' +
+              '<table><thead><tr><th>#</th><th>Municipio</th><th style="text-align:right">Casos</th>' +
+              '<th style="text-align:right">Localizadas</th><th style="text-align:right">Continúan desaparecidas</th>' +
+              '<th style="text-align:right">% localización</th></tr></thead><tbody>' + tblTop + '</tbody></table></div>' +
+            '<div class="bloque"><h3>Municipios sin ninguna localización en el periodo</h3>' +
+              '<table><thead><tr><th>Municipio</th><th style="text-align:right">Continúan desaparecidas</th>' +
+              '<th style="text-align:right">Casos</th></tr></thead><tbody>' + tblSin + '</tbody></table></div>' +
+            '<div class="bloque"><h3>Comportamiento mensual contra el mismo mes del año anterior</h3>' +
+              '<img src="' + G.mensual + '" alt="Serie mensual">' +
+              '<table><thead><tr><th>Mes</th><th style="text-align:right">Periodo</th><th style="text-align:right">Año anterior</th>' +
+              '<th style="text-align:right">Diferencia</th><th style="text-align:right">Variación</th></tr></thead><tbody>' + tblMes + '</tbody></table></div>' +
+            (G.anual ? '<div class="bloque"><h3>Mismo periodo en años anteriores</h3><img src="' + G.anual + '" alt="Serie anual">' +
+              '<table><thead><tr><th>Año</th><th style="text-align:right">Casos</th><th style="text-align:right">Diferencia</th>' +
+              '<th style="text-align:right">Variación</th></tr></thead><tbody>' + tblAnual + '</tbody></table></div>' : '') +
+          '</div></body></html>';
+
+          const w = window.open('', '_blank');
+          if (!w){
+            AD('err-box').innerHTML =
+              '<div class="Audit-Desap-err"><b>El navegador bloqueó la ventana emergente.</b><br>' +
+              'Permite las ventanas emergentes para este sitio y vuelve a pulsar «Descargar reporte».</div>';
+            return;
+          }
+          w.document.open(); w.document.write(html); w.document.close();
+        }
+
+        /* =======================================================================
+           RENDER
+           ======================================================================= */
+        function render(){
+          leeTema();
+          AD('cut-date').textContent = CUT_TEXT || '—';
+          AD('rec-count').textContent = fmt(ROWS.length);
+
+          initFiltro();
+          renderExplorador();
+          renderFijas();
+        }
+
+        /* Gráficas que replican al sitio oficial. Separadas de render() para que el
+           cambio de tema las redibuje sin volver a ligar oyentes ni a leer el Sheet. */
+        function renderFijas(){
+
+          const DES = ROWS.filter(esDesaparecida);
+          const LOC = ROWS.filter(r => esLocalizada(r) && locDesdeDic18(r));
+          const CIE = ROWS.filter(esCierre);
+
+          /* ---------- KPIs ---------- */
+          const locM = LOC.filter(r => r.sexo === 'MUJER').length;
+          const locH = LOC.filter(r => r.sexo === 'HOMBRE').length;
+          const desM = DES.filter(r => r.sexo === 'MUJER').length;
+          const desH = DES.filter(r => r.sexo === 'HOMBRE').length;
+          const conCI = DES.filter(r => r.carpeta === 'SÍ' || r.carpeta === 'SI').length;
+          const sinCI = DES.filter(r => r.carpeta === 'NO').length;
+
+          AD('kpi-loc').innerHTML = `
+            ${kpi('Personas localizadas desde el 1 de diciembre de 2018', fmt(LOC.length), 'Localización confirmada por la autoridad')}
+            ${kpi('Mujeres localizadas', fmt(locM), pctTxt(locM, LOC.length) + ' del total localizado')}
+            ${kpi('Hombres localizados', fmt(locH), pctTxt(locH, LOC.length) + ' del total localizado')}`;
+          AD('kpi-des').innerHTML = `
+            ${kpi('Personas desaparecidas', fmt(DES.length), 'Estatus vigente a la fecha de corte', true)}
+            ${kpi('Con carpeta de investigación', fmt(conCI), pctTxt(conCI, DES.length) + ' de las desaparecidas', true)}
+            ${kpi('Sin carpeta de investigación', fmt(sinCI), pctTxt(sinCI, DES.length) + ' de las desaparecidas', true)}
+            ${kpi('Mujeres / Hombres desaparecidos', fmt(desM) + ' / ' + fmt(desH), 'Desagregación por sexo', true)}`;
+
+          /* ---------- Resumen: condición × sexo ---------- */
+          const sexos = ['MUJER','HOMBRE'];
+          ROWS.forEach(r => { if (r.sexo && !sexos.includes(r.sexo)) sexos.push(r.sexo); });
+          mkChart('c-resumen', {
+            type:'bar',
+            data:{ labels:['Con vida','Sin vida'],
+              datasets: sexos.map((s,i) => ({
+                label: s.charAt(0) + s.slice(1).toLowerCase(),
+                data: ['CON VIDA','SIN VIDA'].map(c => LOC.filter(r => r.condLoc === c && r.sexo === s).length),
+                backgroundColor: [C.salmon, C.teal, C.gold, C.grey][i % 4], borderRadius:5, maxBarThickness:74
+              })) },
+            options: barOpts(false,false,false)
+          });
+          auditPanel('a-resumen',{
+            cols:['ESTATUS','FECHA DE LOCALIZACION','CONDICION LOCALIZACION','SEXO'],
+            filtro:'<code>ESTATUS = "PERSONA LOCALIZADA"</code> &nbsp;Y&nbsp; la <code>FECHA DE LOCALIZACION</code> es diciembre de 2018 o posterior.',
+            pasos:[
+              'Filtra la columna <b>ESTATUS</b> dejando solo <code>PERSONA LOCALIZADA</code>.',
+              'La <b>FECHA DE LOCALIZACION</b> viene como texto <code>MM/AAAA</code>. Crea una columna auxiliar que extraiga el año: <code>=VALOR(DERECHA(J2,4))</code> y otra con el mes: <code>=VALOR(IZQUIERDA(J2,2))</code>.',
+              'Conserva únicamente las filas donde <b>año &gt; 2018</b>, o bien <b>año = 2018 y mes = 12</b>. Ese es el punto de partida del 1 de diciembre de 2018.',
+              'Cuenta las filas cruzando <b>CONDICION LOCALIZACION</b> (Con vida / Sin vida) contra <b>SEXO</b>. Una tabla dinámica lo resuelve directamente.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(Estatus,"PERSONA LOCALIZADA",\n                      Condicion,"CON VIDA",\n                      Sexo,"MUJER",\n                      AnioLoc,"&gt;2018")\n\n\' Sumar aparte los localizados en 12/2018:\n=CONTAR.SI.CONJUNTO(Estatus,"PERSONA LOCALIZADA",Condicion,"CON VIDA",\n                      Sexo,"MUJER",AnioLoc,2018,MesLoc,12)',
+            check:`La suma de las cuatro barras debe dar exactamente <b>${fmt(LOC.length)}</b>, el mismo total que la tarjeta «Personas localizadas desde el 1 de diciembre de 2018».`
+          });
+
+          /* ---------- Carpeta de investigación ---------- */
+          mkChart('c-carpeta',{
+            type:'bar',
+            data:{ labels:['Con carpeta de investigación','Sin carpeta de investigación'],
+              datasets:[{ label:'Personas desaparecidas', data:[conCI,sinCI],
+                backgroundColor:[C.teal,C.salmon], borderRadius:5, maxBarThickness:44 }] },
+            options: barOpts(false,true,false)
+          });
+          auditPanel('a-carpeta',{
+            cols:['ESTATUS','CARPETA DE INVESTIGACIÓN'],
+            filtro:'<code>ESTATUS = "PERSONA DESAPARECIDA"</code>, separando por el valor de <code>CARPETA DE INVESTIGACIÓN</code> (Sí / NO).',
+            pasos:[
+              'Filtra <b>ESTATUS</b> dejando solo <code>PERSONA DESAPARECIDA</code>. No incluyas las localizadas ni las de estatus <code>CIERRE</code>.',
+              'Cuenta cuántas de esas filas tienen <b>CARPETA DE INVESTIGACIÓN = "Sí"</b> → barra superior.',
+              'Cuenta cuántas tienen <b>CARPETA DE INVESTIGACIÓN = "NO"</b> → barra inferior.',
+              'Cuidado con el acento: el valor en la base es <code>Sí</code> con tilde. Si tu fórmula devuelve cero, es casi siempre por esto.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",Carpeta,"Sí")\n=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",Carpeta,"NO")',
+            check:`Las dos barras deben sumar el total de personas desaparecidas: ${fmt(conCI)} + ${fmt(sinCI)} = <b>${fmt(DES.length)}</b>.`
+          });
+
+          /* ---------- Desaparecidas por año y sexo ---------- */
+          const desAnioM = YEARS.map(y => DES.filter(r => r.fDes && r.fDes.y === y && r.sexo === 'MUJER').length);
+          const desAnioH = YEARS.map(y => DES.filter(r => r.fDes && r.fDes.y === y && r.sexo === 'HOMBRE').length);
+          mkChart('c-anio-sexo',{
+            type:'bar',
+            data:{ labels:YEARS, datasets:[
+              { label:'Mujeres', data:desAnioM, backgroundColor:C.salmon, borderRadius:4 },
+              { label:'Hombres', data:desAnioH, backgroundColor:C.teal,   borderRadius:4 }] },
+            options: barOpts(true,true,false)
+          });
+          const pre19  = DES.filter(r => r.fDes && r.fDes.y <= 2018);
+          const pre19M = pre19.filter(r => r.sexo === 'MUJER').length;
+          const pre19H = pre19.filter(r => r.sexo === 'HOMBRE').length;
+          AD('n-anio-sexo').innerHTML =
+            `En la gráfica se muestran sólo los datos de desapariciones ocurridas a partir del 1 de enero de 2019.
+             Se tiene registro de <b>${fmt(pre19.length)}</b> personas que continúan desaparecidas cuya desaparición ocurrió antes de esa fecha:
+             <b>${fmt(pre19M)}</b> mujeres y <b>${fmt(pre19H)}</b> hombres.`;
+          auditPanel('a-anio-sexo',{
+            cols:['ESTATUS','FECHA DESAPARICION','SEXO'],
+            filtro:'<code>ESTATUS = "PERSONA DESAPARECIDA"</code> &nbsp;Y&nbsp; el año de <code>FECHA DESAPARICION</code> entre 2019 y 2026.',
+            pasos:[
+              'Filtra <b>ESTATUS</b> dejando solo <code>PERSONA DESAPARECIDA</code>. Esta gráfica mide el <b>saldo pendiente</b>, no la incidencia: cuenta a quienes siguen sin ser localizadas.',
+              'Extrae el año de <b>FECHA DESAPARICION</b> (texto <code>MM/AAAA</code>) con <code>=VALOR(DERECHA(F2,4))</code>.',
+              'Para cada año de 2019 a 2026, cuenta las filas con <b>SEXO = "MUJER"</b> → segmento rosa de la barra.',
+              'Repite con <b>SEXO = "HOMBRE"</b> → segmento verde. La barra completa es la suma de ambos.',
+              'Todo lo que tenga año de desaparición ≤ 2018 queda fuera de la gráfica y se reporta en la nota al pie.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",\n                      AnioDesap,2026,\n                      Sexo,"MUJER")',
+            check:`Suma todas las barras (2019–2026) y agrégale las ${fmt(pre19.length)} personas de la nota al pie: el resultado debe ser <b>${fmt(DES.length)}</b>, el total de personas desaparecidas.`
+          });
+
+          /* ---------- Incidencia enero–agosto ---------- */
+          // VERIFICADO: el sitio oficial INCLUYE los registros con estatus CIERRE en la incidencia.
+          const incM = YEARS.map(y => ROWS.filter(r => incidenciaEneJul(r,y) && r.sexo === 'MUJER').length);
+          const incH = YEARS.map(y => ROWS.filter(r => incidenciaEneJul(r,y) && r.sexo === 'HOMBRE').length);
+          mkChart('c-enejul',{
+            type:'bar',
+            data:{ labels:YEARS, datasets:[
+              { label:'Mujeres', data:incM, backgroundColor:C.salmon, borderRadius:4 },
+              { label:'Hombres', data:incH, backgroundColor:C.teal,   borderRadius:4 }] },
+            options: barOpts(true,true,false)
+          });
+          const preInc  = ROWS.filter(r => r.fDes && r.fRep && r.fDes.y <= 2018 && r.fDes.m <= CUT_MONTH && r.fRep.y === r.fDes.y && r.fRep.m <= CUT_MONTH);
+          AD('n-enejul').innerHTML =
+            `Se muestran sólo las desapariciones <b>ocurridas y reportadas</b> del 1 de enero al 31 de agosto de cada año.
+             Con ese mismo criterio, antes de 2019 se tiene registro de <b>${fmt(preInc.length)}</b> desapariciones
+             (<b>${fmt(preInc.filter(r=>r.sexo==='MUJER').length)}</b> mujeres y <b>${fmt(preInc.filter(r=>r.sexo==='HOMBRE').length)}</b> hombres),
+             contabilizadas con el mismo criterio de la serie, que incluye los registros con estatus «CIERRE».`;
+          auditPanel('a-enejul',{
+            cols:['ESTATUS','FECHA DESAPARICION','FECHA REPORTE','SEXO'],
+            filtro:'Mes de <code>FECHA DESAPARICION</code> ≤ 8 &nbsp;Y&nbsp; mes de <code>FECHA REPORTE</code> ≤ 8 &nbsp;Y&nbsp; ambos años iguales al año analizado. <b>Sin filtro de estatus.</b>',
+            pasos:[
+              'Crea cuatro columnas auxiliares: mes y año de <b>FECHA DESAPARICION</b>, y mes y año de <b>FECHA REPORTE</b>. Ejemplo: <code>=VALOR(IZQUIERDA(F2,2))</code> y <code>=VALOR(DERECHA(F2,4))</code>.',
+              'Filtra: <b>mes de desaparición entre 1 y 8</b>. Esto define la ventana enero–agosto.',
+              'Filtra además: <b>mes de reporte entre 1 y 8</b> y <b>año de reporte = año de desaparición</b>. Es la doble condición «ocurridas <i>y</i> reportadas» del criterio oficial.',
+              '<b>No apliques ningún filtro de estatus.</b> La serie oficial cuenta los tres estatus, incluidos los registros con <code>CIERRE</code>: mide desapariciones ocurridas y reportadas en la ventana, no casos vigentes.',
+              'Cuenta por año y por sexo.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(AnioDesap,2026, MesDesap,"&lt;=8",\n                      AnioRep,2026,   MesRep,"&lt;=8",\n                      Sexo,"MUJER")',
+            check:`Para 2026 el total (mujeres + hombres) debe dar <b>${fmt(incM[7]+incH[7])}</b>, la cifra de incidencia enero–agosto que reportan los boletines oficiales.`,
+            flag:'Excluir los registros con estatus «CIERRE» parece razonable —el glosario los describe como registros cerrados por duplicidad o falta de competencia— y además reproduce la cifra del boletín de prensa. Pero <b>no</b> reproduce la del sitio oficial, que es la fuente a la que se alinea este tablero. Se verificó por dos vías independientes: la ventana enero–agosto de 2026 y la nota al pie de las desapariciones previas a 2019.'
+          });
+
+          /* ---------- No disponible: violencia ---------- */
+          auditPanel('a-violencia',{
+            cols:['— ninguna columna disponible —'],
+            filtro:'No aplicable. La variable requerida no está publicada en la descarga abierta.',
+            pasos:[
+              'Abre la pestaña de origen del Sheet (<code>gid ' + SHEET_GID + '</code>) y revisa los encabezados de la fila 13: son 18 columnas, de la A a la R.',
+              'Ninguna de ellas contiene el atributo <i>violencia / sin violencia</i>. Las columnas de clasificación disponibles son <b>CONDICION LOCALIZACION</b> (con vida / sin vida) y <b>CLASIFICACION LOCALIZACION</b> (víctima o no de delito), y <b>ambas aplican únicamente a personas ya localizadas</b>.',
+              'La gráfica oficial se construye sobre las carpetas de investigación de la Vicefiscalía en Personas Desaparecidas, un insumo interno que no forma parte del archivo público.',
+              'Conclusión auditable: el dato no es derivable de esta fuente. Para reproducirlo haría falta solicitar la variable a la VFPD por transparencia o convenio de intercambio de información.'
+            ],
+            formula:'\' No existe fórmula posible: la columna origen no está en el archivo.\n\' Cualquier estimación sería una imputación, no una réplica.',
+            flag:'Se deja el espacio de la gráfica visible y declarado como faltante, en lugar de omitirlo en silencio o de rellenarlo con una aproximación. Como referencia documental, el sitio oficial indica que hasta el 31 de diciembre de 2018 se tenía registro de 94 mujeres desaparecidas con violencia, 432 mujeres sin violencia, 1,173 hombres con violencia y 4,150 hombres sin violencia.'
+          });
+
+          /* ---------- Rango de edad ---------- */
+          ['MUJER','HOMBRE'].forEach(sexo => {
+            const key = sexo === 'MUJER' ? 'm' : 'h';
+            const ds = AGE_GROUPS.map((g,i) => ({
+              label:g, backgroundColor:AGE_COLORS[i], borderRadius:3,
+              data: YEARS.map(y => DES.filter(r => r.sexo === sexo && r.fDes && r.fDes.y === y && grupoEdad(r.rango) === g).length)
+            }));
+            mkChart('c-edad-' + key, { type:'bar', data:{ labels:YEARS, datasets:ds }, options: barOpts(true,true,false) });
+
+            const pre = DES.filter(r => r.sexo === sexo && r.fDes && r.fDes.y <= 2018);
+            const det = AGE_GROUPS.map(g => `${g}: <b>${fmt(pre.filter(r => grupoEdad(r.rango) === g).length)}</b>`).join(' · ');
+            AD('n-edad-' + key).innerHTML =
+              `Se muestran sólo ${sexo === 'MUJER' ? 'las mujeres' : 'los hombres'} cuya desaparición ocurrió a partir del 1 de enero de 2019.
+               ${sexo === 'MUJER' ? 'Las mujeres desaparecidas' : 'Los hombres desaparecidos'} hasta el 31 de diciembre de 2018
+               (<b>${fmt(pre.length)}</b>) se ubican en los siguientes rangos: ${det}.`;
+
+            auditPanel('a-edad-' + key,{
+              cols:['ESTATUS','SEXO','FECHA DESAPARICION','RANGO DE EDAD'],
+              filtro:`<code>ESTATUS = "PERSONA DESAPARECIDA"</code> &nbsp;Y&nbsp; <code>SEXO = "${sexo}"</code> &nbsp;Y&nbsp; año de desaparición entre 2019 y 2026.`,
+              pasos:[
+                `Filtra <b>ESTATUS = "PERSONA DESAPARECIDA"</b> y <b>SEXO = "${sexo}"</b>.`,
+                'Extrae el año de <b>FECHA DESAPARICION</b> y quédate con 2019 a 2026.',
+                'La columna <b>RANGO DE EDAD</b> viene en tramos quinquenales (0-4, 5-9, 10-14, 15-19, 20-24…). Debes reagruparlos en los seis tramos de la gráfica con una columna auxiliar.',
+                'Reagrupación: <b>0-14</b> = 0-4 + 5-9 + 10-14 · <b>15-19</b> = tal cual · <b>20-29</b> = 20-24 + 25-29 · <b>30-39</b> = 30-34 + 35-39 · <b>40-49</b> = 40-44 + 45-49 · <b>50+</b> = todos los tramos de 50 en adelante.',
+                'Cuenta por año y por tramo reagrupado.'
+              ],
+              formula:`=SI(O(D2="0-4",D2="5-9",D2="10-14"),"0-14",\n SI(D2="15-19","15-19",\n SI(O(D2="20-24",D2="25-29"),"20-29",\n SI(O(D2="30-34",D2="35-39"),"30-39",\n SI(O(D2="40-44",D2="45-49"),"40-49","50+")))))\n\n=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",Sexo,"${sexo}",\n                      AnioDesap,2026, GrupoEdad,"20-29")`,
+              check:`La suma de los seis tramos en todos los años, más las ${fmt(pre.length)} personas de la nota al pie, debe dar el total de ${sexo === 'MUJER' ? 'mujeres' : 'hombres'} con estatus de persona desaparecida.`,
+              flag:'Los registros cuyo <b>RANGO DE EDAD</b> es <code>SE IGNORA</code> quedan contabilizados dentro del tramo <b>50+</b>. Así lo hace el sitio oficial: verificado porque es la única agrupación que reproduce exactamente sus cifras al pie. Si los separas en una categoría propia, tus totales no coincidirán con los publicados.'
+            });
+          });
+
+          /* ---------- Condición × clasificación ---------- */
+          const CLAS = ['SIN SER VICTIMA DE DELITO','VICTIMA DE DELITO DIVERSO','VICTIMA DE DELITO CONTEMPLADO EN LA LEY GENERAL'];
+          const CLAS_LBL = ['No víctimas de delito','Víctimas de delito diverso','Víctimas de delito contemplado en Ley General'];
+          const CLAS_COL = [C.tealLight, C.gold, C.salmon];
+          function condChart(canvas, filtro){
+            const set = LOC.filter(filtro);
+            mkChart(canvas,{
+              type:'bar',
+              data:{ labels:['Con vida','Sin vida'],
+                datasets: CLAS.map((c,i) => ({
+                  label: CLAS_LBL[i], backgroundColor: CLAS_COL[i], borderRadius:4, maxBarThickness:46,
+                  data: ['CON VIDA','SIN VIDA'].map(cd => set.filter(r => r.condLoc === cd && r.clasLoc === c).length)
+                })) },
+              options: barOpts(true,true,false)
+            });
+            return set.length;
+          }
+          const nAll = condChart('c-cond-todas', () => true);
+          const nMuj = condChart('c-cond-m', r => r.sexo === 'MUJER');
+          const nHom = condChart('c-cond-h', r => r.sexo === 'HOMBRE');
+
+          [['a-cond','todas las personas localizadas',null,nAll],
+           ['a-cond-m','las mujeres localizadas','MUJER',nMuj],
+           ['a-cond-h','los hombres localizados','HOMBRE',nHom]].forEach(([id,desc,sexo,total]) => {
+            auditPanel(id,{
+              cols:['ESTATUS','FECHA DE LOCALIZACION','CONDICION LOCALIZACION','CLASIFICACION LOCALIZACION'].concat(sexo ? ['SEXO'] : []),
+              filtro:`<code>ESTATUS = "PERSONA LOCALIZADA"</code> &nbsp;Y&nbsp; localización desde diciembre de 2018${sexo ? ` &nbsp;Y&nbsp; <code>SEXO = "${sexo}"</code>` : ''}.`,
+              pasos:[
+                'Filtra <b>ESTATUS = "PERSONA LOCALIZADA"</b>.',
+                'Con las columnas auxiliares de año y mes de <b>FECHA DE LOCALIZACION</b>, conserva año &gt; 2018 o bien año = 2018 con mes = 12.',
+                sexo ? `Filtra <b>SEXO = "${sexo}"</b>.` : 'No apliques filtro de sexo: esta gráfica es del total.',
+                'Cruza <b>CONDICION LOCALIZACION</b> (dos categorías: CON VIDA / SIN VIDA) contra <b>CLASIFICACION LOCALIZACION</b> (tres categorías).',
+                'Resultan seis combinaciones posibles, que son los seis segmentos de las dos barras apiladas.'
+              ],
+              formula:`=CONTAR.SI.CONJUNTO(Estatus,"PERSONA LOCALIZADA",\n                      Condicion,"CON VIDA",\n                      Clasificacion,"SIN SER VICTIMA DE DELITO",${sexo ? `\n                      Sexo,"${sexo}",` : ''}\n                      AnioLoc,"&gt;2018")`,
+              check:`Los seis segmentos deben sumar <b>${fmt(total)}</b>.`
+            });
+          });
+
+          /* ---------- Porcentaje de localización ---------- */
+          function pctSerie(anual){
+            return YEARS.map(y => {
+              // VERIFICADO contra el sitio: la cohorte del denominador INCLUYE los registros con estatus CIERRE.
+              const den = ROWS.filter(r => anual ? incidenciaAnual(r,y) : incidenciaEneJul(r,y));
+              const num = den.filter(r => r.fLoc && r.fLoc.y === y && (anual ? true : r.fLoc.m <= CUT_MONTH)).length;
+              return den.length ? +(num / den.length * 100).toFixed(2) : 0;
+            });
+          }
+          const serieAnual  = pctSerie(true);
+          const serieEneJul = pctSerie(false);
+
+          function pctChart(canvas, serie){
+            mkChart(canvas,{
+              type:'bar',
+              data:{ labels:YEARS, datasets:[{ label:'Porcentaje de localización', data:serie,
+                backgroundColor: YEARS.map((y,i) => i === YEARS.length - 1 ? C.blue : C.teal), borderRadius:4, maxBarThickness:34 }] },
+              options: barOpts(false,true,true)
+            });
+          }
+          pctChart('c-pct-anual', serieAnual);
+          pctChart('c-pct-enejul', serieEneJul);
+
+          auditPanel('a-pct-anual',{
+            cols:['ESTATUS','FECHA DESAPARICION','FECHA REPORTE','FECHA DE LOCALIZACION'],
+            filtro:'Año de desaparición = año de reporte = año analizado, <b>sin filtro de estatus</b>. El numerador exige además que la localización haya ocurrido en ese mismo año.',
+            pasos:[
+              '<b>Denominador.</b> Cuenta las filas donde el <b>año de FECHA DESAPARICION</b> y el <b>año de FECHA REPORTE</b> son ambos el año que estás calculando. Es la cohorte de personas que desaparecieron y fueron reportadas dentro de ese año calendario.',
+              'No excluyas ningún estatus del denominador: los registros con <b>CIERRE</b> forman parte de la cohorte, tal como los contabiliza el sitio oficial.',
+              '<b>Numerador.</b> De esa misma cohorte, cuenta cuántas tienen <b>año de FECHA DE LOCALIZACION</b> igual a ese año. Es decir: fueron localizadas dentro del mismo año en que desaparecieron.',
+              'Divide numerador entre denominador y multiplica por 100.',
+              'Importante: el numerador <b>no</b> es simplemente «ESTATUS = PERSONA LOCALIZADA». Una persona desaparecida en 2019 y localizada en 2024 cuenta en el denominador de 2019 pero <b>no</b> en su numerador.'
+            ],
+            formula:'\' Numerador\n=CONTAR.SI.CONJUNTO(AnioDesap,2025, AnioRep,2025, AnioLoc,2025)\n\n\' Denominador\n=CONTAR.SI.CONJUNTO(AnioDesap,2025, AnioRep,2025)\n\n\' Porcentaje\n= Numerador / Denominador * 100',
+            flag:'El año en curso siempre aparece más bajo de lo que terminará siendo: sólo ha transcurrido una parte del año para que ocurran localizaciones. Por eso la comparación válida entre años es la gráfica siguiente, con ventana fija enero–agosto.'
+          });
+
+          auditPanel('a-pct-enejul',{
+            cols:['ESTATUS','FECHA DESAPARICION','FECHA REPORTE','FECHA DE LOCALIZACION'],
+            filtro:'Desaparición y reporte dentro de enero–agosto del año analizado, <b>sin filtro de estatus</b>. El numerador exige además localización dentro de esa misma ventana enero–agosto.',
+            pasos:[
+              '<b>Denominador.</b> Filtra: mes de desaparición ≤ 8, año de desaparición = año analizado, mes de reporte ≤ 8 y año de reporte = año analizado. Cuenta las filas, <b>sin excluir ningún estatus</b>.',
+              '<b>Numerador.</b> Sobre esas mismas filas, cuenta cuántas tienen <b>mes de FECHA DE LOCALIZACION ≤ 8</b> y <b>año de localización = año analizado</b>.',
+              'Divide numerador entre denominador y multiplica por 100.',
+              'Esta es la ventana que hace comparables los años entre sí: siempre son ocho meses de exposición al riesgo y ocho meses de oportunidad de localización.'
+            ],
+            formula:'\' Numerador\n=CONTAR.SI.CONJUNTO(AnioDesap,2026, MesDesap,"&lt;=8",\n                      AnioRep,2026,   MesRep,"&lt;=8",\n                      AnioLoc,2026,   MesLoc,"&lt;=8")\n\n\' Denominador\n=CONTAR.SI.CONJUNTO(AnioDesap,2026, MesDesap,"&lt;=8",\n                      AnioRep,2026,   MesRep,"&lt;=8")\n\n\' Porcentaje\n= Numerador / Denominador * 100',
+            check:`Para 2026 esta fórmula debe dar <b>${serieEneJul[7].toFixed(2)}%</b>, idéntico al dato publicado por el sitio oficial. Si el resultado es 66.98% en lugar de 66.55%, el denominador volvió a excluir los registros con estatus «CIERRE».`,
+            flag:'Las cifras del sitio oficial y las de los boletines de prensa no coinciden para el mismo indicador: para enero–julio de 2026 el boletín publicó 66.8% y el sitio 66.49%. Conviven dos metodologías oficiales. Este tablero se alinea siempre al <b>sitio</b>, por ser la fuente con versión pública descargable y trazable por folio.'
+          });
+
+          /* ---------- Municipios ---------- */
+          const muniMap = {};
+          ROWS.forEach(r => {
+            const m = r.munDes || 'SE IGNORA';
+            if (!muniMap[m]) muniMap[m] = { des:0, loc:0, tot:0 };
+            muniMap[m].tot++;
+            if (esDesaparecida(r)) muniMap[m].des++;
+            if (esLocalizada(r))   muniMap[m].loc++;
+          });
+          const muniArr = Object.entries(muniMap).map(([k,v]) => ({ muni:k, ...v })).sort((a,b) => b.des - a.des);
+          const top15 = muniArr.slice(0,15);
+
+          mkChart('c-muni',{
+            type:'bar',
+            data:{ labels: top15.map(m => capMun(m.muni)),
+              datasets:[{ label:'Personas desaparecidas', data: top15.map(m => m.des),
+                backgroundColor:C.blue, borderRadius:4 }] },
+            options: barOpts(false,true,false)
+          });
+          auditPanel('a-muni',{
+            cols:['ESTATUS','MUNICIPIO DESAPARICION'],
+            filtro:'<code>ESTATUS = "PERSONA DESAPARECIDA"</code>, agrupando por <code>MUNICIPIO DESAPARICION</code>.',
+            pasos:[
+              'Filtra <b>ESTATUS = "PERSONA DESAPARECIDA"</b>.',
+              'Inserta una tabla dinámica con <b>MUNICIPIO DESAPARICION</b> en filas y el conteo de folios en valores.',
+              'Ordena de mayor a menor y conserva los 15 primeros municipios.',
+              'Los registros cuyo municipio es <code>SE IGNORA</code> se conservan como categoría propia: no se eliminan ni se redistribuyen.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(Estatus,"PERSONA DESAPARECIDA",\n                      MunicipioDesap,"ZAPOPAN")',
+            flag:'El municipio corresponde al <b>lugar de la desaparición</b>, no al lugar de residencia de la persona ni al de su localización. Para esto último existe la columna <code>MUNICIPIO LOCALIZACION</code>, que responde a una pregunta distinta.'
+          });
+
+          renderTablaMuni();
+          auditPanel('a-tbl-muni',{
+            cols:['MUNICIPIO DESAPARICION','ESTATUS','FECHA REPORTE','FECHA DESAPARICION','FECHA DE LOCALIZACION'],
+            filtro:'Base activa del <b>filtro de temporalidad</b> del inicio de la página, agrupada por <code>MUNICIPIO DESAPARICION</code>. Con el filtro sin acotar, la tabla recorre el total de registros.',
+            pasos:[
+              'Aplica primero la ventana del filtro sobre el campo de fecha elegido. Si el filtro está en «toda la temporalidad», no hay filtro previo y la tabla es el acumulado histórico.',
+              'Tabla dinámica: <b>MUNICIPIO DESAPARICION</b> en filas y <b>ESTATUS</b> en columnas.',
+              '«Localizadas en el periodo» exige que el índice de <b>FECHA DE LOCALIZACION</b> caiga dentro de la ventana; «localizadas (cualquier fecha)» sólo mira el estatus. Con la ventana completa ambas columnas coinciden.',
+              'El <b>% de localización</b> se calcula como localizadas en el periodo ÷ casos del periodo × 100.',
+              'Este porcentaje no es comparable con el de las gráficas oficiales de porcentaje de localización: aquéllas usan cohortes anuales con doble condición de ocurrencia y reporte.'
+            ],
+            formula:'=CONTAR.SI.CONJUNTO(MunicipioDesap,"GUADALAJARA",\n                      IndiceRep,"&gt;=Inicio", IndiceRep,"&lt;=Fin")\n\n=CONTAR.SI.CONJUNTO(MunicipioDesap,"GUADALAJARA",\n                      IndiceRep,"&gt;=Inicio", IndiceRep,"&lt;=Fin",\n                      IndiceLoc,"&gt;=Inicio", IndiceLoc,"&lt;=Fin")',
+            flag:'Los municipios con pocos casos tienen porcentajes muy volátiles: un registro puede mover el resultado varios puntos. Revisa siempre el absoluto antes de ordenar por porcentaje y sacar conclusiones.'
+          });
+
+          /* ---------- Cobertura ---------- */
+          const cierreTipos = {};
+          CIE.forEach(r => { const t = r.tipoCierre || 'SIN ESPECIFICAR'; cierreTipos[t] = (cierreTipos[t] || 0) + 1; });
+          AD('cobertura').innerHTML = `
+            <h4 class="Audit-Desap-h4">Cobertura y conciliación de la base</h4>
+            <div class="Audit-Desap-cobertura">
+              Registros totales en el Sheet: <b>${fmt(ROWS.length)}</b> &nbsp;=&nbsp;
+              <b>${fmt(DES.length)}</b> con estatus de persona desaparecida &nbsp;+&nbsp;
+              <b>${fmt(ROWS.filter(esLocalizada).length)}</b> con estatus de persona localizada &nbsp;+&nbsp;
+              <b>${fmt(CIE.length)}</b> con estatus de cierre.<br>
+              Desglose de los cierres: ${Object.entries(cierreTipos).sort((a,b) => b[1]-a[1])
+                .map(([k,v]) => `${k.charAt(0)+k.slice(1).toLowerCase()} (<b>${fmt(v)}</b>)`).join(' · ')}.<br>
+              De las ${fmt(ROWS.filter(esLocalizada).length)} personas localizadas, <b>${fmt(LOC.length)}</b> lo fueron a partir del
+              1 de diciembre de 2018; las restantes <b>${fmt(ROWS.filter(esLocalizada).length - LOC.length)}</b> corresponden a
+              localizaciones anteriores a esa fecha y quedan fuera de las gráficas de la sección de personas localizadas.
+            </div>`;
+        }
+
+        function kpi(lbl, val, sub, alt){
+          return `<div class="Audit-Desap-kpi${alt ? ' Audit-Desap-alt' : ''}"><div class="Audit-Desap-lbl">${lbl}</div><div class="Audit-Desap-val">${val}</div><div class="Audit-Desap-sub">${sub}</div></div>`;
+        }
+        function pctTxt(a, b){ return b ? (a / b * 100).toFixed(1) + '%' : '—'; }
+
+
+        /* =======================================================================
+           CSS · nodo propio, se va con el módulo. Todo acotado a #Audit-Desap-vista
+           y resuelto con los tokens del tablero, así el modo oscuro se adapta solo.
+           ======================================================================= */
+        function adEstilos(){
+          if (document.getElementById(P + 'estilos')) return;
+          const s = document.createElement('style');
+          s.id = P + 'estilos';
+          s.textContent = `
+          #Audit-Desap-vista { position:relative; font-family:'Poppins','Inter',sans-serif; min-height:60vh;
+            --Audit-Desap-azul:var(--brand-head); --Audit-Desap-salmon:#C2414B; --Audit-Desap-sube:var(--risk);
+            --Audit-Desap-baja:var(--down); --Audit-Desap-aviso:#9C5700; --Audit-Desap-tope:0px; }
+          html[data-tema="oscuro"] #Audit-Desap-vista { --Audit-Desap-azul:#8FB6EE; --Audit-Desap-salmon:#F08A91;
+            --Audit-Desap-sube:#FF8A7A; --Audit-Desap-baja:#6FD39A; --Audit-Desap-aviso:#F5C77E; }
+          #Audit-Desap-vista h2, #Audit-Desap-vista h3, #Audit-Desap-vista h4 { font-family:'Poppins','Inter',sans-serif; }
+          #Audit-Desap-vista section { scroll-margin-top:calc(var(--Audit-Desap-tope) + 90px); }
+          #Audit-Desap-vista code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.92em;
+            background:var(--chip); color:var(--ink); padding:1px 5px; border-radius:4px; }
+
+          /* ---------- Encabezado de la vista ---------- */
+          #Audit-Desap-vista .Audit-Desap-cab { padding:20px 22px 18px; position:relative; }
+          #Audit-Desap-vista .Audit-Desap-cab::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--accent); }
+          #Audit-Desap-vista .Audit-Desap-titulo { font-size:22px; font-weight:700; letter-spacing:-.01em; color:var(--ink); line-height:1.2; }
+          #Audit-Desap-vista .Audit-Desap-subtitulo { font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase;
+            color:var(--accent); margin-top:4px; }
+          #Audit-Desap-vista .Audit-Desap-lede { font-size:13.5px; color:var(--ink-soft); margin-top:10px; max-width:900px; line-height:1.6; }
+          #Audit-Desap-vista .Audit-Desap-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; align-items:center; }
+          #Audit-Desap-vista .Audit-Desap-corte { display:inline-block; background:var(--chip); color:var(--ink-soft); line-height:1.5;
+            border:1px solid var(--line); padding:6px 13px; border-radius:var(--r-lg,14px); font-size:12.5px; }
+          #Audit-Desap-vista .Audit-Desap-corte b { color:var(--ink); font-weight:600; }
+          #Audit-Desap-vista .Audit-Desap-saltos { display:flex; gap:7px; flex-wrap:wrap; margin-top:14px; }
+          #Audit-Desap-vista .Audit-Desap-salto { font-family:inherit; font-size:12px; font-weight:600; color:var(--ink-soft);
+            background:var(--surface-2); border:1px solid var(--line); padding:6px 13px; border-radius:var(--r-pill,999px); cursor:pointer; }
+          #Audit-Desap-vista .Audit-Desap-salto:hover { border-color:var(--accent); color:var(--ink); }
+
+          /* ---------- Paneles: textos de introducción ---------- */
+          #Audit-Desap-vista .Audit-Desap-intro { font-size:13.5px; color:var(--ink-soft); max-width:900px; margin-bottom:16px; line-height:1.6; }
+          #Audit-Desap-vista .panel-nota { white-space:normal; text-align:right; max-width:46%; }
+
+          /* ---------- KPI ---------- */
+          #Audit-Desap-vista .Audit-Desap-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(215px,100%),1fr)); gap:12px; margin-bottom:12px; }
+          #Audit-Desap-vista .Audit-Desap-kpi { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
+            padding:16px 17px; position:relative; overflow:hidden; }
+          #Audit-Desap-vista .Audit-Desap-kpi::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:var(--Audit-Desap-azul); }
+          #Audit-Desap-vista .Audit-Desap-kpi.Audit-Desap-alt::before { background:var(--Audit-Desap-salmon); }
+          #Audit-Desap-vista .Audit-Desap-lbl { font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--muted);
+            font-weight:700; min-height:30px; line-height:1.4; }
+          #Audit-Desap-vista .Audit-Desap-val { font-size:30px; font-weight:800; color:var(--ink); margin:4px 0 2px; letter-spacing:-.025em;
+            line-height:1.1; font-variant-numeric:tabular-nums; }
+          #Audit-Desap-vista .Audit-Desap-alt .Audit-Desap-val { color:var(--Audit-Desap-salmon); }
+          #Audit-Desap-vista .Audit-Desap-sub { font-size:12px; color:var(--muted); }
+
+          /* ---------- Tarjetas de gráfica ---------- */
+          #Audit-Desap-vista .Audit-Desap-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md);
+            margin-bottom:16px; overflow:hidden; }
+          #Audit-Desap-vista .Audit-Desap-card:last-child { margin-bottom:0; }
+          #Audit-Desap-vista .Audit-Desap-card-head { padding:16px 18px 0; }
+          #Audit-Desap-vista .Audit-Desap-card-head h3 { font-size:14px; font-weight:600; color:var(--ink); line-height:1.35; }
+          #Audit-Desap-vista .Audit-Desap-meta { font-size:12px; color:var(--muted); margin-top:3px; }
+          #Audit-Desap-vista .Audit-Desap-card-body { padding:12px 18px 18px; }
+          #Audit-Desap-vista .Audit-Desap-chart-wrap { position:relative; width:100%; }
+          #Audit-Desap-vista .Audit-Desap-note { font-size:12px; color:var(--ink-soft); background:var(--surface-3); border-left:3px solid var(--line);
+            padding:10px 13px; border-radius:0 var(--r-sm) var(--r-sm) 0; margin-top:14px; line-height:1.55; }
+          #Audit-Desap-vista .Audit-Desap-note b { color:var(--ink); }
+
+          /* ---------- Auditoría ---------- */
+          #Audit-Desap-vista .Audit-Desap-audit-btn { display:inline-flex; align-items:center; gap:8px; margin-top:14px; background:var(--surface);
+            color:var(--Audit-Desap-azul); border:1.5px solid var(--Audit-Desap-azul); border-radius:var(--r-pill,999px); padding:7px 15px;
+            font-family:inherit; font-size:12px; font-weight:600; cursor:pointer; transition:background-color .2s, color .2s; }
+          #Audit-Desap-vista .Audit-Desap-audit-btn:hover { background:var(--Audit-Desap-azul); color:var(--surface); }
+          #Audit-Desap-vista .Audit-Desap-audit-btn .Audit-Desap-chev { transition:transform .25s; font-size:.7rem; }
+          #Audit-Desap-vista .Audit-Desap-audit-btn.Audit-Desap-open .Audit-Desap-chev { transform:rotate(180deg); }
+          #Audit-Desap-vista .Audit-Desap-audit-panel { display:none; margin-top:14px; background:var(--surface-2); border:1px solid var(--line);
+            border-radius:var(--r-md); padding:16px 18px; font-size:13px; color:var(--ink-soft); }
+          #Audit-Desap-vista .Audit-Desap-audit-panel.Audit-Desap-open { display:block; animation:Audit-Desap-fade .25s ease; }
+          @keyframes Audit-Desap-fade { from { opacity:0; transform:translateY(-5px); } to { opacity:1; transform:none; } }
+          #Audit-Desap-vista .Audit-Desap-audit-panel h4 { font-size:10.5px; text-transform:uppercase; letter-spacing:.1em; color:var(--Audit-Desap-azul);
+            margin:14px 0 7px; font-weight:700; }
+          #Audit-Desap-vista .Audit-Desap-audit-panel h4:first-child { margin-top:0; }
+          #Audit-Desap-vista .Audit-Desap-audit-panel ol { margin:0; padding-left:20px; }
+          #Audit-Desap-vista .Audit-Desap-audit-panel ol li { margin-bottom:7px; }
+          #Audit-Desap-vista .Audit-Desap-audit-panel b { color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-suave { color:var(--ink-soft); }
+          #Audit-Desap-vista .Audit-Desap-cols { display:flex; flex-wrap:wrap; gap:6px; }
+          #Audit-Desap-vista .Audit-Desap-col-chip { background:var(--brand-head); color:#fff; padding:3px 10px; border-radius:5px;
+            font-family:ui-monospace,Menlo,Consolas,monospace; font-size:11.5px; font-weight:500; }
+          #Audit-Desap-vista .Audit-Desap-fx { background:#0F2438; color:#B9E4FF; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;
+            padding:12px 14px; border-radius:var(--r-sm); overflow-x:auto; white-space:pre; line-height:1.7; border:1px solid var(--line); }
+          #Audit-Desap-vista .Audit-Desap-chk { background:color-mix(in srgb, var(--Audit-Desap-baja) 11%, transparent);
+            border:1px solid color-mix(in srgb, var(--Audit-Desap-baja) 35%, transparent); color:var(--Audit-Desap-baja);
+            border-radius:var(--r-sm); padding:10px 13px; font-size:12.5px; margin-top:10px; }
+          #Audit-Desap-vista .Audit-Desap-chk b { color:inherit; font-weight:700; }
+          #Audit-Desap-vista .Audit-Desap-flag { background:color-mix(in srgb, var(--Audit-Desap-aviso) 10%, transparent);
+            border:1px solid color-mix(in srgb, var(--Audit-Desap-aviso) 38%, transparent); color:var(--Audit-Desap-aviso);
+            border-radius:var(--r-sm); padding:11px 14px; font-size:12.5px; margin-top:10px; line-height:1.6; }
+          #Audit-Desap-vista .Audit-Desap-flag b { color:inherit; }
+
+          /* ---------- No disponible ---------- */
+          #Audit-Desap-vista .Audit-Desap-unavail { background:color-mix(in srgb, var(--Audit-Desap-aviso) 8%, transparent);
+            border:1px dashed color-mix(in srgb, var(--Audit-Desap-aviso) 55%, transparent); border-radius:var(--r-md); padding:24px 22px;
+            text-align:center; color:var(--Audit-Desap-aviso); }
+          #Audit-Desap-vista .Audit-Desap-unavail .Audit-Desap-ic { font-size:1.6rem; display:block; margin-bottom:8px; }
+          #Audit-Desap-vista .Audit-Desap-unavail h4 { font-size:14px; margin-bottom:7px; color:inherit; }
+          #Audit-Desap-vista .Audit-Desap-unavail p { font-size:12.5px; line-height:1.65; max-width:680px; margin:0 auto; }
+          #Audit-Desap-vista .Audit-Desap-unavail b { color:inherit; }
+
+          /* ---------- Tablas (misma gramática que .data-table del tablero) ---------- */
+          #Audit-Desap-vista .Audit-Desap-tbl-scroll { max-height:430px; overflow:auto; border:1px solid var(--line); border-radius:var(--r-md); }
+          #Audit-Desap-vista .Audit-Desap-tabla { width:100%; border-collapse:collapse; font-size:13px; }
+          #Audit-Desap-vista .Audit-Desap-tabla thead th { position:sticky; top:0; z-index:1; background:var(--brand-head); color:#fff;
+            padding:10px 13px; text-align:left; font-family:'Poppins','Inter',sans-serif; font-weight:600; font-size:11px;
+            text-transform:uppercase; letter-spacing:.06em; }
+          #Audit-Desap-vista .Audit-Desap-tabla tbody td { padding:8px 13px; border-bottom:1px solid var(--line-soft); color:var(--ink-soft); }
+          #Audit-Desap-vista .Audit-Desap-tabla tbody tr:hover td { background:var(--surface-2); }
+          #Audit-Desap-vista td.Audit-Desap-num { text-align:right; font-variant-numeric:tabular-nums; font-weight:500; }
+          #Audit-Desap-vista th.Audit-Desap-sortable { cursor:pointer; user-select:none; }
+          #Audit-Desap-vista th.Audit-Desap-sortable:hover { background:var(--brand); }
+          #Audit-Desap-vista th .Audit-Desap-arw { opacity:.65; font-size:.65rem; margin-left:3px; }
+          #Audit-Desap-vista .Audit-Desap-tbl-tools { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:11px; }
+          #Audit-Desap-vista .Audit-Desap-empty { padding:22px; text-align:center; color:var(--muted); font-size:13px; }
+
+          /* ---------- Filtro de temporalidad (fijo bajo el encabezado del tablero) ---------- */
+          #Audit-Desap-vista .Audit-Desap-filtro { position:sticky; top:var(--Audit-Desap-tope); z-index:120; background:var(--surface);
+            border:1px solid var(--line); border-top:3px solid var(--accent); border-radius:var(--r-lg); box-shadow:var(--shadow);
+            padding:14px 18px; margin-bottom:var(--gap,18px); }
+          #Audit-Desap-vista .Audit-Desap-filtro-tit { font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+            color:var(--accent); margin-bottom:9px; }
+          #Audit-Desap-vista .Audit-Desap-filtro-row { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
+          #Audit-Desap-vista .Audit-Desap-fgrp { display:flex; flex-direction:column; gap:5px; }
+          #Audit-Desap-vista .Audit-Desap-fgrp label { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; }
+          #Audit-Desap-vista .Audit-Desap-pair { display:flex; gap:6px; }
+          #Audit-Desap-vista .Audit-Desap-fsel { font-family:inherit; font-size:13px; padding:7px 10px; border:1px solid var(--line);
+            border-radius:var(--r-sm); background:var(--surface); color:var(--ink); min-width:96px; }
+          #Audit-Desap-vista .Audit-Desap-fsel option { background:var(--surface); color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-fbtns { display:flex; gap:8px; flex-wrap:wrap; margin-left:auto; }
+          #Audit-Desap-vista .Audit-Desap-fbtn { font-family:inherit; font-size:12px; font-weight:600; padding:7px 14px; border-radius:var(--r-pill,999px);
+            border:1.5px solid var(--Audit-Desap-azul); background:var(--surface); color:var(--Audit-Desap-azul); cursor:pointer;
+            transition:background-color .2s, color .2s; }
+          #Audit-Desap-vista .Audit-Desap-fbtn:hover, #Audit-Desap-vista .Audit-Desap-fbtn.Audit-Desap-solid { background:var(--Audit-Desap-azul); color:var(--surface); }
+          #Audit-Desap-vista .Audit-Desap-fbtn.Audit-Desap-oro { border-color:var(--accent); color:var(--accent); }
+          #Audit-Desap-vista .Audit-Desap-fbtn.Audit-Desap-oro:hover { background:var(--accent); color:#fff; }
+          #Audit-Desap-vista .Audit-Desap-fstate { margin-top:11px; font-size:12.5px; color:var(--ink-soft); background:var(--surface-3);
+            border-radius:var(--r-sm); padding:8px 12px; line-height:1.55; }
+          #Audit-Desap-vista .Audit-Desap-fstate b { color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-mini { font-size:12px; color:var(--muted); }
+          #Audit-Desap-vista .Audit-Desap-delta-up { color:var(--Audit-Desap-sube); font-weight:600; }
+          #Audit-Desap-vista .Audit-Desap-delta-down { color:var(--Audit-Desap-baja); font-weight:600; }
+          #Audit-Desap-vista .Audit-Desap-delta-flat { color:var(--muted); font-weight:600; }
+
+          /* ---------- Notas, cobertura, error y carga ---------- */
+          #Audit-Desap-vista .Audit-Desap-texto { font-size:13px; color:var(--ink-soft); margin-bottom:14px; line-height:1.65; }
+          #Audit-Desap-vista .Audit-Desap-texto b { color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-h4 { font-size:12.5px; font-weight:700; color:var(--Audit-Desap-azul); margin-bottom:9px; }
+          #Audit-Desap-vista .Audit-Desap-cobertura { font-size:13px; color:var(--ink-soft); line-height:1.85; }
+          #Audit-Desap-vista .Audit-Desap-cobertura b { color:var(--ink); }
+          #Audit-Desap-vista .Audit-Desap-pie { margin-top:18px; padding-top:14px; border-top:1px solid var(--line); font-size:12px;
+            color:var(--muted); line-height:1.65; }
+          #Audit-Desap-vista .Audit-Desap-pie a { color:var(--accent); }
+          #Audit-Desap-vista .Audit-Desap-err { background:color-mix(in srgb, var(--risk) 10%, transparent);
+            border:1px solid color-mix(in srgb, var(--risk) 40%, transparent); color:var(--Audit-Desap-sube);
+            padding:14px 16px; border-radius:var(--r-md); font-size:13px; margin-bottom:var(--gap,18px); line-height:1.6; }
+          #Audit-Desap-vista .Audit-Desap-err b { color:inherit; }
+          #Audit-Desap-vista .Audit-Desap-loader { position:absolute; inset:0; z-index:130; display:flex; flex-direction:column; align-items:center;
+            justify-content:flex-start; padding-top:140px; background:color-mix(in srgb, var(--canvas) 86%, transparent);
+            border-radius:var(--r-lg); transition:opacity .4s, visibility .4s; }
+          #Audit-Desap-vista .Audit-Desap-loader.Audit-Desap-hide { opacity:0; visibility:hidden; pointer-events:none; }
+          #Audit-Desap-vista .Audit-Desap-spinner { width:42px; height:42px; border:3px solid var(--line); border-top-color:var(--accent);
+            border-radius:50%; animation:Audit-Desap-gira 1s linear infinite; margin-bottom:16px; }
+          @keyframes Audit-Desap-gira { to { transform:rotate(360deg); } }
+          #Audit-Desap-vista .Audit-Desap-loader p { font-size:14px; color:var(--ink); font-weight:600; }
+          #Audit-Desap-vista .Audit-Desap-loader .Audit-Desap-loader-sub { font-size:12.5px; color:var(--muted); font-weight:400; margin-top:4px; }
+          @media (prefers-reduced-motion: reduce) {
+            #Audit-Desap-vista .Audit-Desap-spinner { animation-duration:3s; }
+            #Audit-Desap-vista .Audit-Desap-audit-panel.Audit-Desap-open { animation:none; }
+          }
+          @media (max-width: 820px) {
+            /* En celular el filtro fijo cubriría media pantalla: se vuelve estático. */
+            #Audit-Desap-vista .Audit-Desap-filtro { position:static; }
+            #Audit-Desap-vista .panel-nota { display:none; }
+            #Audit-Desap-vista .Audit-Desap-fbtns { margin-left:0; }
+          }
+          @media (max-width: 640px) {
+            #Audit-Desap-vista .Audit-Desap-titulo { font-size:19px; }
+            #Audit-Desap-vista .Audit-Desap-val { font-size:25px; }
+            #Audit-Desap-vista .Audit-Desap-card-head, #Audit-Desap-vista .Audit-Desap-card-body { padding-left:13px; padding-right:13px; }
+            #Audit-Desap-vista .Audit-Desap-fsel[id$="f-modo"] { min-width:0; width:100%; }
+          }`;
+          document.head.appendChild(s);
+        }
+
+        /* =======================================================================
+           MAQUETADO · mismo contenido que el tablero de origen, en paneles
+           plegables del tablero (section + .panel-cab).
+           ======================================================================= */
+        const AUD_TXT = '&#128202; C&oacute;mo auditar esta gr&aacute;fica en Excel <span class="Audit-Desap-chev">&#9660;</span>';
+        const AUD_TBL = '&#128202; C&oacute;mo auditar esta tabla en Excel <span class="Audit-Desap-chev">&#9660;</span>';
+        function auditBtn(id, txt){
+          return '<button type="button" class="Audit-Desap-audit-btn" aria-expanded="false" data-audit="' + id + '">' + (txt || AUD_TXT) + '</button>' +
+                 '<div class="Audit-Desap-audit-panel" id="Audit-Desap-' + id + '"></div>';
+        }
+        function cab(titulo, nota){
+          return '<div class="panel-cab" data-panel role="button" tabindex="0" aria-expanded="true">' +
+                 '<span class="h2-marca"></span><h2>' + titulo + '</h2>' +
+                 '<span class="panel-nota">' + nota + '</span><span class="panel-toggle">&#9662;</span></div>';
+        }
+        function tarjeta(titulo, meta, cuerpo){
+          return '<div class="Audit-Desap-card"><div class="Audit-Desap-card-head"><h3>' + titulo + '</h3>' +
+                 '<div class="Audit-Desap-meta"' + (meta.id ? ' id="Audit-Desap-' + meta.id + '"' : '') + '>' + (meta.txt || '&mdash;') + '</div></div>' +
+                 '<div class="Audit-Desap-card-body">' + cuerpo + '</div></div>';
+        }
+        const lienzo = (id, alto) => '<div class="Audit-Desap-chart-wrap" style="height:' + alto + 'px"><canvas id="Audit-Desap-' + id + '"></canvas></div>';
+        const nota   = id => '<div class="Audit-Desap-note" id="Audit-Desap-' + id + '"></div>';
+        const thR    = t => '<th style="text-align:right">' + t + '</th>';
+        function tabla(cabeza, tbody, estilo){
+          return '<div class="Audit-Desap-tbl-scroll"' + (estilo ? ' style="' + estilo + '"' : '') + '>' +
+                 '<table class="Audit-Desap-tabla"><thead><tr>' + cabeza + '</tr></thead><tbody id="Audit-Desap-' + tbody + '"></tbody></table></div>';
+        }
+
+        function maquetado(){
+          const SECS = [['explorador','Explorador'],['resumen','Resumen general'],['desaparecidas','Personas desaparecidas'],
+                        ['localizadas','Personas localizadas'],['territorio','Territorio'],['notas','Notas y fuente']];
+          return '' +
+          '<div class="Audit-Desap-loader" id="Audit-Desap-loader"><div class="Audit-Desap-spinner"></div>' +
+            '<p>Cargando informaci&oacute;n del Google Sheet&hellip;</p>' +
+            '<p class="Audit-Desap-loader-sub" id="Audit-Desap-loader-sub">Conectando con la fuente de datos&hellip;</p></div>' +
+
+          /* ---------- Encabezado ---------- */
+          '<section id="Audit-Desap-cab" class="Audit-Desap-cab">' +
+            '<h2 class="Audit-Desap-titulo">Auditor&iacute;a Desaparecidos</h2>' +
+            '<div class="Audit-Desap-subtitulo">Vice fiscal&iacute;a - Desaparecidos</div>' +
+            '<p class="Audit-Desap-lede">R&eacute;plica auditable de las estad&iacute;sticas de la Versi&oacute;n P&uacute;blica del Registro Estatal de ' +
+              'Personas Desaparecidas (REPD) de Jalisco. Cada gr&aacute;fica incluye un bot&oacute;n que expone su f&oacute;rmula exacta ' +
+              'para poder reproducirla y auditarla en Excel.</p>' +
+            '<div class="Audit-Desap-chips"><span class="Audit-Desap-corte">&#128197; Informaci&oacute;n actualizada al <b id="Audit-Desap-cut-date">&mdash;</b>' +
+              ' &middot; <span id="Audit-Desap-rec-count">&mdash;</span> registros procesados</span></div>' +
+            '<nav class="Audit-Desap-saltos" aria-label="Secciones de la auditor&iacute;a">' +
+              SECS.map(([k, t]) => '<button type="button" class="Audit-Desap-salto" data-salto="' + k + '">' + t + '</button>').join('') +
+            '</nav>' +
+          '</section>' +
+
+          '<div id="Audit-Desap-err-box"></div>' +
+
+          /* ---------- Filtro de temporalidad ---------- */
+          '<div class="Audit-Desap-filtro" id="Audit-Desap-filtro">' +
+            '<div class="Audit-Desap-filtro-tit">Filtro de temporalidad &middot; gobierna el explorador y la tabla de detalle municipal</div>' +
+            '<div class="Audit-Desap-filtro-row">' +
+              '<div class="Audit-Desap-fgrp"><label for="Audit-Desap-f-modo">Campo de fecha</label>' +
+                '<select class="Audit-Desap-fsel" id="Audit-Desap-f-modo" style="min-width:290px">' +
+                  '<option value="REP">Fecha de reporte</option>' +
+                  '<option value="DES">Fecha de desaparici&oacute;n</option>' +
+                  '<option value="AMB">Reporte Y desaparici&oacute;n (criterio oficial)</option>' +
+                  '<option value="CUALQ">Reporte O desaparici&oacute;n (cualquiera)</option>' +
+                '</select></div>' +
+              '<div class="Audit-Desap-fgrp"><label for="Audit-Desap-f-m1">Desde</label>' +
+                '<div class="Audit-Desap-pair"><select class="Audit-Desap-fsel" id="Audit-Desap-f-m1" aria-label="Mes inicial"></select>' +
+                '<select class="Audit-Desap-fsel" id="Audit-Desap-f-y1" aria-label="A&ntilde;o inicial"></select></div></div>' +
+              '<div class="Audit-Desap-fgrp"><label for="Audit-Desap-f-m2">Hasta</label>' +
+                '<div class="Audit-Desap-pair"><select class="Audit-Desap-fsel" id="Audit-Desap-f-m2" aria-label="Mes final"></select>' +
+                '<select class="Audit-Desap-fsel" id="Audit-Desap-f-y2" aria-label="A&ntilde;o final"></select></div></div>' +
+              '<div class="Audit-Desap-fbtns">' +
+                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-solid" data-preset="todo">Toda la temporalidad</button>' +
+                '<button type="button" class="Audit-Desap-fbtn" data-preset="anio" id="Audit-Desap-p-anio">A&ntilde;o en curso</button>' +
+                '<button type="button" class="Audit-Desap-fbtn" data-preset="12m">&Uacute;ltimos 12 meses</button>' +
+                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-reporte">&#128196; Descargar reporte</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="Audit-Desap-fstate" id="Audit-Desap-f-state">&mdash;</div>' +
+          '</div>' +
+
+          /* ---------- Explorador temporal ---------- */
+          '<section id="Audit-Desap-sec-explorador">' + cab('Explorador temporal', 'Responde al filtro de temporalidad') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-intro">Acota el an&aacute;lisis a cualquier ventana de meses y a&ntilde;os. El filtro gobierna esta secci&oacute;n y la tabla de detalle ' +
+              'municipal del final; las gr&aacute;ficas que replican al sitio oficial conservan sus definiciones fijas y no se ven ' +
+              'afectadas, para que la r&eacute;plica siga siendo auditable contra la fuente.</p>' +
+            '<div class="Audit-Desap-kpis" id="Audit-Desap-kpi-exp"></div>' +
+            '<div class="Audit-Desap-kpis" id="Audit-Desap-kpi-exp2"></div>' +
+            '<div class="Audit-Desap-card"><div class="Audit-Desap-card-body" style="padding-top:4px">' +
+              auditBtn('a-exp', '&#128202; C&oacute;mo auditar estos indicadores en Excel <span class="Audit-Desap-chev">&#9660;</span>') + '</div></div>' +
+            tarjeta('Municipios con mayor n&uacute;mero de casos en el periodo', { id:'m-top10' },
+              lienzo('c-top10', 360) +
+              tabla('<th>#</th><th>Municipio de desaparici&oacute;n</th>' + thR('Casos') + thR('Localizadas en el periodo') +
+                    thR('Contin&uacute;an desaparecidas') + thR('% localizaci&oacute;n'), 'tbl-top10', 'margin-top:16px;max-height:none') +
+              auditBtn('a-top10')) +
+            tarjeta('Municipios con personas desaparecidas y sin ninguna localizaci&oacute;n en el periodo', { id:'m-sinloc' },
+              tabla('<th>Municipio de desaparici&oacute;n</th>' + thR('Contin&uacute;an desaparecidas') + thR('Casos en el periodo'),
+                    'tbl-sinloc', 'max-height:340px') +
+              auditBtn('a-sinloc', AUD_TBL)) +
+            tarjeta('Variaci&oacute;n mensual contra el mismo mes del a&ntilde;o anterior', { id:'m-mensual' },
+              lienzo('c-mensual', 340) +
+              tabla('<th>Mes</th>' + thR('Periodo') + thR('A&ntilde;o anterior') + thR('Diferencia') + thR('Variaci&oacute;n'),
+                    'tbl-mensual', 'margin-top:16px;max-height:360px') +
+              auditBtn('a-mensual')) +
+            tarjeta('Variaci&oacute;n del periodo acumulado contra el mismo periodo del a&ntilde;o anterior', { id:'m-periodo' },
+              lienzo('c-periodo', 330) +
+              tabla('<th>A&ntilde;o</th>' + thR('Periodo acumulado') + thR('Diferencia') + thR('Variaci&oacute;n'),
+                    'tbl-periodo', 'margin-top:16px;max-height:none') +
+              auditBtn('a-periodo')) +
+           '</div></section>' +
+
+          /* ---------- Resumen general ---------- */
+          '<section id="Audit-Desap-sec-resumen">' + cab('Resumen general', 'Cifras acumuladas a la fecha de corte') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-intro">Cifras acumuladas del registro a la fecha de corte. Las personas localizadas se contabilizan a partir del ' +
+              '1 de diciembre de 2018, conforme al criterio del sitio oficial.</p>' +
+            '<div class="Audit-Desap-kpis" id="Audit-Desap-kpi-loc"></div>' +
+            '<div class="Audit-Desap-kpis" id="Audit-Desap-kpi-des"></div>' +
+            tarjeta('Personas localizadas por condici&oacute;n de localizaci&oacute;n y sexo', { txt:'Datos del 1 de diciembre de 2018 al corte' },
+              lienzo('c-resumen', 340) + auditBtn('a-resumen')) +
+           '</div></section>' +
+
+          /* ---------- Personas desaparecidas ---------- */
+          '<section id="Audit-Desap-sec-desaparecidas">' + cab('Personas desaparecidas', 'Secci&oacute;n 1 &middot; estatus vigente al corte') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-intro">Personas que, a la fecha de corte, contin&uacute;an con estatus de <b>persona desaparecida</b> en el registro, ' +
+              'salvo donde se indique lo contrario.</p>' +
+            tarjeta('Personas desaparecidas con y sin carpeta de investigaci&oacute;n', { txt:'Datos a la fecha de corte' },
+              lienzo('c-carpeta', 210) + auditBtn('a-carpeta')) +
+            tarjeta('Personas desaparecidas, por a&ntilde;o de desaparici&oacute;n y sexo (2019&ndash;2026)',
+              { txt:'Personas que contin&uacute;an desaparecidas, seg&uacute;n el a&ntilde;o en que ocurri&oacute; la desaparici&oacute;n' },
+              lienzo('c-anio-sexo', 390) + nota('n-anio-sexo') + auditBtn('a-anio-sexo')) +
+            tarjeta('Personas desaparecidas del 1 de enero al 31 de agosto, de 2019 a 2026',
+              { txt:'Incidencia del periodo: desapariciones ocurridas <i>y</i> reportadas dentro de la ventana enero&ndash;agosto de cada a&ntilde;o' },
+              lienzo('c-enejul', 390) + nota('n-enejul') + auditBtn('a-enejul')) +
+            tarjeta('Desapariciones con violencia y sin violencia, por a&ntilde;o de desaparici&oacute;n (2019&ndash;2026)', { txt:'Gr&aacute;fica presente en el sitio oficial' },
+              '<div class="Audit-Desap-unavail"><span class="Audit-Desap-ic">&#9888;&#65039;</span>' +
+                '<h4>No reproducible con la fuente de datos de este tablero</h4>' +
+                '<p>El sitio oficial construye esta gr&aacute;fica con la variable <b>violencia / sin violencia</b>, que proviene de las carpetas de ' +
+                'investigaci&oacute;n de la Vicefiscal&iacute;a en Personas Desaparecidas. <b>Esa variable no existe en ninguna de las 18 columnas ' +
+                'publicadas en la descarga abierta del REPD</b>, que es la &uacute;nica fuente de este tablero. No se estima ni se aproxima: ' +
+                'se declara faltante. Ver el bot&oacute;n de auditor&iacute;a para el detalle de la verificaci&oacute;n.</p></div>' +
+              auditBtn('a-violencia', '&#128202; Por qu&eacute; no se puede auditar con esta fuente <span class="Audit-Desap-chev">&#9660;</span>')) +
+            tarjeta('Mujeres desaparecidas, por a&ntilde;o de desaparici&oacute;n y rango de edad (2019&ndash;2026)', { txt:'Personas que contin&uacute;an desaparecidas' },
+              lienzo('c-edad-m', 390) + nota('n-edad-m') + auditBtn('a-edad-m')) +
+            tarjeta('Hombres desaparecidos, por a&ntilde;o de desaparici&oacute;n y rango de edad (2019&ndash;2026)', { txt:'Personas que contin&uacute;an desaparecidas' },
+              lienzo('c-edad-h', 390) + nota('n-edad-h') + auditBtn('a-edad-h')) +
+           '</div></section>' +
+
+          /* ---------- Personas localizadas ---------- */
+          '<section id="Audit-Desap-sec-localizadas">' + cab('Personas localizadas', 'Secci&oacute;n 2 &middot; serie desde dic-2018') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-intro">Personas cuya localizaci&oacute;n fue confirmada por la autoridad competente. Serie contabilizada desde el ' +
+              '1 de diciembre de 2018.</p>' +
+            tarjeta('Personas localizadas, por condici&oacute;n de localizaci&oacute;n y si fueron o no v&iacute;ctimas de delito', { txt:'Datos del 1 de diciembre de 2018 al corte' },
+              lienzo('c-cond-todas', 240) + auditBtn('a-cond')) +
+            tarjeta('Porcentaje de localizaci&oacute;n por a&ntilde;o (2019&ndash;2026)', { txt:'A&ntilde;o calendario completo: 1 de enero al 31 de diciembre' },
+              lienzo('c-pct-anual', 370) +
+              '<div class="Audit-Desap-note"><b>Definici&oacute;n oficial:</b> refleja el porcentaje de personas que fueron localizadas en el a&ntilde;o, respecto del ' +
+              'total de personas cuya desaparici&oacute;n y reporte ocurrieron entre el 1 de enero y el 31 de diciembre de ese a&ntilde;o.</div>' +
+              auditBtn('a-pct-anual')) +
+            tarjeta('Porcentaje de localizaci&oacute;n del 1 de enero al 31 de agosto, de 2019 a 2026',
+              { txt:'Ventana comparable enero&ndash;agosto &middot; es la cifra citada en los boletines oficiales' },
+              lienzo('c-pct-enejul', 370) +
+              '<div class="Audit-Desap-note"><b>Definici&oacute;n oficial:</b> refleja el porcentaje de personas que fueron localizadas en el periodo del 1 de enero ' +
+              'al 31 de agosto de cada a&ntilde;o, respecto del total de personas cuya desaparici&oacute;n y reporte ocurrieron ese mismo periodo de cada a&ntilde;o.</div>' +
+              auditBtn('a-pct-enejul')) +
+            tarjeta('Mujeres localizadas, por condici&oacute;n de localizaci&oacute;n y si fueron o no v&iacute;ctimas de delito', { txt:'Datos del 1 de diciembre de 2018 al corte' },
+              lienzo('c-cond-m', 240) + auditBtn('a-cond-m')) +
+            tarjeta('Hombres localizados, por condici&oacute;n de localizaci&oacute;n y si fueron o no v&iacute;ctimas de delito', { txt:'Datos del 1 de diciembre de 2018 al corte' },
+              lienzo('c-cond-h', 240) + auditBtn('a-cond-h')) +
+           '</div></section>' +
+
+          /* ---------- Territorio ---------- */
+          '<section id="Audit-Desap-sec-territorio">' + cab('Distribuci&oacute;n territorial', 'Secci&oacute;n 3 &middot; municipio de desaparici&oacute;n') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-intro">El sitio oficial presenta un mapa interactivo de los 125 municipios. La descarga abierta del REPD no incluye ' +
+              'coordenadas geogr&aacute;ficas, por lo que aqu&iacute; se presenta el equivalente tabular y gr&aacute;fico por municipio de desaparici&oacute;n.</p>' +
+            tarjeta('Municipios con mayor n&uacute;mero de personas desaparecidas',
+              { txt:'Personas que contin&uacute;an desaparecidas, por municipio de desaparici&oacute;n &middot; 15 principales' },
+              lienzo('c-muni', 430) + auditBtn('a-muni')) +
+            tarjeta('Detalle municipal completo &middot; % de localizaci&oacute;n por municipio',
+              { txt:'Responde al filtro de temporalidad. Haz clic en cualquier encabezado para reordenar la tabla.' },
+              '<div class="Audit-Desap-tbl-tools">' +
+                '<input class="Audit-Desap-fsel" id="Audit-Desap-q-muni" type="search" placeholder="Buscar municipio&hellip;" style="min-width:230px" aria-label="Buscar municipio">' +
+                '<span class="Audit-Desap-mini" id="Audit-Desap-m-tblmuni">&mdash;</span></div>' +
+              tabla([['muni','Municipio de desaparici&oacute;n',0],['n','Casos en el periodo',1],['des','Contin&uacute;an desaparecidas',1],
+                     ['locV','Localizadas en el periodo',1],['locT','Localizadas (cualquier fecha)',1],['pct','% localizaci&oacute;n',1]]
+                     .map(([k, t, der]) => '<th class="Audit-Desap-sortable" data-sort="' + k + '"' + (der ? ' style="text-align:right"' : '') +
+                          '>' + t + '<span class="Audit-Desap-arw"></span></th>').join(''), 'tbl-muni') +
+              auditBtn('a-tbl-muni', AUD_TBL)) +
+           '</div></section>' +
+
+          /* ---------- Notas y fuente ---------- */
+          '<section id="Audit-Desap-sec-notas">' + cab('Notas metodol&oacute;gicas y fuente', 'Transparencia de datos') +
+           '<div class="panel-cuerpo">' +
+            '<p class="Audit-Desap-texto"><b>Fuente &uacute;nica:</b> Google Sheet propio de la CGES que replica la descarga abierta de la Versi&oacute;n P&uacute;blica del ' +
+              'Registro Estatal de Personas Desaparecidas del Estado de Jalisco (COBUPEJ). El Sheet es la fuente de verdad &mdash; ' +
+              'este tablero nunca modifica, corrige ni reinterpreta sus valores: los agrega y los muestra.</p>' +
+            '<div class="Audit-Desap-flag"><b>Sobre el estatus &laquo;CIERRE&raquo;.</b> El glosario oficial del REPD define <i>Cierre</i> como el registro cerrado por no ' +
+              'competencia territorial, no competencia de delito, acumulaci&oacute;n (duplicidad) o b&uacute;squeda de familiares. Aunque no son ' +
+              'casos vigentes, <b>s&iacute; forman parte de las cohortes</b> de las gr&aacute;ficas de incidencia y de porcentaje de localizaci&oacute;n: ' +
+              'as&iacute; los contabiliza el sitio oficial, y as&iacute; se replican aqu&iacute;. La verificaci&oacute;n es exacta &mdash;la ventana enero&ndash;agosto de 2026 ' +
+              'da 66.55% incluy&eacute;ndolos y 66.98% excluy&eacute;ndolos, y el sitio publica 66.55%&mdash; y se confirma por una segunda v&iacute;a ' +
+              'independiente en la nota al pie de las desapariciones previas a 2019. En el apartado de cobertura se reportan por ' +
+              'separado para no ocultarlos.</div>' +
+            '<div class="Audit-Desap-flag"><b>Dos cifras oficiales para el mismo indicador.</b> Los boletines de prensa y el sitio de la versi&oacute;n p&uacute;blica publican ' +
+              'n&uacute;meros distintos: para enero&ndash;julio de 2026, el bolet&iacute;n report&oacute; 1,473 desapariciones y 66.8% de localizaci&oacute;n, mientras ' +
+              'que el sitio report&oacute; 1,479 y 66.49%. Conviven dos metodolog&iacute;as oficiales. Este tablero se alinea de manera consistente ' +
+              'al <b>sitio</b>, por ser la fuente con versi&oacute;n p&uacute;blica descargable en la que cada caso tiene folio estatal de b&uacute;squeda ' +
+              'y, por tanto, es trazable y reproducible registro por registro.</div>' +
+            '<div class="Audit-Desap-flag"><b>Alcance del filtro de temporalidad.</b> El filtro de temporalidad gobierna el explorador temporal y la tabla ' +
+              'de detalle municipal. Las gr&aacute;ficas que replican al sitio oficial mantienen sus definiciones fijas &mdash;ventana enero&ndash;agosto, ' +
+              'cohortes anuales, localizaciones desde diciembre de 2018&mdash; porque son el objeto mismo de la r&eacute;plica: si el filtro las ' +
+              'moviera, dejar&iacute;an de ser comparables contra la fuente. Los indicadores del explorador responden a la ventana activa y ' +
+              'llevan su propia documentaci&oacute;n de auditor&iacute;a.</div>' +
+            '<div id="Audit-Desap-cobertura" style="margin-top:16px"></div>' +
+            '<p class="Audit-Desap-pie">Coordinaci&oacute;n General Estrat&eacute;gica de Seguridad, Gobierno de Jalisco. Fuente: Comisi&oacute;n de B&uacute;squeda de ' +
+              'Personas del Estado de Jalisco (COBUPEJ), Versi&oacute;n P&uacute;blica del Registro Estatal de Personas Desaparecidas &mdash; ' +
+              '<a href="https://version-publica-repd.jalisco.gob.mx/estadisticas" target="_blank" rel="noopener">version-publica-repd.jalisco.gob.mx</a>. ' +
+              'La informaci&oacute;n del registro se actualiza de manera mensual, los d&iacute;as 10 de cada mes. Las cifras est&aacute;n sujetas a ' +
+              'actualizaci&oacute;n conforme avanzan las acciones de b&uacute;squeda e investigaci&oacute;n.<br>' +
+              'Elaboraci&oacute;n: CGES/DGAPP/AA &middot; Esta vista es una r&eacute;plica auditable con fines de an&aacute;lisis institucional y no sustituye ' +
+              'a la fuente oficial.</p>' +
+           '</div></section>' +
+
+          '<div id="Audit-Desap-offscreen" aria-hidden="true" style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden"></div>';
+        }
+
+        /* =======================================================================
+           COMPORTAMIENTO DE LA VISTA · tope fijo, saltos, redimensión, tema
+           ======================================================================= */
+        /** Altura del encabezado fijo del tablero (en móvil deja de ser fijo). */
+        function topeEncabezado(){
+          const h = document.querySelector('header');
+          if (!h) return 0;
+          return getComputedStyle(h).position === 'sticky' || getComputedStyle(h).position === 'fixed' ? h.offsetHeight : 0;
+        }
+        function ajustaTope(){
+          const v = AD('vista');
+          if (v) v.style.setProperty('--Audit-Desap-tope', topeEncabezado() + 'px');
+        }
+        function redimensiona(){
+          setTimeout(() => Object.values(CHARTS).forEach(c => { try { c.resize(); } catch (e) {} }), 60);
+        }
+        function saltaA(clave){
+          const sec = AD('sec-' + clave);
+          if (!sec) return;
+          const filtro = AD('filtro');
+          const tope = topeEncabezado() + (filtro && clave !== 'explorador' ? filtro.offsetHeight : 0) + 12;
+          window.scrollTo({ top: Math.max(0, sec.getBoundingClientRect().top + window.scrollY - tope), behavior: 'smooth' });
+        }
+
+        /* =======================================================================
+           MONTAJE · botón junto a «Personas desaparecidas», contenedor y registro
+           ======================================================================= */
+        let montado = false;
+        function adMonta(){
+          if (montado) return;
+          montado = true;
+          adEstilos();
+
+          const btn = document.createElement('button');
+          btn.className = 'btn-nav btn-nav-off';
+          btn.id = P + 'navBtn';
+          btn.type = 'button';
+          btn.textContent = 'Auditoría Desaparecidos';
+          btn.title = 'Auditoría Desaparecidos · Vice fiscalía - Desaparecidos';
+          const ref = document.getElementById('navDesapBtn');
+          if (ref) ref.insertAdjacentElement('afterend', btn);
+          else { const barra = document.querySelector('nav.tabs'); if (barra) barra.appendChild(btn); }
+
+          const cont = document.createElement('div');
+          cont.id = P + 'vista';
+          cont.style.display = 'none';
+          cont.innerHTML = maquetado();
+          const main = document.querySelector('main');
+          if (main) main.appendChild(cont);
+
+          /* `push`, no `unshift`: el tablero debe seguir abriendo en el Resumen
+             Ejecutivo (VISTAS[0]). El orden visual lo da el botón, no el registro. */
+          VISTAS.push({ id: 'auditdesap', div: P + 'vista', btn: P + 'navBtn', hash: 'AuditoriaDesaparecidos' });
+          /* El `VISTAS.forEach` que reparte los oyentes de navegación ya corrió. */
+          btn.addEventListener('click', () => dsMostrarVista('auditdesap'));
+          /* Carga diferida: el Sheet sólo se lee al abrir la pestaña. «Actualizar»
+             del tablero vuelve a llamar a este cargador: load() es reentrante. */
+          registrarCargador('auditdesap', () => setTimeout(load, 60));
+
+          /* Saltos internos: desplazan la página sin tocar el hash (el hash es de
+             la navegación entre vistas). */
+          cont.querySelectorAll('[data-salto]').forEach(b =>
+            b.addEventListener('click', () => saltaA(b.getAttribute('data-salto'))));
+
+          /* Al reabrir un panel plegado, Chart.js no recalcula por sí solo. */
+          cont.addEventListener('click', e => { if (e.target.closest('.panel-cab')) redimensiona(); });
+          cont.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.closest('.panel-cab')) redimensiona(); });
+
+          /* Al mostrarse la vista (clic, hash o «Atrás»): tope del filtro y tamaño de gráficas. */
+          new MutationObserver(() => { if (cont.style.display !== 'none'){ ajustaTope(); redimensiona(); } })
+            .observe(cont, { attributes: true, attributeFilter: ['style'] });
+          window.addEventListener('resize', ajustaTope, { passive: true });
+
+          /* Cambio de tema del tablero: se redibuja con los colores del tema activo. */
+          new MutationObserver(() => {
+            leeTema();
+            if (ROWS.length) { renderExplorador(); renderFijas(); }
+          }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-tema'] });
+
+          /* Restaura los paneles que el usuario dejó plegados (estado del tablero). */
+          if (typeof aplicarPanelesGuardados === 'function') { try { aplicarPanelesGuardados(); } catch (e) {} }
+        }
+
+        adMonta();
+        })();
+        /* ═══════════ FIN · MÓDULO AUDITORÍA DESAPARECIDOS (Audit-Desap-) ═══════════ */
+
     </script>
 </body>
 </html>
