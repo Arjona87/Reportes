@@ -15553,6 +15553,7 @@
         function mkChart(id, cfg){
           if (CHARTS[id]) CHARTS[id].destroy();      // el filtro redibuja: evita instancias fantasma
           pintaTema(cfg.options, TEMA.ink, TEMA.muted);
+          if (typeof cmpEtiquetas === 'function') cmpEtiquetas(cfg);   // Submódulo comparativo (Audit-Desap-cmp-): etiquetas de valor
           CHARTS[id] = new Chart(AD(id), cfg);
           return CHARTS[id];
         }
@@ -17834,32 +17835,37 @@
         }
 
         adMonta();
-
         /* ═══════════ INICIO · SUBMÓDULO COMPARATIVO REPD (Audit-Desap-cmp-) ═══════════
 
            QUÉ ES
            Sección final de la vista «Auditoría Desaparecidos»: réplica del libro
-           «REPD_Jalisco_Comparativo_Filtrable.xlsx». Filtro propio (Inicio, Final,
-           Criterio «Foto a la fecha» / «Base vigente») que gobierna: tabla
-           comparativa por periodo, efecto fotografía, sensibilidad, serie mensual,
-           municipios y un banco de gráficas. Descarga ligera (tablas del periodo)
-           y descarga total oculta (doble clic en la firma «CGES/Arjona» del pie):
-           libro completo con la base y el filtro funcionando por fórmulas.
+           «REPD_Jalisco_Comparativo_Filtrable.xlsx». La gobierna el filtro de
+           temporalidad de la vista (Desde / Hasta, siempre sobre la fecha de
+           desaparición) más el criterio «Foto a la fecha» / «Base vigente» que este
+           bloque agrega a la barra del filtro. Contiene tabla comparativa por
+           periodo, efecto fotografía, sensibilidad, serie mensual (anual si el rango
+           pasa de 96 meses), municipios y un banco de gráficas; descarga ligera
+           (botón «Descargar Excel» en la barra), descarga total oculta (doble clic
+           en la firma «CGES/Arjona» del pie) y análisis en Word.
+           También aporta: etiquetas de valor para TODAS las gráficas de la vista
+           (cmpEtiquetas, llamado desde mkChart), sello «Desde diciembre 2018» en las
+           gráficas fijas y encabezado / primera columna inmovilizados en las tablas.
 
            CÓMO SE ELIMINA
            1) Borrar desde este comentario hasta «FIN · SUBMÓDULO COMPARATIVO REPD».
-           2) Borrar en load() la línea marcada «Submódulo comparativo».
+           2) Borrar en load() y en mkChart() las líneas marcadas «Submódulo comparativo».
            El resto de la vista no depende de este bloque.
 
            AISLAMIENTO
            · Ids y clases con prefijo «Audit-Desap-cmp-»; CSS acotado a #Audit-Desap-vista.
            · Funciones y estado con prefijo cmp*; nada se publica en `window`.
-           · No toca ROWS ni el filtro de temporalidad de la vista: lee las filas
-             crudas de gviz (A–R) una sola vez, en load(), sin otra descarga.
+           · No toca ROWS: lee las filas crudas de gviz (A–R) una sola vez, en
+             load(), sin otra descarga. Del filtro de la vista sólo LEE FILTRO.a/.b
+             y escucha sus mismos controles; no altera su lógica.
 
-           DE QUÉ DEPENDE (dentro de esta IIFE): P, AD, cell, ym, CUT_TEXT, cab,
-           mkChart, pintaTema, leeTema, esOscuro, TEMA, CHARTS. Externo: Chart.js 4
-           (ya cargado) y JSZip 3.10.1 (CDN, sólo al descargar).
+           DE QUÉ DEPENDE (dentro de esta IIFE): P, AD, RAIZ, cell, ym, CUT_TEXT, cab,
+           mkChart, chartPNG, pintaTema, leeTema, esOscuro, TEMA, CHARTS, FILTRO.
+           Externo: Chart.js 4 (ya cargado) y JSZip 3.10.1 (CDN, sólo al descargar).
 
            Elaboración: CGES/Arjona
            ═══════════════════════════════════════════════════════════════════ */
@@ -17870,20 +17876,6 @@
         const CMP_EDAD_MAP = { '0-4':0,'5-9':0,'10-14':0,'15-19':1,'20-24':2,'25-29':2,'30-34':3,'35-39':3,'40-44':3,
           '45-49':4,'50-54':4,'55-59':4,'60-64':5,'65-69':5,'70-74':5,'75-79':5,'80-84':5,'85-89':5,'90-94':5,'95+':5,'SE IGNORA':6 };
         const CMP_POB = 8348151;                       // INEGI, Censo 2020
-        /* Cifras oficiales: Segundo Informe (págs. 406–408) y boletín ene–oct citado por Antena/Mural (11-11-2026). */
-        const CMP_OFI = [
-          [201910,202009,4454,null,.5305,'Segundo Informe p. 407–408'],[202010,202109,4165,null,.5580,'Segundo Informe p. 407–408'],
-          [202110,202209,4251,null,.5006,'Segundo Informe p. 407–408'],[202210,202309,3445,null,.5033,'Segundo Informe p. 407–408'],
-          [202310,202409,3316,null,.5504,'Segundo Informe p. 407–408'],[202410,202509,2745,null,.6208,'Segundo Informe p. 406–408'],
-          [202510,202609,2458,1646,.6696,'Segundo Informe p. 406'],
-          [201901,201909,3653,null,.5324,'Segundo Informe p. 406–407'],[202001,202009,3268,null,.5184,'Segundo Informe p. 406–407'],
-          [202101,202109,3218,null,.5404,'Segundo Informe p. 406–407'],[202201,202209,3120,null,.4760,'Segundo Informe p. 406–407'],
-          [202301,202309,2544,null,.4862,'Segundo Informe p. 406–407'],[202401,202409,2489,null,.5432,'Segundo Informe p. 406–407'],
-          [202501,202509,2100,null,.5948,'Segundo Informe p. 406–407'],[202601,202609,1898,null,.6696,'Segundo Informe p. 406–407'],
-          [201901,201910,4086,null,.5218,'Boletín ene–oct (Antena Noticias, 11-11-2026)'],[202001,202010,3599,null,null,'Boletín (Antena)'],
-          [202101,202110,3632,null,null,'Boletín (Antena)'],[202201,202210,3410,null,null,'Boletín (Antena)'],[202301,202310,2809,null,null,'Boletín (Antena)'],
-          [202401,202410,2776,null,.5587,'Boletín (Antena)'],[202501,202510,2308,null,.6040,'Boletín (Mural / Antena)'],[202601,202610,2129,null,.6717,'Boletín ene–oct 2026']
-        ];
         const CMP_PRES = {2018:2005955,2019:10000000,2020:29112961,2021:39659052,2022:41204409,2023:64928208,2024:72074545,2025:82504991,2026:105866014};
         const CMP_NOTA3 = [
           ['Foto a la fecha', 'cuenta lo que el registro tenía al cierre de cada periodo (lo reportado y localizado hasta ese mes, sin los registros ya cerrados). Es la que coincide con las cifras oficiales. Úsala para comparar años o periodos entre sí: todos se miden con el mismo tiempo de reporte y búsqueda.'],
@@ -17896,7 +17888,7 @@
         const CMP_SERIE_OSCURA = ['#3987e5','#d95926','#199e70','#c98500'];
         const cmpColor = i => (esOscuro() ? CMP_SERIE_OSCURA : CMP_SERIE_CLARA)[i];
 
-        const CMP = { listo:false, n:0, raw:null, cols:null, corte:0, muns:[], sel:{ a:0, z:0, foto:true }, grupos:{A:1,B:1,D:1}, munTodos:false, res:null };
+        const CMP = { listo:false, n:0, raw:null, cols:null, corte:0, primer:0, muns:[], sel:{ a:0, z:0, foto:true }, grupos:{A:1,B:1,D:1}, munTodos:false, res:null };
 
         /* ---------- utilidades de fecha y formato ---------- */
         const cmpIdx  = v => Math.floor(v / 100) * 12 + (v % 100) - 1;
@@ -17950,13 +17942,21 @@
           const muns = Array.from(munJal).sort();
           muns.forEach((m, i) => munIx.set(m, i));
           for (let i = 0; i < k; i++){ const v = raw[i]; MUN[i] = v[6] === 'JALISCO' ? munIx.get(v[7]) : -1; }
-          Object.assign(CMP, { listo:true, n:k, raw:raw.slice(0, k), corte, muns,
+          let primer = 999999;
+          for (let i = 0; i < k; i++) if (FD[i] > 0 && FD[i] < primer) primer = FD[i];
+          Object.assign(CMP, { listo:true, n:k, raw:raw.slice(0, k), corte, primer, muns,
             A:{ FD, FR, FL, FC, EST, COND, CLAS, CARP, SEXO, TERR, EDAD, TCIE, MUN, MESES } });
-          if (!CMP.sel.a || CMP.sel.z > corte){
-            const zz = (corte % 100) >= 9 ? Math.floor(corte / 100) * 100 + 9 : (Math.floor(corte / 100) - 1) * 100 + 9;
-            CMP.sel.a = zz - 100 + 1; CMP.sel.z = zz;
-          }
-          setTimeout(() => { try { cmpPreparaFiltro(); cmpCalcula(); cmpPinta(); } catch (e) { cmpError(e); } }, 0);
+          /* render() de la vista corre justo después y fija FILTRO; el comparativo lo lee en el siguiente ciclo. */
+          setTimeout(() => { try { cmpDesdeFiltro(); } catch (e) { cmpError(e); } }, 0);
+        }
+        /** Lee el rango del filtro de la vista (índices año*12 + mes − 1) y recalcula el comparativo. */
+        function cmpDesdeFiltro(){
+          if (!CMP.listo || (!FILTRO.a && !FILTRO.b)) return;
+          const aaaamm = n => Math.floor(n / 12) * 100 + (n % 12) + 1;
+          CMP.sel.a = aaaamm(Math.min(FILTRO.a, FILTRO.b));
+          CMP.sel.z = Math.min(aaaamm(Math.max(FILTRO.a, FILTRO.b)), CMP.corte);
+          AD('cmp-corte').textContent = CUT_TEXT || cmpLab(CMP.corte);
+          cmpCalcula(); cmpPinta();
         }
 
         /* =======================================================================
@@ -17965,8 +17965,11 @@
         function cmpVentanas(a, z){
           if (!a || !z || z < a || z > CMP.corte) return [];
           const span = cmpIdx(z) - cmpIdx(a) + 1;
-          if (span > 12) return [[a, z], [cmpYm(cmpIdx(a) - span), cmpYm(cmpIdx(a) - 1)]];
-          const n = Math.min(8, Math.floor(z / 100) - 2019 + 1), out = [];
+          if (span > 12){
+            const pa = cmpYm(cmpIdx(a) - span);                  // periodo anterior de igual duración, si la base lo cubre
+            return pa >= CMP.primer ? [[a, z], [pa, cmpYm(cmpIdx(a) - 1)]] : [[a, z]];
+          }
+          const n = Math.max(1, Math.min(8, Math.floor(z / 100) - 2019 + 1)), out = [];
           for (let k = 0; k < n; k++) out.push([a - 100 * k, z - 100 * k]);
           return out;
         }
@@ -18025,20 +18028,30 @@
           }
           return { a, z, fD, fL, vD, vL, rep, cer, ld, lt, cD, cL, mad: cmpIdx(CMP.corte) - cmpIdx(z) };
         }
+        /** Tramos de la serie: un mes por fila; si el rango pasa de 96 meses, un año por fila (recortado al rango). */
+        function cmpTramos(a, z){
+          const n = cmpIdx(z) - cmpIdx(a) + 1, out = [];
+          if (n <= 96){ for (let j = 0; j < n; j++){ const m = cmpYm(cmpIdx(a) + j); out.push({ a: m, z: m, lab: cmpLab(m) }); } return out; }
+          for (let y = Math.floor(a / 100); y <= Math.floor(z / 100); y++){
+            const ta = Math.max(a, y * 100 + 1), tz = Math.min(z, y * 100 + 12);
+            out.push({ a: ta, z: tz, lab: (ta === y * 100 + 1 && tz === y * 100 + 12) ? String(y) : cmpLabP(ta, tz) });
+          }
+          return out;
+        }
         function cmpSerie(a, z, foto){
-          const X = CMP.A, n = cmpIdx(z) - cmpIdx(a) + 1, out = [];
-          for (let j = 0; j < Math.min(n, 96); j++){
-            const m = cmpYm(cmpIdx(a) + j), zr = foto ? m : 999999;
+          const X = CMP.A, out = [];
+          cmpTramos(a, z).forEach(t => {
+            const zr = foto ? t.z : 999999;
             let D=0,L=0,cv=0,sv=0,cc=0,av=0,avc=0;
             for (let i = 0; i < CMP.n; i++){
-              const ci = X.EST[i] === 3, cz = ci && X.FC[i] <= zr;
-              if (X.FR[i] === m && !cz){ av++; if (X.CARP[i]) avc++; }
-              if (X.FD[i] !== m || X.FR[i] > zr || cz) continue;
+              const ci = X.EST[i] === 3, cz = ci && X.FC[i] <= zr, fr = X.FR[i], fd = X.FD[i];
+              if (fr >= t.a && fr <= t.z && !cz){ av++; if (X.CARP[i]) avc++; }
+              if (fd < t.a || fd > t.z || fr > zr || cz) continue;
               D++; if (X.CARP[i]) cc++;
               if (X.EST[i] === 2 && X.FL[i] <= zr){ L++; if (X.COND[i] === 1) cv++; else if (X.COND[i] === 2) sv++; }
             }
-            out.push({ m, D, L, cv, sv, siguen: D - L, cc, av, avc });
-          }
+            out.push({ m: t.a, a: t.a, z: t.z, lab: t.lab, D, L, cv, sv, siguen: D - L, cc, av, avc });
+          });
           return out;
         }
         function cmpMunicipios(V, foto){
@@ -18065,18 +18078,11 @@
           filas.sort((x, y) => (y.sel - x.sel) || ((y.ant || 0) - (x.ant || 0)) || (x.j - y.j));
           return filas;
         }
-        function cmpOficial(a, z){
-          const f = CMP_OFI.find(o => o[0] === a && o[1] === z);
-          if (!f) return null;
-          const L = f[3] !== null ? f[3] : (f[4] !== null ? Math.round(f[2] * f[4]) : null);
-          return { D: f[2], L, p: f[4], derivada: f[3] === null && f[4] !== null, fuente: f[5] };
-        }
         function cmpCalcula(){
           const { a, z, foto } = CMP.sel, V = cmpVentanas(a, z);
           CMP.res = { a, z, foto, V,
             filas: V.map(([x, y]) => cmpIndicadores(x, y, foto)),
             puente: V.map(([x, y]) => cmpPuente(x, y)),
-            ofi: V.map(([x, y]) => cmpOficial(x, y)),
             serie: V.length ? cmpSerie(a, z, foto) : [],
             mun: V.length ? cmpMunicipios(V, foto) : [] };
         }
@@ -18186,6 +18192,17 @@
           ${R}mini { font-size:11.5px; color:var(--muted); }
           ${R}firma { cursor:default; user-select:none; font-weight:600; }
           ${R}oculto { display:none !important; }
+          ${R}sello { display:inline-block; margin-left:8px; padding:2px 8px; border-radius:999px; font-size:10.5px; font-weight:600; vertical-align:middle;
+            color:var(--muted); border:1px solid var(--line); background:var(--surface-2,transparent); white-space:nowrap; }
+          .Audit-Desap-fbtns .Audit-Desap-cmp-seg { margin-left:4px; }
+          #Audit-Desap-vista .Audit-Desap-tbl-scroll[style*="max-height:none"] { max-height:560px !important; }
+          #Audit-Desap-vista .Audit-Desap-tabla thead th:first-child, #Audit-Desap-vista .Audit-Desap-tabla tbody td:first-child { position:sticky; left:0; }
+          #Audit-Desap-vista .Audit-Desap-tabla tbody td:first-child { background:var(--surface); z-index:1; }
+          #Audit-Desap-vista .Audit-Desap-tabla thead th:first-child { z-index:3; }
+          #Audit-Desap-vista .Audit-Desap-cmp-fix2 thead th:first-child, #Audit-Desap-vista .Audit-Desap-cmp-fix2 tbody td:first-child { width:42px; min-width:42px; max-width:42px; }
+          #Audit-Desap-vista .Audit-Desap-cmp-fix2 thead th:nth-child(2), #Audit-Desap-vista .Audit-Desap-cmp-fix2 tbody td:nth-child(2) { position:sticky; left:42px; }
+          #Audit-Desap-vista .Audit-Desap-cmp-fix2 tbody td:nth-child(2) { background:var(--surface); z-index:1; }
+          #Audit-Desap-vista .Audit-Desap-cmp-fix2 thead th:nth-child(2) { z-index:3; }
           @media (max-width: 640px) { ${R}grid { grid-template-columns:1fr; } ${R}sel { min-width:0; } }`;
           document.head.appendChild(s);
         }
@@ -18198,32 +18215,29 @@
           ['g-foto','% de localización: foto a la fecha contra base vigente','La distancia entre las dos líneas es el tiempo de búsqueda acumulado: los periodos antiguos ganan puntos con los años; el reciente apenas empieza.'],
           ['g-vida','Localizadas con vida y sin vida','Condición registrada de las personas localizadas en cada periodo, con el criterio elegido.'],
           ['g-carp','Siguen desaparecidas: con y sin carpeta','Personas sin localizar al cierre del periodo según si su caso tiene carpeta de investigación (estatus vigente al corte).'],
-          ['g-mens','Serie mensual del periodo seleccionado','Desaparecidas por mes de desaparición y localizadas, con el criterio elegido.'],
+          ['g-mens','Serie del periodo seleccionado','Desaparecidas por mes de desaparición (por año si el rango pasa de 96 meses) y localizadas, con el criterio elegido.'],
           ['g-avcarp','% de avisos con carpeta, por mes de reporte','Proporción de reportes recibidos en el mes que hoy tienen carpeta de investigación. La línea punteada marca agosto de 2025.'],
           ['g-mun','Municipios con más desapariciones','Diez municipios con más casos en el periodo seleccionado, contra el periodo de comparación.'],
           ['g-terr','% de localización: AMG contra interior','Mismo criterio y mismos periodos de la tabla; AMG = 9 municipios.'],
           ['g-edad','Edad al desaparecer','Periodo seleccionado contra el periodo de comparación, por grupo de edad.']
         ];
         function cmpMaquetado(){
-          return '<section id="Audit-Desap-sec-comparativo">' + cab('Comparativo por periodo &middot; foto a la fecha y base vigente', 'Secci&oacute;n final &middot; filtro propio') +
+          return '<section id="Audit-Desap-sec-comparativo">' + cab('Comparativo por periodo &middot; foto a la fecha y base vigente', 'Secci&oacute;n final &middot; responde al filtro de temporalidad') +
             '<div class="panel-cuerpo">' +
-            '<p class="Audit-Desap-intro">R&eacute;plica del libro <b>REPD_Jalisco_Comparativo_Filtrable.xlsx</b>. Elige el periodo y el criterio: todas las tablas y gr&aacute;ficas de esta secci&oacute;n se ' +
-              'recalculan con la base completa del registro. Este filtro es independiente del filtro de temporalidad de arriba.</p>' +
+            '<p class="Audit-Desap-intro">R&eacute;plica del libro <b>REPD_Jalisco_Comparativo_Filtrable.xlsx</b>. La gobierna el <b>filtro de temporalidad</b> de la vista ' +
+              '(Desde / Hasta) y el criterio <b>Foto a la fecha / Base vigente</b> de la misma barra. Aqu&iacute; el periodo se aplica siempre a la <b>fecha de desaparici&oacute;n</b>, ' +
+              'sin importar el &laquo;Campo de fecha&raquo; elegido para el explorador; el criterio s&oacute;lo cambia esta secci&oacute;n.</p>' +
             '<div class="Audit-Desap-cmp-barra" id="Audit-Desap-cmp-barra">' +
-              '<div class="Audit-Desap-cmp-grp"><label for="Audit-Desap-cmp-ini">Inicio</label><select class="Audit-Desap-cmp-sel" id="Audit-Desap-cmp-ini"></select></div>' +
-              '<div class="Audit-Desap-cmp-grp"><label for="Audit-Desap-cmp-fin">Final</label><select class="Audit-Desap-cmp-sel" id="Audit-Desap-cmp-fin"></select></div>' +
-              '<div class="Audit-Desap-cmp-grp"><label>Criterio</label><div class="Audit-Desap-cmp-seg" role="group" aria-label="Criterio">' +
-                '<button type="button" data-cmp-crit="foto" aria-pressed="true">Foto a la fecha</button><button type="button" data-cmp-crit="vig" aria-pressed="false">Base vigente</button></div></div>' +
-              '<div class="Audit-Desap-cmp-grp"><label>&nbsp;</label><button type="button" class="Audit-Desap-cmp-btn" id="Audit-Desap-cmp-btn-xlsx">&#11015; Descargar Excel</button></div>' +
               '<div class="Audit-Desap-cmp-estado" id="Audit-Desap-cmp-estado" role="status">Esperando datos&hellip;</div>' +
+              '<button type="button" class="Audit-Desap-cmp-btn" id="Audit-Desap-cmp-btn-doc">&#128240; Descargar an&aacute;lisis (Word)</button>' +
             '</div>' +
             '<div class="Audit-Desap-cmp-nota3" id="Audit-Desap-cmp-nota3">' +
               CMP_NOTA3.map(([t, d]) => '<div><b>' + t + ':</b> ' + d + '</div>').join('') + '</div>' +
             '<div class="Audit-Desap-cmp-kpis" id="Audit-Desap-cmp-kpis"></div>' +
-            cmpTarjeta('Tabla comparativa por periodo', 'Filas: periodo seleccionado y los mismos meses de a&ntilde;os anteriores (desde 2019); si pasa de 12 meses, el periodo anterior de igual duraci&oacute;n',
+            cmpTarjeta('Tabla comparativa por periodo', 'Filas: periodo seleccionado y los mismos meses de a&ntilde;os anteriores (desde 2019); si pasa de 12 meses, el periodo anterior de igual duraci&oacute;n cuando la base lo cubre',
               '<div class="Audit-Desap-cmp-chips" id="Audit-Desap-cmp-chips" role="group" aria-label="Grupos de columnas"></div>' +
               '<div class="Audit-Desap-cmp-scroll"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-comp"></table></div>' +
-              '<p class="Audit-Desap-cmp-mini">Naranja = cifra oficial (s&oacute;lo cuando el periodo coincide con uno publicado); cursiva = localizadas derivadas (desaparecidas &times; % publicado). Porcentajes truncados a 2 decimales.</p>') +
+              '<p class="Audit-Desap-cmp-mini">Porcentajes y variaciones truncados a 2 decimales. Los controles (grupo L) deben dar 0.</p>') +
             cmpTarjeta('Efecto fotograf&iacute;a', 'Por qu&eacute; una misma cifra cambia seg&uacute;n la fecha en que se mide (no depende del criterio)',
               '<div class="Audit-Desap-cmp-scroll"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-efecto"></table></div>' +
               '<ul class="Audit-Desap-cmp-frases" id="Audit-Desap-cmp-frases"></ul>') +
@@ -18232,13 +18246,13 @@
             '<div class="Audit-Desap-cmp-grid" id="Audit-Desap-cmp-grid">' +
               CMP_GRAF.map(([id, t, d]) => '<div class="Audit-Desap-cmp-graf"><h3>' + t + '</h3><p>' + d + '</p><div class="Audit-Desap-cmp-lienzo"><canvas id="Audit-Desap-cmp-' + id + '"></canvas></div></div>').join('') +
             '</div>' +
-            cmpTarjeta('Serie mensual', 'Una fila por mes entre Inicio y Final, con el criterio elegido (avisos por mes de reporte)',
+            cmpTarjeta('Serie del periodo', 'Una fila por mes del periodo (por a&ntilde;o si pasa de 96 meses), con el criterio elegido; avisos por mes de reporte',
               '<div class="Audit-Desap-cmp-scroll" style="max-height:460px"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-serie"></table></div>') +
             cmpTarjeta('Municipios', 'Periodo seleccionado contra el periodo de comparaci&oacute;n &middot; ordenado de mayor a menor',
               '<div class="Audit-Desap-cmp-scroll" style="max-height:520px"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-mun"></table></div>' +
               '<p><button type="button" class="Audit-Desap-cmp-btn Audit-Desap-cmp-btn-sec" id="Audit-Desap-cmp-btn-mun">Ver todos los municipios</button></p>') +
             '<p class="Audit-Desap-pie">Fuente: COBUPEJ, Versi&oacute;n P&uacute;blica del Registro Estatal de Personas Desaparecidas (misma lectura del Sheet de esta vista), corte al ' +
-              '<span id="Audit-Desap-cmp-corte">&mdash;</span>. Cifras oficiales: Segundo Informe de Gobierno (p&aacute;gs. 406&ndash;408) y bolet&iacute;n ene&ndash;oct 2026. ' +
+              '<span id="Audit-Desap-cmp-corte">&mdash;</span>. ' +
               'Las carpetas reflejan el estatus vigente al corte. Elaboraci&oacute;n: <span class="Audit-Desap-cmp-firma" id="Audit-Desap-cmp-firma">CGES/Arjona</span>.' +
               ' <button type="button" class="Audit-Desap-cmp-btn Audit-Desap-cmp-btn-sec Audit-Desap-cmp-oculto" id="Audit-Desap-cmp-btn-total">&#11015; Descarga total (libro con base y filtro)</button></p>' +
             '</div></section>';
@@ -18252,32 +18266,27 @@
           if (el){ el.textContent = 'No se pudo calcular el comparativo: ' + (e && e.message ? e.message : e); el.classList.add('Audit-Desap-cmp-mal'); }
           if (window.console) console.error(e);
         }
-        function cmpPreparaFiltro(){
-          const opts = []; for (let i = cmpIdx(201901); i <= cmpIdx(CMP.corte); i++){ const v = cmpYm(i); opts.push('<option value="' + v + '">' + cmpLab(v) + '</option>'); }
-          const html = opts.join('');
-          AD('cmp-ini').innerHTML = html; AD('cmp-fin').innerHTML = html;
-          AD('cmp-ini').value = String(CMP.sel.a); AD('cmp-fin').value = String(CMP.sel.z);
-          AD('cmp-corte').textContent = CUT_TEXT || cmpLab(CMP.corte);
-        }
         function cmpPinta(){
           if (!CMP.listo || !CMP.res) return;
           leeTema();
           const R = CMP.res, V = R.V, est = AD('cmp-estado');
           document.querySelectorAll('#' + P + 'vista [data-cmp-crit]').forEach(b => b.setAttribute('aria-pressed', String((b.getAttribute('data-cmp-crit') === 'foto') === R.foto)));
           if (!V.length){
-            est.textContent = R.z < R.a ? '⚠ El Final es anterior al Inicio.' : '⚠ Periodo fuera del rango de la base.'; est.classList.add('Audit-Desap-cmp-mal');
+            est.textContent = '⚠ Periodo fuera del rango de la base.'; est.classList.add('Audit-Desap-cmp-mal');
             ['kpis','t-comp','t-efecto','t-sens','t-serie','t-mun','frases'].forEach(id => AD('cmp-' + id).innerHTML = '');
             return;
           }
           est.classList.remove('Audit-Desap-cmp-mal');
           const span = cmpIdx(R.z) - cmpIdx(R.a) + 1;
           est.innerHTML = '<b>' + cmpLabP(R.a, R.z) + '</b> &middot; ' + span + (span === 1 ? ' mes' : ' meses') + ' &middot; criterio: <b>' + (R.foto ? 'Foto a la fecha' : 'Base vigente') + '</b> &middot; ' +
-            (span > 12 ? 'm&aacute;s de 12 meses: se compara contra el periodo anterior de igual duraci&oacute;n' : 'se compara contra los mismos meses de a&ntilde;os anteriores (desde 2019)') +
-            ' &middot; corte de la base: ' + cmpLab(CMP.corte) + ' &middot; ' + CMP.n.toLocaleString('es-MX') + ' registros';
+            (V.length < 2 ? 'sin periodo de comparaci&oacute;n en la base' : span > 12 ? 'm&aacute;s de 12 meses: se compara contra el periodo anterior de igual duraci&oacute;n' : 'se compara contra los mismos meses de a&ntilde;os anteriores (desde 2019)') +
+            (span > 96 ? ' &middot; serie agrupada por a&ntilde;o' : '') +
+            ' &middot; corte de la base: ' + cmpLab(CMP.corte) + ' &middot; ' + CMP.n.toLocaleString('es-MX') + ' registros' +
+            (R.a < 201901 ? '<br>⚠ El rango incluye a&ntilde;os anteriores a 2019: buena parte de esos registros proviene de captura retroactiva; comp&aacute;ralos con cautela.' : '');
           cmpKpis(); cmpTablaComp(); cmpTablaEfecto(); cmpTablaSens(); cmpTablaSerie(); cmpTablaMun(); cmpGraficas();
         }
         function cmpKpis(){
-          const R = CMP.res, o = R.filas[0], p = R.filas[1], of = R.ofi[0];
+          const R = CMP.res, o = R.filas[0], p = R.filas[1];
           const k = (v, l, s) => '<div class="Audit-Desap-cmp-kpi"><div class="Audit-Desap-cmp-kv">' + v + '</div><div class="Audit-Desap-cmp-kl">' + l + '</div>' + (s ? '<div class="Audit-Desap-cmp-ks">' + s + '</div>' : '') + '</div>';
           const vs = (a, b, t) => p ? 'vs. ' + cmpLabP(p.a, p.z) + ': ' + cmpVar(a, b, t).s : '';
           AD('cmp-kpis').innerHTML =
@@ -18286,30 +18295,26 @@
             k(cmpPc(cmpDiv(o.L, o.D)), '% de localización', vs(cmpDiv(o.L, o.D), p && cmpDiv(p.L, p.D), 'p')) +
             k(cmpN(o.siguen), 'Siguen desaparecidas al cierre', cmpPc(cmpDiv(o.siguen_sin_carpeta, o.siguen)) + ' sin carpeta') +
             k(cmpPc(cmpDiv(o.sin_vida, o.L)), 'Localizadas sin vida', cmpN(o.sin_vida) + ' personas') +
-            k(of ? cmpN(of.D) : '—', 'Cifra oficial del periodo', of ? (of.p !== null ? cmpPc(of.p) + ' de localización · ' : '') + of.fuente : 'El periodo no coincide con uno publicado');
+            k(cmpPc(cmpDiv(o.avisos_carpeta, o.avisos)), 'Avisos recibidos con carpeta', cmpN(o.avisos_carpeta) + ' de ' + cmpN(o.avisos) + ' avisos del periodo');
         }
         function cmpTablaComp(){
           const R = CMP.res, G = CMP_GR.filter(g => CMP.grupos[g[0]]);
-          let h = '<thead><tr class="Audit-Desap-cmp-g"><th class="Audit-Desap-cmp-c0" rowspan="2">Periodo</th><th colspan="3">Cifra oficial</th><th colspan="3">Base REPD &middot; ' + (R.foto ? 'foto a la fecha' : 'base vigente') + '</th>' +
+          let h = '<thead><tr class="Audit-Desap-cmp-g"><th class="Audit-Desap-cmp-c0" rowspan="2">Periodo</th><th colspan="3">Base REPD &middot; ' + (R.foto ? 'foto a la fecha' : 'base vigente') + '</th>' +
             G.map(g => '<th colspan="' + g[2].length + '">' + g[0] + '. ' + g[1] + '</th>').join('') + '</tr><tr>' +
-            ['Desaparecidas','Localizadas','% localización','Desaparecidas','Localizadas','% localización'].map(t => '<th>' + t + '</th>').join('') +
+            ['Desaparecidas','Localizadas','% localización'].map(t => '<th>' + t + '</th>').join('') +
             G.map(g => g[2].map(c => '<th>' + c[1] + '</th>').join('')).join('') + '</tr></thead><tbody>';
-          const celdas = (o, of) => {
+          const celdas = o => {
             let s = '';
-            s += of ? '<td class="Audit-Desap-cmp-of" data-v="' + of.D + '">' + cmpN(of.D) + '</td><td class="Audit-Desap-cmp-of' + (of.derivada ? ' Audit-Desap-cmp-der' : '') + '">' + cmpN(of.L) + '</td><td class="Audit-Desap-cmp-of">' + cmpPc(of.p) + '</td>'
-                    : '<td class="Audit-Desap-cmp-of">n.p.</td><td class="Audit-Desap-cmp-of">n.p.</td><td class="Audit-Desap-cmp-of">n.p.</td>';
             s += '<td data-k="D" data-v="' + o.D + '">' + cmpN(o.D) + '</td><td data-k="L" data-v="' + o.L + '">' + cmpN(o.L) + '</td><td>' + cmpPc(cmpDiv(o.L, o.D)) + '</td>';
             G.forEach(g => g[2].forEach(([k, , t]) => { const v = cmpValor(o, k, t);
               s += '<td data-k="' + k + '" data-v="' + (v === null ? '' : v) + '"' + (t === 'c' ? ' class="Audit-Desap-cmp-ctl' + (v === 0 ? ' Audit-Desap-cmp-ok' : '') + '"' : '') + '>' + cmpTxt(v, t) + '</td>'; }));
             return s;
           };
-          R.filas.forEach((o, i) => { h += '<tr' + (i === 0 ? ' class="Audit-Desap-cmp-sel"' : '') + ' data-a="' + o.a + '" data-z="' + o.z + '"><td class="Audit-Desap-cmp-c0">' + cmpLabP(o.a, o.z) + '</td>' + celdas(o, R.ofi[i]) + '</tr>'; });
+          R.filas.forEach((o, i) => { h += '<tr' + (i === 0 ? ' class="Audit-Desap-cmp-sel"' : '') + ' data-a="' + o.a + '" data-z="' + o.z + '"><td class="Audit-Desap-cmp-c0">' + cmpLabP(o.a, o.z) + '</td>' + celdas(o) + '</tr>'; });
           const var_ = (lab, j) => {
             if (R.filas.length < 2) return '';
-            const o = R.filas[0], b = R.filas[j], ofa = R.ofi[0], ofb = R.ofi[j];
+            const o = R.filas[0], b = R.filas[j];
             let s = '<tr class="Audit-Desap-cmp-var"><td class="Audit-Desap-cmp-c0">' + lab + '</td>';
-            s += '<td>' + (ofa && ofb ? cmpVar(ofa.D, ofb.D, 'n').s : '—') + '</td><td>' + (ofa && ofb && ofa.L !== null && ofb.L !== null ? cmpVar(ofa.L, ofb.L, 'n').s : '—') + '</td><td>' +
-                 (ofa && ofb && ofa.p !== null && ofb.p !== null ? cmpVar(ofa.p, ofb.p, 'p').s : '—') + '</td>';
             s += '<td>' + cmpVar(o.D, b.D, 'n').s + '</td><td>' + cmpVar(o.L, b.L, 'n').s + '</td><td>' + cmpVar(cmpDiv(o.L, o.D), cmpDiv(b.L, b.D), 'p').s + '</td>';
             G.forEach(g => g[2].forEach(([k, , t]) => { s += '<td>' + (t === 'c' ? '' : cmpVar(cmpValor(o, k, t), cmpValor(b, k, t), t).s) + '</td>'; }));
             return s + '</tr>';
@@ -18354,29 +18359,30 @@
         }
         function cmpTablaSerie(){
           const S = CMP.res.serie;
-          let h = '<thead><tr><th class="Audit-Desap-cmp-c0">Mes</th><th>Desaparecidas</th><th>Localizadas</th><th>% localizaci&oacute;n</th><th>Con vida</th><th>Sin vida</th><th>% sin vida</th>' +
+          const anual = S.length && S[0].a !== S[0].z;
+          let h = '<thead><tr><th class="Audit-Desap-cmp-c0">' + (anual ? 'A&ntilde;o' : 'Mes') + '</th><th>Desaparecidas</th><th>Localizadas</th><th>% localizaci&oacute;n</th><th>Con vida</th><th>Sin vida</th><th>% sin vida</th>' +
             '<th>Siguen desaparecidas</th><th>Con carpeta</th><th>% con carpeta</th><th>Avisos recibidos</th><th>Avisos con carpeta</th><th>% avisos con carpeta</th></tr></thead><tbody>';
           const T = { D:0, L:0, cv:0, sv:0, siguen:0, cc:0, av:0, avc:0 };
           const fila = (lab, s, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="Audit-Desap-cmp-c0">' + lab + '</td><td data-v="' + s.D + '">' + cmpN(s.D) + '</td><td>' + cmpN(s.L) + '</td><td>' + cmpPc(cmpDiv(s.L, s.D)) + '</td><td>' + cmpN(s.cv) +
             '</td><td>' + cmpN(s.sv) + '</td><td>' + cmpPc(cmpDiv(s.sv, s.L)) + '</td><td>' + cmpN(s.siguen) + '</td><td>' + cmpN(s.cc) + '</td><td>' + cmpPc(cmpDiv(s.cc, s.D)) + '</td><td>' + cmpN(s.av) +
             '</td><td>' + cmpN(s.avc) + '</td><td><b>' + cmpPc(cmpDiv(s.avc, s.av)) + '</b></td></tr>';
-          S.forEach(s => { Object.keys(T).forEach(k => T[k] += s[k]); h += fila(cmpLab(s.m), s); });
+          S.forEach(s => { Object.keys(T).forEach(k => T[k] += s[k]); h += fila(s.lab, s); });
           h += fila('Total del periodo', T, 'Audit-Desap-cmp-var');
           AD('cmp-t-serie').innerHTML = h + '</tbody>';
         }
         function cmpTablaMun(){
           const R = CMP.res, M = R.mun, tot = M.reduce((s, m) => s + m.sel, 0), n = CMP.munTodos ? M.length : 20;
           const B = R.filas[1] ? cmpLabP(R.filas[1].a, R.filas[1].z) : '—';
-          let h = '<thead><tr><th>#</th><th class="Audit-Desap-cmp-c0">Municipio</th><th>AMG</th><th>' + B + '</th><th>' + cmpLabP(R.a, R.z) + '</th><th>Var.</th><th>Localizadas</th><th>% loc.</th>' +
+          let h = '<thead><tr><th class="Audit-Desap-cmp-c0">Municipio</th><th>AMG</th><th>' + B + '</th><th>' + cmpLabP(R.a, R.z) + '</th><th>Var.</th><th>Localizadas</th><th>% loc.</th>' +
             '<th>Con vida</th><th>Sin vida</th><th>Con carpeta</th><th>% con carpeta</th><th>% del estado</th></tr></thead><tbody>';
           M.slice(0, n).forEach((m, i) => {
-            const nom = m.nombre === 'OTRA ENTIDAD' ? 'Otra entidad / se ignora' : m.nombre.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());
-            h += '<tr><td>' + (i + 1) + '</td><td class="Audit-Desap-cmp-c0">' + nom + '</td><td>' + (m.amg ? 'Sí' : '') + '</td><td>' + cmpN(m.ant) + '</td><td data-v="' + m.sel + '"><b>' + cmpN(m.sel) + '</b></td><td>' +
+            const nom = m.nombre === 'OTRA ENTIDAD' ? 'Otra entidad / se ignora' : capMun(m.nombre);
+            h += '<tr><td class="Audit-Desap-cmp-c0">' + (i + 1) + '. ' + nom + '</td><td>' + (m.amg ? 'Sí' : '') + '</td><td>' + cmpN(m.ant) + '</td><td data-v="' + m.sel + '"><b>' + cmpN(m.sel) + '</b></td><td>' +
               (m.ant === null ? '—' : (m.ant ? cmpVr(cmpTr(m.sel / m.ant - 1)) : (m.sel > 0 ? 'NC' : '—'))) + '</td><td>' + cmpN(m.L) + '</td><td>' + cmpPc(cmpDiv(m.L, m.sel)) + '</td><td>' + cmpN(m.CV) + '</td><td>' + cmpN(m.SV) +
               '</td><td>' + cmpN(m.CS) + '</td><td>' + cmpPc(cmpDiv(m.CS, m.sel)) + '</td><td>' + cmpPc(cmpDiv(m.sel, tot)) + '</td></tr>';
           });
           const ta = M.reduce((s, m) => s + (m.ant || 0), 0), tl = M.reduce((s, m) => s + m.L, 0), tcs = M.reduce((s, m) => s + m.CS, 0);
-          h += '<tr class="Audit-Desap-cmp-var"><td></td><td class="Audit-Desap-cmp-c0">Total Jalisco</td><td></td><td>' + (R.filas[1] ? cmpN(ta) : '—') + '</td><td data-k="totmun" data-v="' + tot + '">' + cmpN(tot) + '</td><td>' +
+          h += '<tr class="Audit-Desap-cmp-var"><td class="Audit-Desap-cmp-c0">Total Jalisco</td><td></td><td>' + (R.filas[1] ? cmpN(ta) : '—') + '</td><td data-k="totmun" data-v="' + tot + '">' + cmpN(tot) + '</td><td>' +
             (R.filas[1] ? cmpVr(cmpTr(tot / ta - 1)) : '—') + '</td><td>' + cmpN(tl) + '</td><td>' + cmpPc(cmpDiv(tl, tot)) + '</td><td>' + cmpN(M.reduce((s, m) => s + m.CV, 0)) + '</td><td>' + cmpN(M.reduce((s, m) => s + m.SV, 0)) +
             '</td><td>' + cmpN(tcs) + '</td><td>' + cmpPc(cmpDiv(tcs, tot)) + '</td><td>100.00%</td></tr>';
           AD('cmp-t-mun').innerHTML = h + '</tbody>';
@@ -18405,16 +18411,16 @@
           mkChart('cmp-g-foto', { type: 'line', data: { labels: et, datasets: [cmpLinea('Foto a la fecha', Pz.map(p => pc(p.fL, p.fD)), 0), cmpLinea('Base vigente', Pz.map(p => pc(p.vL, p.vD)), 1)] }, options: cmpOpts(false, false, true) });
           mkChart('cmp-g-vida', { type: 'bar', data: { labels: et, datasets: [cmpBarra('Con vida', F.map(o => o.con_vida), 2), cmpBarra('Sin vida', F.map(o => o.sin_vida), 1)] }, options: cmpOpts(true, false, false) });
           mkChart('cmp-g-carp', { type: 'bar', data: { labels: et, datasets: [cmpBarra('Con carpeta', F.map(o => o.siguen_con_carpeta), 0), cmpBarra('Sin carpeta', F.map(o => o.siguen_sin_carpeta), 1)] }, options: cmpOpts(true, false, false) });
-          const S = R.serie, em = S.map(s => cmpLab(s.m));
+          const S = R.serie, em = S.map(s => s.lab);
           mkChart('cmp-g-mens', { type: 'bar', data: { labels: em, datasets: [cmpBarra('Desaparecidas', S.map(s => s.D), 0), cmpBarra('Localizadas', S.map(s => s.L), 2)] }, options: cmpOpts(false, false, false) });
-          const ix = S.findIndex(s => s.m === 202508);
+          const ix = S.findIndex(s => s.a <= 202508 && s.z >= 202508 && s.a === s.z);
           const marca = { id: 'cmpMarca', afterDatasetsDraw(ch){
             if (ix < 0) return; const x = ch.scales.x.getPixelForValue(ix), a = ch.chartArea, c = ch.ctx;
             c.save(); c.strokeStyle = TEMA.muted; c.setLineDash([4, 4]); c.lineWidth = 1; c.beginPath(); c.moveTo(x, a.top); c.lineTo(x, a.bottom); c.stroke();
             c.setLineDash([]); c.fillStyle = TEMA.muted; c.font = "11px 'Poppins', sans-serif"; c.fillText('ago 2025', x + 4, a.top + 12); c.restore(); } };
           const oAv = cmpOpts(false, false, true); oAv.plugins.legend.display = false;
           mkChart('cmp-g-avcarp', { type: 'line', data: { labels: em, datasets: [cmpLinea('% avisos con carpeta', S.map(s => pc(s.avc, s.av)), 0)] }, options: oAv, plugins: [marca] });
-          const M = R.mun.slice(0, 10), nomb = M.map(m => m.nombre === 'OTRA ENTIDAD' ? 'Otra entidad' : m.nombre.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase()));
+          const M = R.mun.slice(0, 10), nomb = M.map(m => m.nombre === 'OTRA ENTIDAD' ? 'Otra entidad' : capMun(m.nombre));
           const dsM = [cmpBarra(cmpLabP(R.a, R.z), M.map(m => m.sel), 0)];
           if (R.filas[1]) dsM.push(cmpBarra(cmpLabP(R.filas[1].a, R.filas[1].z), M.map(m => m.ant), 3));
           mkChart('cmp-g-mun', { type: 'bar', data: { labels: nomb, datasets: dsM }, options: cmpOpts(false, true, false) });
@@ -18506,6 +18512,7 @@
                 '<fonts count="' + fonts.length + '">' + fonts.join('') + '</fonts><fills count="' + fills.length + '">' + fills.join('') + '</fills>' +
                 '<borders count="' + borders.length + '">' + borders.join('') + '</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
                 '<cellXfs count="' + xfs.length + '">' + xfs.join('') + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>');
+              Object.keys(zip.files).forEach(k => { if (zip.files[k].dir) delete zip.files[k]; });   // sin entradas de carpeta (Word/Excel en la nube las rechazan)
               return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 },
                 mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
             },
@@ -18565,18 +18572,15 @@
             W.set(h, 2, 1, 'Periodo: ' + cmpLabP(R.a, R.z) + ' · Criterio: ' + crit + ' · Corte de la base: ' + cmpLab(CMP.corte) + ' · ' + CMP.n.toLocaleString('es-MX') + ' registros', CX.est); W.merge(h, 2, 1, 2, nc); h.altos[1] = 24; };
           /* 1 · Comparativa (todas las columnas) */
           const h1 = W.hoja('Comparativa'), cols = []; CMP_GR.forEach(g => g[2].forEach(c => cols.push([g, c])));
-          const NC = 7 + cols.length; encab(h1, 'Tabla comparativa por periodo · REPD Jalisco', NC);
-          W.set(h1, 4, 1, 'Periodo', CX.hdr); W.set(h1, 4, 2, 'Desaparecidas (oficial)', CX.org); W.set(h1, 4, 3, 'Localizadas (oficial)', CX.org); W.set(h1, 4, 4, '% localización (oficial)', CX.org);
-          W.set(h1, 4, 5, 'Desaparecidas', CX.ver); W.set(h1, 4, 6, 'Localizadas', CX.ver); W.set(h1, 4, 7, '% localización', CX.ver);
-          cols.forEach(([g, c], j) => W.set(h1, 4, 8 + j, g[0] + '. ' + c[1], g[0] === 'L' ? CX.gris : CX.hdr2));
+          const NC = 4 + cols.length; encab(h1, 'Tabla comparativa por periodo · REPD Jalisco', NC);
+          W.set(h1, 4, 1, 'Periodo', CX.hdr); W.set(h1, 4, 2, 'Desaparecidas', CX.ver); W.set(h1, 4, 3, 'Localizadas', CX.ver); W.set(h1, 4, 4, '% localización', CX.ver);
+          cols.forEach(([g, c], j) => W.set(h1, 4, 5 + j, g[0] + '. ' + c[1], g[0] === 'L' ? CX.gris : CX.hdr2));
           h1.altos[4] = 64;
           R.filas.forEach((o, i) => {
-            const r = 5 + i, of = R.ofi[i];
+            const r = 5 + i;
             W.set(h1, r, 1, cmpLabP(o.a, o.z), Object.assign({}, CX.txt, i === 0 ? { b: 1 } : {}));
-            if (of){ W.set(h1, r, 2, of.D, CX.of); W.set(h1, r, 3, of.L, of.derivada ? CX.est2 : CX.of); W.set(h1, r, 4, of.p, CX.ofp); }
-            else { W.set(h1, r, 2, 'n.p.', CX.na); W.set(h1, r, 3, 'n.p.', CX.na); W.set(h1, r, 4, 'n.p.', CX.na); }
-            W.set(h1, r, 5, o.D, CX.nb); W.set(h1, r, 6, o.L, CX.nb); W.set(h1, r, 7, cmpDiv(o.L, o.D), CX.pl);
-            cols.forEach(([g, c], j) => { const v = cmpValor(o, c[0], c[2]); W.set(h1, r, 8 + j, v, c[2] === 'p' ? CX.p : c[2] === 'x' || c[2] === 't' ? CX.d2 : c[2] === 'c' ? CX.ctl : CX.n); });
+            W.set(h1, r, 2, o.D, CX.nb); W.set(h1, r, 3, o.L, CX.nb); W.set(h1, r, 4, cmpDiv(o.L, o.D), CX.pl);
+            cols.forEach(([g, c], j) => { const v = cmpValor(o, c[0], c[2]); W.set(h1, r, 5 + j, v, c[2] === 'p' ? CX.p : c[2] === 'x' || c[2] === 't' ? CX.d2 : c[2] === 'c' ? CX.ctl : CX.n); });
           });
           let r = 5 + R.filas.length;
           [[1, 'Var. vs periodo anterior'], [R.filas.length - 1, 'Var. vs periodo más antiguo']].forEach(([j, lab]) => {
@@ -18584,9 +18588,8 @@
             const o = R.filas[0], b = R.filas[j];
             W.set(h1, r, 1, lab, CX.blk);
             const V = (a, bb, t, c) => { const x = cmpVar(a, bb, t); W.set(h1, r, c, x.v, t === 'p' ? CX.varpp : t === 'x' ? CX.var2 : CX.varb); };
-            [2, 3, 4].forEach(c => W.set(h1, r, c, null, CX.blkv));
-            V(o.D, b.D, 'n', 5); V(o.L, b.L, 'n', 6); V(cmpDiv(o.L, o.D), cmpDiv(b.L, b.D), 'p', 7);
-            cols.forEach(([g, c], k) => c[2] === 'c' ? W.set(h1, r, 8 + k, null, CX.blkv) : V(cmpValor(o, c[0], c[2]), cmpValor(b, c[0], c[2]), c[2], 8 + k));
+            V(o.D, b.D, 'n', 2); V(o.L, b.L, 'n', 3); V(cmpDiv(o.L, o.D), cmpDiv(b.L, b.D), 'p', 4);
+            cols.forEach(([g, c], k) => c[2] === 'c' ? W.set(h1, r, 5 + k, null, CX.blkv) : V(cmpValor(o, c[0], c[2]), cmpValor(b, c[0], c[2]), c[2], 5 + k));
             r++;
           });
           r++; CMP_NOTA3.forEach(([t, d]) => { W.set(h1, r, 1, t + ': ' + d, CX.nota); W.merge(h1, r, 1, r, 20); h1.altos[r] = 30; r++; });
@@ -18601,7 +18604,7 @@
               W.set(h2, rr, 1 + j, v, j === 0 ? CX.txt : j >= 10 && j <= 11 ? CX.pb : j === 12 ? CX.pp : [3, 4, 7, 8].indexOf(j) >= 0 ? CX.di : CX.n)); });
           let r2 = 6 + R.puente.length;
           Array.from(AD('cmp-frases').querySelectorAll('li')).forEach(li => { W.set(h2, r2, 1, li.textContent, CX.nota); W.merge(h2, r2, 1, r2, HE.length); h2.altos[r2] = 30; r2++; });
-          h2.cols[1] = { w: 22 }; for (let c = 2; c <= HE.length; c++) h2.cols[c] = { w: 13 };
+          h2.cols[1] = { w: 22 }; for (let c = 2; c <= HE.length; c++) h2.cols[c] = { w: 13 }; h2.freeze = [5, 2];
           /* 3 · Sensibilidad */
           const h3 = W.hoja('Sensibilidad'); encab(h3, 'Sensibilidad a la definición del universo', 10);
           ['Periodo','Foto · desaparecidas','Foto · localizadas','Foto · %','Vigente · desaparecidas','Vigente · localizadas','Vigente · %','Con cierre · desaparecidas','Con cierre · localizadas','Con cierre · %']
@@ -18609,12 +18612,12 @@
           R.puente.forEach((p, i) => { const rr = 5 + i; W.set(h3, rr, 1, cmpLabP(p.a, p.z), CX.txt);
             [[p.fD, p.fL], [p.vD, p.vL], [p.cD, p.cL]].forEach(([d, l], j) => { W.set(h3, rr, 2 + 3 * j, d, CX.n); W.set(h3, rr, 3 + 3 * j, l, CX.n); W.set(h3, rr, 4 + 3 * j, cmpDiv(l, d), CX.p); }); });
           let r3 = 6 + R.puente.length; CMP_NOTA3.forEach(([t, d]) => { W.set(h3, r3, 1, t + ': ' + d, CX.nota); W.merge(h3, r3, 1, r3, 10); h3.altos[r3] = 30; r3++; });
-          h3.cols[1] = { w: 22 }; for (let c = 2; c <= 10; c++) h3.cols[c] = { w: 13 };
+          h3.cols[1] = { w: 22 }; for (let c = 2; c <= 10; c++) h3.cols[c] = { w: 13 }; h3.freeze = [5, 2];
           /* 4 · Serie mensual */
-          const h4 = W.hoja('Serie mensual'), HS = ['Mes','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta','Avisos recibidos','Avisos con carpeta','% avisos con carpeta'];
+          const h4 = W.hoja('Serie'), HS = [(R.serie.length && R.serie[0].a !== R.serie[0].z) ? 'Año' : 'Mes','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta','Avisos recibidos','Avisos con carpeta','% avisos con carpeta'];
           encab(h4, 'Serie mensual del periodo', HS.length); HS.forEach((t, j) => W.set(h4, 4, 1 + j, t, CX.hdr)); h4.altos[4] = 40;
           R.serie.forEach((s, i) => { const rr = 5 + i;
-            [cmpLab(s.m), s.D, s.L, cmpDiv(s.L, s.D), s.cv, s.sv, cmpDiv(s.sv, s.L), s.siguen, s.cc, cmpDiv(s.cc, s.D), s.av, s.avc, cmpDiv(s.avc, s.av)]
+            [s.lab, s.D, s.L, cmpDiv(s.L, s.D), s.cv, s.sv, cmpDiv(s.sv, s.L), s.siguen, s.cc, cmpDiv(s.cc, s.D), s.av, s.avc, cmpDiv(s.avc, s.av)]
               .forEach((v, j) => W.set(h4, rr, 1 + j, v, j === 0 ? CX.txt : [3, 6, 9, 12].indexOf(j) >= 0 ? CX.p : CX.n)); });
           h4.cols[1] = { w: 11 }; for (let c = 2; c <= HS.length; c++) h4.cols[c] = { w: 12 }; h4.freeze = [5, 2];
           /* 5 · Municipios */
@@ -18651,7 +18654,7 @@
           ['Control','1 Tabla comparativa','2 Efecto fotografía','3 Sensibilidad','4 Serie mensual','5 Municipios','6 COBUPEJ','7 Metodología','Listas','BASE'].forEach(n => hojas[n] = W.hoja(n));
           /* --- Listas --- */
           const wl = hojas['Listas']; S(wl, 1, 1, 'AAAAMM', { b: 1 }); S(wl, 1, 2, 'Mes', { b: 1 });
-          let r = 2; for (let y = 2019; y <= 2030; y++) for (let m = 1; m <= 12; m++){ S(wl, r, 1, y * 100 + m); S(wl, r, 2, CMP_MES[m - 1] + ' ' + y); r++; }
+          let r = 2; for (let y = 1940; y <= 2030; y++) for (let m = 1; m <= 12; m++){ S(wl, r, 1, y * 100 + m); S(wl, r, 2, CMP_MES[m - 1] + ' ' + y); r++; }
           const NL = r - 1;
           S(wl, 1, 4, 'Mes', { b: 1 }); CMP_MES.forEach((m, i) => S(wl, 2 + i, 4, m));
           S(wl, 1, 6, 'Rango de edad', { b: 1 }); S(wl, 1, 7, 'Grupo', { b: 1 });
@@ -18691,34 +18694,35 @@
            [6, 'Criterio', sel.foto ? 'Foto a la fecha' : 'Base vigente', '=IF(C6="Base vigente",0,1)']].forEach(([rr, l, v, f]) => { S(wc, rr, 2, l, { b: 1, al: 'left' }); S(wc, rr, 3, v, CX.inp); S(wc, rr, 4, f, CX.aux); wc.altos[rr] = 20; });
           S(wc, 7, 2, 'Corte de la base (último mes de reporte)', { b: 1, al: 'left' }); S(wc, 7, 4, '=MAX(B_FR)', CX.aux); S(wc, 7, 3, '=' + MESF('D7'), { b: 1 });
           S(wc, 8, 2, 'Meses en el periodo', { b: 1, al: 'left' }); S(wc, 8, 3, '=IF(D5<D4,0,' + IDXF('D5') + '-' + IDXF('D4') + '+1)', { b: 1 });
-          S(wc, 9, 2, 'Filas de comparación', { b: 1, al: 'left' }); S(wc, 9, 3, '=IF(OR(D4=0,D5=0,D5<D4,D5>D7),0,IF(C8<=12,MIN(8,INT(D5/100)-2019+1),2))', { b: 1 });
+          S(wc, 9, 2, 'Filas de comparación', { b: 1, al: 'left' }); S(wc, 9, 3, '=IF(OR(D4=0,D5=0,D5<D4,D5>D7),0,IF(C8<=12,MAX(1,MIN(8,INT(D5/100)-2019+1)),IF(' + YMF(IDXF('D4') + '-C8') + '>=D12,2,1)))', { b: 1 });
           S(wc, 10, 2, 'Validación', { b: 1, al: 'left' });
-          S(wc, 10, 3, '=IF(OR(D4=0,D5=0),"⚠ Elige Inicio y Final de la lista",IF(D5<D4,"⚠ El Final es anterior al Inicio",IF(D5>D7,"⚠ El Final pasa el corte de la base",IF(C8>12,"✓ Periodo válido · más de 12 meses: se compara contra el periodo anterior de igual duración","✓ Periodo válido · se compara contra los mismos meses de años anteriores (desde 2019)"))))', { b: 1, al: 'left' });
+          S(wc, 10, 3, '=IF(OR(D4=0,D5=0),"⚠ Elige Inicio y Final de la lista",IF(D5<D4,"⚠ El Final es anterior al Inicio",IF(D5>D7,"⚠ El Final pasa el corte de la base",IF(C9=1,"✓ Periodo válido · sin periodo de comparación en la base",IF(C8>12,"✓ Periodo válido · más de 12 meses: se compara contra el periodo anterior de igual duración","✓ Periodo válido · se compara contra los mismos meses de años anteriores (desde 2019)")))&IF(D4<201901," · ⚠ incluye años antes de 2019 (captura retroactiva): comparar con cautela","")&IF(C8>96," · serie agrupada por año","")))', { b: 1, al: 'left' });
           W.merge(wc, 10, 3, 10, 6);
           S(wc, 11, 2, 'Qué cuenta el criterio', { b: 1, al: 'left' }); W.merge(wc, 11, 3, 11, 6); wc.altos[11] = 54;
           S(wc, 11, 3, '=IF(D6=1,"FOTO A LA FECHA: desaparición ocurrida en el periodo y reportada a más tardar al cierre del periodo; excluye los cierres hechos hasta esa fecha; localizadas = localizadas hasta el cierre del periodo. Reproduce las cifras oficiales y compara años con el mismo tiempo de reporte y búsqueda.","BASE VIGENTE: desaparición ocurrida en el periodo con todo lo que se sabe al corte (incluye reportes tardíos y localizaciones posteriores); excluye todos los registros con estatus CIERRE. Los periodos recientes se ven más bajos porque han tenido menos tiempo de reporte y búsqueda.")', CX.txtw);
+          S(wc, 12, 2, 'Primer mes con datos en la base', { b: 1, al: 'left' }); S(wc, 12, 4, '=_xlfn.MINIFS(B_FD,B_FD,">0")', CX.aux); S(wc, 12, 3, '=' + MESF('D12'), { b: 1 });
           wc.val.push({ sqref: 'C4:C5', f: 'Listas!$B$2:$B$' + NL }, { sqref: 'C6', f: '"Foto a la fecha,Base vigente"' });
-          notas(wc, 13, 6, ['CÓMO ACTUALIZAR LA BASE', '1. Descarga la versión pública del REPD (hoja DATOS). 2. En la hoja BASE borra las filas 2 en adelante de las columnas A a R. 3. Pega los registros (sin encabezados) a partir de A2, con el mismo orden de las 18 columnas. 4. Las columnas S a Z se calculan solas hasta la fila ' + NMAX.toLocaleString('es-MX') + '. 5. El corte se detecta solo y la lista de meses llega hasta dic 2030.',
+          notas(wc, 14, 6, ['CÓMO ACTUALIZAR LA BASE', '1. Descarga la versión pública del REPD (hoja DATOS). 2. En la hoja BASE borra las filas 2 en adelante de las columnas A a R. 3. Pega los registros (sin encabezados) a partir de A2, con el mismo orden de las 18 columnas. 4. Las columnas S a Z se calculan solas hasta la fila ' + NMAX.toLocaleString('es-MX') + '. 5. El corte y el primer mes se detectan solos; la lista de meses va de ene 1940 a dic 2030.',
             'Las hojas 1 a 7 dependen solo de esta hoja y de BASE. Las proporciones y variaciones están truncadas a 2 decimales (regla CGES). Las carpetas reflejan el estatus vigente al corte (la base no publica la fecha de apertura).', CMP_FIRMA], 44);
           [2, 34, 30, 12, 20, 20].forEach((w, i) => wc.cols[i + 1] = { w });
-          [['CTL_A','$D$4'],['CTL_Z','$D$5'],['CTL_FOTO','$D$6'],['CTL_CRIT','$C$6'],['CTL_CORTE','$D$7'],['CTL_SPAN','$C$8'],['CTL_NROWS','$C$9'],['CTL_ILAB','$C$4'],['CTL_FLAB','$C$5'],['CTL_CLAB','$C$7']]
+          [['CTL_A','$D$4'],['CTL_Z','$D$5'],['CTL_FOTO','$D$6'],['CTL_CRIT','$C$6'],['CTL_CORTE','$D$7'],['CTL_SPAN','$C$8'],['CTL_NROWS','$C$9'],['CTL_PRIMER','$D$12'],['CTL_ILAB','$C$4'],['CTL_FLAB','$C$5'],['CTL_CLAB','$C$7']]
             .forEach(([n, c]) => W.nombre(n, 'Control!' + c));
           /* --- 1 Tabla comparativa --- */
-          const ws = hojas['1 Tabla comparativa'], C0 = 10, COLS = []; let cc = C0;
+          const ws = hojas['1 Tabla comparativa'], C0 = 7, COLS = []; let cc = C0;
           CMP_GR.forEach(g => g[2].forEach(([k, lab, t]) => { COLS.push({ c: cc, k, lab, t, g: g[0] }); cc++; }));
-          const NC = cc - 1, colof = { D: 'G', L: 'H' }; COLS.forEach(x => colof[x.k] = cmpCol(x.c));
+          const NC = cc - 1, colof = { D: 'D', L: 'E' }; COLS.forEach(x => colof[x.k] = cmpCol(x.c));
           const ZRC = NC + 2, ZCC = NC + 3, VC = NC + 4, ZR = cmpCol(ZRC), ZC = cmpCol(ZCC);
-          titulo(ws, 'Desapariciones, localizaciones e indicadores del periodo seleccionado · Jalisco', 'Filas: periodo seleccionado y los mismos meses de años anteriores (desde 2019); si el periodo pasa de 12 meses, el periodo anterior de igual duración. Columnas: cifra oficial (cuando el periodo coincide con uno publicado), universo según el criterio elegido e indicadores. Condición y clasificación: valor vigente de las localizadas. Carpetas: estatus vigente al corte. Porcentajes truncados a 2 decimales.', NC, 40);
+          titulo(ws, 'Desapariciones, localizaciones e indicadores del periodo seleccionado · Jalisco', 'Filas: periodo seleccionado y los mismos meses de años anteriores (desde 2019); si el periodo pasa de 12 meses, el periodo anterior de igual duración cuando la base lo cubre. Columnas: universo según el criterio elegido e indicadores. Condición y clasificación: valor vigente de las localizadas. Carpetas: estatus vigente al corte. Porcentajes truncados a 2 decimales.', NC, 40);
           estado(ws, 3, NC);
           [[1, 'Periodo'], [2, 'Desde (AAAAMM)'], [3, 'Hasta (AAAAMM)']].forEach(([c, t]) => { S(ws, 4, c, t, CX.hdr); S(ws, 5, c, null, CX.hdr); S(ws, 6, c, null, CX.hdr); W.merge(ws, 4, c, 6, c); });
-          grp(ws, 4, 4, 6, 'Cifra oficial', CX.org); grp(ws, 5, 4, 6, 'Informe / boletín', CX.org); grp(ws, 4, 7, NC, 'Base REPD · criterio del panel de control', CX.hdr); grp(ws, 5, 7, 9, 'Universo y localización', CX.ver);
+          grp(ws, 4, 4, NC, 'Base REPD · criterio del panel de control', CX.hdr); grp(ws, 5, 4, 6, 'Universo y localización', CX.ver);
           CMP_GR.forEach((g, i) => { const xs = COLS.filter(x => x.g === g[0]); grp(ws, 5, xs[0].c, xs[xs.length - 1].c, g[0] + '. ' + g[1], g[0] === 'L' ? CX.gris : CX.hdr2); });
-          ['Desaparecidas','Localizadas','% localización','Desaparecidas','Localizadas','% localización'].forEach((t, j) => S(ws, 6, 4 + j, t, CX.hdr2));
+          ['Desaparecidas','Localizadas','% localización'].forEach((t, j) => S(ws, 6, 4 + j, t, CX.hdr2));
           COLS.forEach(x => S(ws, 6, x.c, x.lab, CX.hdr2)); S(ws, 6, ZRC, 'zr', CX.aux); S(ws, 6, ZCC, 'zc', CX.aux); S(ws, 6, VC, 'k', CX.aux);
           ws.altos[4] = 22; ws.altos[5] = 30; ws.altos[6] = 52;
           const R1 = 7, RN = 14;
           const SPEC = {
-            siguen: r => 'G' + r + '-H' + r, con_vida: 'L:,B_COND,"CON VIDA"', sin_vida: 'L:,B_COND,"SIN VIDA"', cl_lg: 'L:,B_CLAS,"VICTIMA DE DELITO CONTEMPLADO EN LA LEY GENERAL"',
+            siguen: r => 'D' + r + '-E' + r, con_vida: 'L:,B_COND,"CON VIDA"', sin_vida: 'L:,B_COND,"SIN VIDA"', cl_lg: 'L:,B_CLAS,"VICTIMA DE DELITO CONTEMPLADO EN LA LEY GENERAL"',
             cl_div: 'L:,B_CLAS,"VICTIMA DE DELITO DIVERSO"', cl_sin: 'L:,B_CLAS,"SIN SER VICTIMA DE DELITO"', con_carpeta: 'D:,B_CARP,"SI"', sin_carpeta: 'D:,B_CARP,"NO"',
             siguen_con_carpeta: 'SC:SI', siguen_sin_carpeta: 'SC:NO', avisos: 'A:', avisos_ant: 'A:,B_FD,"<"&$B{r},B_FD,">0"', avisos_carpeta: 'A:,B_CARP,"SI"', cierres_excl: 'CE:',
             ci_terr: 'CE:,B_TCIE,"NO COMPETENCIA TERRITORIAL"', ci_del: 'CE:,B_TCIE,"NO COMPETENCIA DE DELITO"', ci_acu: 'CE:,B_TCIE,"POR ACUMULACION"', ci_fam: 'CE:,B_TCIE,"POR BUSQUEDA DE FAMILIARES"',
@@ -18732,7 +18736,7 @@
           const fx = (k, r) => {
             const s = SPEC[k], q = crit(r);
             if (typeof s === 'function') return s(r);
-            if (k === 'cl_otra') return 'H' + r + '-' + colof.cl_lg + r + '-' + colof.cl_div + r + '-' + colof.cl_sin + r;
+            if (k === 'cl_otra') return 'E' + r + '-' + colof.cl_lg + r + '-' + colof.cl_div + r + '-' + colof.cl_sin + r;
             if (k === 'prom_meses') return 'IFERROR(AVERAGEIFS(B_MESES,' + q.base + ',B_EST,"PERSONA LOCALIZADA",B_FL,"<="&$' + ZR + r + '),"—")';
             const [kind, ex0] = [s.split(':')[0], s.slice(s.indexOf(':') + 1).replace(/\{r\}/g, r)];
             if (kind === 'D') return q.Dx(ex0); if (kind === 'L') return q.Lx(ex0); if (kind === 'A') return q.Ax(ex0);
@@ -18741,9 +18745,9 @@
             if (kind === 'CP') return 'COUNTIFS(' + q.base + ',B_EST,"CIERRE",B_FC,">"&$' + ZC + r + ')';
             throw new Error('spec ' + k);
           };
-          const CTLF = { CTL1: r => colof.con_carpeta + r + '+' + colof.sin_carpeta + r + '-G' + r, CTL2: r => colof.D_h + r + '+' + colof.D_m + r + '-G' + r,
-            CTL3: r => colof.con_vida + r + '+' + colof.sin_vida + r + '-H' + r, CTL4: r => 'SUM(' + colof['e_0-14'] + r + ':' + colof['e_Se ignora'] + r + ')-G' + r,
-            CTL5: r => colof.D_amg + r + '+' + colof.D_int + r + '+' + colof.D_otra + r + '-G' + r };
+          const CTLF = { CTL1: r => colof.con_carpeta + r + '+' + colof.sin_carpeta + r + '-D' + r, CTL2: r => colof.D_h + r + '+' + colof.D_m + r + '-D' + r,
+            CTL3: r => colof.con_vida + r + '+' + colof.sin_vida + r + '-E' + r, CTL4: r => 'SUM(' + colof['e_0-14'] + r + ':' + colof['e_Se ignora'] + r + ')-D' + r,
+            CTL5: r => colof.D_amg + r + '+' + colof.D_int + r + '+' + colof.D_otra + r + '-D' + r };
           for (let k = 0; k < 8; k++){
             const rr = R1 + k, q = crit(rr), key = '$B' + rr + '&"|"&$C' + rr;
             ws.altos[rr] = 16; S(ws, rr, VC, k, CX.aux);
@@ -18751,21 +18755,18 @@
             S(ws, rr, 3, k ? '=IF(' + k + '>=CTL_NROWS,"",IF(CTL_SPAN<=12,CTL_Z-100*' + k + ',' + YMF(IDXF('CTL_A') + '-1') + '))' : '=IF(CTL_NROWS<1,"",CTL_Z)', CX.aux);
             S(ws, rr, 1, '=IF($B' + rr + '="","",' + MESF('$B' + rr) + '&IF($B' + rr + '=$C' + rr + ',""," – "&' + MESF('$C' + rr) + '))', Object.assign({}, CX.txt, k === 0 ? { b: 1 } : {}));
             S(ws, rr, ZRC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',999999))', CX.aux); S(ws, rr, ZCC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',999999))', CX.aux);
-            S(ws, rr, 4, '=IF($B' + rr + '="","",IFERROR(INDEX(OF_D,MATCH(' + key + ',OF_KEY,0)),"n.p."))', CX.of);
-            S(ws, rr, 5, '=IF($B' + rr + '="","",IFERROR(IF(INDEX(OF_L,MATCH(' + key + ',OF_KEY,0))<>"",INDEX(OF_L,MATCH(' + key + ',OF_KEY,0)),IF(INDEX(OF_P,MATCH(' + key + ',OF_KEY,0))<>"",ROUND(D' + rr + '*INDEX(OF_P,MATCH(' + key + ',OF_KEY,0)),0),"n.p.")),"n.p."))', CX.of);
-            S(ws, rr, 6, '=IF($B' + rr + '="","",IFERROR(IF(INDEX(OF_P,MATCH(' + key + ',OF_KEY,0))<>"",INDEX(OF_P,MATCH(' + key + ',OF_KEY,0)),"n.p."),"n.p."))', CX.ofp);
-            S(ws, rr, 7, '=IF($B' + rr + '="","",' + q.Dx() + ')', k ? CX.n : CX.nb); S(ws, rr, 8, '=IF($B' + rr + '="","",' + q.Lx() + ')', k ? CX.n : CX.nb);
-            S(ws, rr, 9, '=IF($B' + rr + '="","",IFERROR(TRUNC(H' + rr + '/G' + rr + ',4),"—"))', CX.pl);
+            S(ws, rr, 4, '=IF($B' + rr + '="","",' + q.Dx() + ')', k ? CX.n : CX.nb); S(ws, rr, 5, '=IF($B' + rr + '="","",' + q.Lx() + ')', k ? CX.n : CX.nb);
+            S(ws, rr, 6, '=IF($B' + rr + '="","",IFERROR(TRUNC(E' + rr + '/D' + rr + ',4),"—"))', CX.pl);
             COLS.forEach(x => {
               let f, o;
               if (x.t === 'p'){ const [nn, dd] = x.k.slice(1).split('/'); f = 'IFERROR(TRUNC(' + colof[nn] + rr + '/' + colof[dd] + rr + ',4),"—")'; o = CX.p; }
-              else if (x.t === 't'){ f = 'TRUNC(G' + rr + '/8348151*100000,2)'; o = CX.d2; }
+              else if (x.t === 't'){ f = 'TRUNC(D' + rr + '/8348151*100000,2)'; o = CX.d2; }
               else if (x.t === 'c'){ f = CTLF[x.k](rr); o = CX.ctl; }
               else { f = fx(x.k, rr); o = x.t === 'x' ? CX.d2 : CX.n; }
               S(ws, rr, x.c, '=IF($B' + rr + '="","",' + f + ')', o);
             });
           }
-          const tipos = { 4: 'n', 5: 'n', 6: 'p', 7: 'n', 8: 'n', 9: 'p' }; COLS.forEach(x => tipos[x.c] = x.t);
+          const tipos = { 4: 'n', 5: 'n', 6: 'p' }; COLS.forEach(x => tipos[x.c] = x.t);
           [[RN + 1, 'Var. vs periodo anterior'], [RN + 2, 'Var. vs periodo más antiguo']].forEach(([rr, lab]) => {
             S(ws, rr, 1, lab, CX.blk); S(ws, rr, 2, null, CX.blkv); S(ws, rr, 3, null, CX.blkv);
             for (let c = 4; c <= NC; c++){
@@ -18779,9 +18780,9 @@
           notas(ws, RN + 4, 30, ['LECTURA', '1. Con «Foto a la fecha» cada fila se mide con lo que se sabía al cierre de ese periodo: reproduce las cifras oficiales y compara años con el mismo tiempo de reporte y búsqueda.',
             '2. Con «Base vigente» cada fila incluye reportes tardíos y localizaciones posteriores: los periodos antiguos se ven más completos que los recientes. La diferencia se explica en la hoja «2 Efecto fotografía».',
             '3. Carpetas: estatus vigente al corte en ambos criterios (la base no publica la fecha de apertura).',
-            'Columnas: oficial (naranja) solo cuando el periodo coincide con uno publicado; «n.p.» = no publicado. Controles (grupo L) deben dar 0.', CMP_FIRMA]);
+            'Los controles (grupo L) deben dar 0. Si no hay periodo de comparación en la base, la tabla muestra una sola fila.', CMP_FIRMA]);
           ws.cols[1] = { w: 22 }; ws.cols[2] = { w: 9 }; ws.cols[3] = { w: 9 }; for (let c = 4; c <= NC; c++) ws.cols[c] = { w: 11 };
-          [ZRC, ZCC, VC].forEach(c => ws.cols[c] = { w: 6, hidden: true }); ws.freeze = [R1, 4]; ws.zoom = 85;
+          [ZRC, ZCC, VC].forEach(c => ws.cols[c] = { w: 6, hidden: true }); ws.freeze = [R1, 2]; ws.zoom = 85;
           /* --- 2 Efecto fotografía --- */
           const T1 = "'1 Tabla comparativa'", we = hojas['2 Efecto fotografía'];
           const HE = ['Periodo','Desde','Hasta','Meses entre el cierre del periodo y el corte','Desaparecidas · foto a la fecha','+ ocurridas en el periodo y reportadas después','− cerradas después del periodo',
@@ -18826,31 +18827,34 @@
               .forEach(([fd, fl], i) => { const a = 4 + 3 * i; S(w3, rr, a, G(fd), CX.n); S(w3, rr, a + 1, G(fl), CX.n); S(w3, rr, a + 2, G('IFERROR(TRUNC(' + cmpCol(a + 1) + rr + '/' + cmpCol(a) + rr + ',4),"—")'), CX.p); });
           }
           notas(w3, 15, 12, ['CÓMO LEER LOS TRES CRITERIOS'].concat(CMP_NOTA3.map(([t, d]) => t.toUpperCase() + ': ' + d), [CMP_FIRMA]), 30);
-          w3.cols[1] = { w: 22 }; for (let c = 2; c <= 12; c++) w3.cols[c] = { w: 12 };
-          /* --- 4 Serie mensual --- */
-          const w4 = hojas['4 Serie mensual'], HS = ['Mes','AAAAMM','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta',
+          w3.cols[1] = { w: 22 }; for (let c = 2; c <= 12; c++) w3.cols[c] = { w: 12 }; w3.freeze = [6, 2];
+          /* --- 4 Serie (mensual; anual si el rango pasa de 96 meses) --- */
+          const w4 = hojas['4 Serie mensual'], HS = ['Mes / año','Desde','Hasta','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta',
             'Avisos recibidos','Avisos con carpeta','% avisos con carpeta','Control: con + sin vida − localiz.'];
-          titulo(w4, 'Serie mensual del periodo seleccionado', 'Una fila por mes entre Inicio y Final (máx. 96). Cada mes se mide con el criterio del panel: con «Foto a la fecha», lo reportado y localizado hasta el cierre de ese mes; con «Base vigente», todo lo conocido al corte. Avisos por mes de reporte.', HS.length);
+          titulo(w4, 'Serie del periodo seleccionado', 'Una fila por mes entre Inicio y Final; si el rango pasa de 96 meses, una fila por año (recortada al rango). Cada tramo se mide con el criterio del panel: con «Foto a la fecha», lo reportado y localizado hasta el cierre del tramo; con «Base vigente», todo lo conocido al corte. Avisos por fecha de reporte.', HS.length);
           estado(w4, 3, HS.length); HS.forEach((t, i) => S(w4, 5, 1 + i, t, CX.hdr)); w4.altos[5] = 40;
           for (let i = 0; i < 96; i++){
-            const rr = 6 + i, zr = 'IF(CTL_FOTO=1,$B' + rr + ',999999)', base = 'B_FD,$B' + rr + ',B_FR,"<="&' + zr, cie = 'B_EST,"CIERRE",B_FC,"<="&' + zr;
+            const rr = 6 + i, yy = '(INT(CTL_A/100)+' + i + ')';
+            const zr = 'IF(CTL_FOTO=1,$C' + rr + ',999999)', base = 'B_FD,">="&$B' + rr + ',B_FD,"<="&$C' + rr + ',B_FR,"<="&' + zr, cie = 'B_EST,"CIERRE",B_FC,"<="&' + zr;
+            const avb = 'B_FR,">="&$B' + rr + ',B_FR,"<="&$C' + rr;
             const Dx = ex => '(COUNTIFS(' + base + (ex || '') + ')-COUNTIFS(' + base + ',' + cie + (ex || '') + '))', Lx = ex => 'COUNTIFS(' + base + ',B_EST,"PERSONA LOCALIZADA",B_FL,"<="&' + zr + (ex || '') + ')';
             const G = e => '=IF($B' + rr + '="","",' + e + ')';
-            S(w4, rr, 2, '=IF(OR(CTL_NROWS<1,' + i + '>CTL_SPAN-1),"",' + YMF(IDXF('CTL_A') + '+' + i) + ')', CX.aux);
-            S(w4, rr, 1, '=IF($B' + rr + '="","",' + MESF('$B' + rr) + ')', CX.txt);
-            S(w4, rr, 3, G(Dx()), CX.n); S(w4, rr, 4, G(Lx()), CX.n); S(w4, rr, 5, G('IFERROR(TRUNC(D' + rr + '/C' + rr + ',4),"—")'), CX.p);
-            S(w4, rr, 6, G(Lx(',B_COND,"CON VIDA"')), CX.n); S(w4, rr, 7, G(Lx(',B_COND,"SIN VIDA"')), CX.n); S(w4, rr, 8, G('IFERROR(TRUNC(G' + rr + '/D' + rr + ',4),"—")'), CX.p);
-            S(w4, rr, 9, G('C' + rr + '-D' + rr), CX.n); S(w4, rr, 10, G(Dx(',B_CARP,"SI"')), CX.n); S(w4, rr, 11, G('IFERROR(TRUNC(J' + rr + '/C' + rr + ',4),"—")'), CX.p);
-            S(w4, rr, 12, G('COUNTIFS(B_FR,$B' + rr + ')-COUNTIFS(B_FR,$B' + rr + ',' + cie + ')'), CX.n);
-            S(w4, rr, 13, G('COUNTIFS(B_FR,$B' + rr + ',B_CARP,"SI")-COUNTIFS(B_FR,$B' + rr + ',B_CARP,"SI",' + cie + ')'), CX.n);
-            S(w4, rr, 14, G('IFERROR(TRUNC(M' + rr + '/L' + rr + ',4),"—")'), CX.pb); S(w4, rr, 15, G('F' + rr + '+G' + rr + '-D' + rr), CX.ctl);
+            S(w4, rr, 2, '=IF(CTL_NROWS<1,"",IF(CTL_SPAN<=96,IF(' + i + '>CTL_SPAN-1,"",' + YMF(IDXF('CTL_A') + '+' + i) + '),IF(' + yy + '>INT(CTL_Z/100),"",MAX(CTL_A,' + yy + '*100+1))))', CX.aux);
+            S(w4, rr, 3, '=IF($B' + rr + '="","",IF(CTL_SPAN<=96,$B' + rr + ',MIN(CTL_Z,' + yy + '*100+12)))', CX.aux);
+            S(w4, rr, 1, '=IF($B' + rr + '="","",IF($B' + rr + '=$C' + rr + ',' + MESF('$B' + rr) + ',IF(AND(MOD($B' + rr + ',100)=1,MOD($C' + rr + ',100)=12),""&INT($B' + rr + '/100),' + MESF('$B' + rr) + '&" – "&' + MESF('$C' + rr) + ')))', CX.txt);
+            S(w4, rr, 4, G(Dx()), CX.n); S(w4, rr, 5, G(Lx()), CX.n); S(w4, rr, 6, G('IFERROR(TRUNC(E' + rr + '/D' + rr + ',4),"—")'), CX.p);
+            S(w4, rr, 7, G(Lx(',B_COND,"CON VIDA"')), CX.n); S(w4, rr, 8, G(Lx(',B_COND,"SIN VIDA"')), CX.n); S(w4, rr, 9, G('IFERROR(TRUNC(H' + rr + '/E' + rr + ',4),"—")'), CX.p);
+            S(w4, rr, 10, G('D' + rr + '-E' + rr), CX.n); S(w4, rr, 11, G(Dx(',B_CARP,"SI"')), CX.n); S(w4, rr, 12, G('IFERROR(TRUNC(K' + rr + '/D' + rr + ',4),"—")'), CX.p);
+            S(w4, rr, 13, G('COUNTIFS(' + avb + ')-COUNTIFS(' + avb + ',' + cie + ')'), CX.n);
+            S(w4, rr, 14, G('COUNTIFS(' + avb + ',B_CARP,"SI")-COUNTIFS(' + avb + ',B_CARP,"SI",' + cie + ')'), CX.n);
+            S(w4, rr, 15, G('IFERROR(TRUNC(N' + rr + '/M' + rr + ',4),"—")'), CX.pb); S(w4, rr, 16, G('G' + rr + '+H' + rr + '-E' + rr), CX.ctl);
           }
-          const rT = 102; S(w4, rT, 1, 'Total del periodo', CX.blk); S(w4, rT, 2, null, CX.blkv);
-          [3, 4, 6, 7, 9, 10, 12, 13].forEach(c => S(w4, rT, c, '=SUM(' + cmpCol(c) + '6:' + cmpCol(c) + (rT - 1) + ')', Object.assign({}, CX.nb, { fill: 'DCE4EE' })));
-          [[5, 'D', 'C'], [8, 'G', 'D'], [11, 'J', 'C'], [14, 'M', 'L']].forEach(([c, nn, dd]) => S(w4, rT, c, '=IFERROR(TRUNC(' + nn + rT + '/' + dd + rT + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' })));
-          S(w4, rT, 15, '=F' + rT + '+G' + rT + '-D' + rT, CX.ctl);
-          notas(w4, rT + 2, HS.length, ['', 'Con «Foto a la fecha», la suma de los meses no es igual a la fila del periodo en la hoja 1: cada mes se cierra en su propio mes. Con «Base vigente» sí coinciden.', CMP_FIRMA]);
-          w4.cols[1] = { w: 11 }; for (let c = 2; c <= HS.length; c++) w4.cols[c] = { w: 12 }; w4.freeze = [6, 3];
+          const rT = 102; S(w4, rT, 1, 'Total del periodo', CX.blk); S(w4, rT, 2, null, CX.blkv); S(w4, rT, 3, null, CX.blkv);
+          [4, 5, 7, 8, 10, 11, 13, 14].forEach(c => S(w4, rT, c, '=SUM(' + cmpCol(c) + '6:' + cmpCol(c) + (rT - 1) + ')', Object.assign({}, CX.nb, { fill: 'DCE4EE' })));
+          [[6, 'E', 'D'], [9, 'H', 'E'], [12, 'K', 'D'], [15, 'N', 'M']].forEach(([c, nn, dd]) => S(w4, rT, c, '=IFERROR(TRUNC(' + nn + rT + '/' + dd + rT + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' })));
+          S(w4, rT, 16, '=G' + rT + '+H' + rT + '-E' + rT, CX.ctl);
+          notas(w4, rT + 2, HS.length, ['', 'Con «Foto a la fecha», la suma de los tramos no es igual a la fila del periodo en la hoja 1: cada tramo se cierra en su propio fin. Con «Base vigente» sí coinciden.', CMP_FIRMA]);
+          w4.cols[1] = { w: 16 }; for (let c = 2; c <= HS.length; c++) w4.cols[c] = { w: 12 }; w4.freeze = [6, 2];
           /* --- 5 Municipios --- */
           const w5 = hojas['5 Municipios'], MUNS = CMP.muns.concat(['OTRA ENTIDAD']), HM = ['#','Municipio','AMG','Periodo anterior','Periodo seleccionado','Var.','Localizadas','% loc.','Con vida','Sin vida','Con carpeta','% con carpeta','% del estado'];
           titulo(w5, 'Desapariciones por municipio · periodo seleccionado contra el periodo anterior', 'Mismo universo y criterio de la hoja 1 (fila 1 = periodo seleccionado, fila 2 = periodo de comparación). Ordenado de mayor a menor por el periodo seleccionado. Top 10 sombreado.', HM.length);
@@ -18883,8 +18887,8 @@
           [4, 5, 7, 9, 10, 11].forEach(c => S(w5, rm, c, '=SUM(' + cmpCol(c) + '6:' + cmpCol(c) + rl + ')', Object.assign({}, CX.nb, { fill: 'DCE4EE' })));
           S(w5, rm, 6, '=IF(CTL_NROWS<2,"",IFERROR(TRUNC(E' + rm + '/D' + rm + '-1,4),"NC"))', CX.varb); S(w5, rm, 8, '=IFERROR(TRUNC(G' + rm + '/E' + rm + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' }));
           S(w5, rm, 12, '=IFERROR(TRUNC(K' + rm + '/E' + rm + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' })); S(w5, rm, 13, '=IFERROR(TRUNC(E' + rm + '/E' + rm + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' }));
-          rm++; S(w5, rm, 2, 'Control: total − hoja 1 (debe ser 0)', { b: 1, al: 'left' }); S(w5, rm, 5, '=E' + (rm - 1) + '-' + T1 + '!G' + R1, CX.di);
-          S(w5, rm, 4, '=IF(CTL_NROWS<2,"",D' + (rm - 1) + '-' + T1 + '!G' + (R1 + 1) + ')', CX.di); S(w5, rm, 7, '=G' + (rm - 1) + '-' + T1 + '!H' + R1, CX.di);
+          rm++; S(w5, rm, 2, 'Control: total − hoja 1 (debe ser 0)', { b: 1, al: 'left' }); S(w5, rm, 5, '=E' + (rm - 1) + '-' + T1 + '!D' + R1, CX.di);
+          S(w5, rm, 4, '=IF(CTL_NROWS<2,"",D' + (rm - 1) + '-' + T1 + '!D' + (R1 + 1) + ')', CX.di); S(w5, rm, 7, '=G' + (rm - 1) + '-' + T1 + '!E' + R1, CX.di);
           notas(w5, rm + 2, HM.length, ['', 'AMG = 9 municipios (sin Acatlán de Juárez). NC = no calculable (base cero). Un municipio nuevo que no esté en la lista aparecerá como diferencia en el control.', CMP_FIRMA]);
           w5.cols[1] = { w: 5 }; w5.cols[2] = { w: 30 }; w5.cols[3] = { w: 6 }; for (let c = 4; c <= HM.length; c++) w5.cols[c] = { w: 11 };
           for (let c = CB; c < CB + 8; c++) w5.cols[c] = { w: 10, hidden: true }; w5.freeze = [6, 3];
@@ -18899,24 +18903,18 @@
           S(w6, r, 4, '=IF(CTL_NROWS<1,"",COUNTIFS(B_FL,">="&CTL_A,B_FL,"<="&CTL_Z))', CX.nb); r += 2;
           S(w6, r, 1, 'Plantilla de personal 2025 → 2026', { al: 'left' }); W.merge(w6, r, 1, r, 2); S(w6, r, 3, 190, CX.n); S(w6, r, 4, 228, CX.n); S(w6, r, 5, '=TRUNC(D' + r + '/C' + r + '-1,4)', CX.vr); S(w6, r, 6, 'Informe: +20 %', { al: 'left', border: false });
           notas(w6, r + 2, 6, ['', 'Pendiente: deflactar con INPC (base 2018) para comparar en pesos constantes.', CMP_FIRMA]);
-          [8, 20, 11, 22, 22, 30].forEach((w, i) => w6.cols[i + 1] = { w });
+          [8, 20, 11, 22, 22, 30].forEach((w, i) => w6.cols[i + 1] = { w }); w6.freeze = [6, 2];
           /* --- 7 Metodología --- */
-          const w7 = hojas['7 Metodología']; S(w7, 1, 1, 'Metodología, definiciones y cifras oficiales de referencia', CX.tit); W.merge(w7, 1, 1, 1, 8); w7.altos[1] = 24;
-          S(w7, 4, 1, 'CIFRAS OFICIALES DE REFERENCIA (la hoja 1 las muestra cuando el periodo coincide)', CX.notaT); W.merge(w7, 4, 1, 4, 8);
-          ['Clave','Desde','Hasta','Desaparecidas','Localizadas publicadas','% localización','Fuente'].forEach((t, i) => S(w7, 5, 1 + i, t, CX.hdr));
-          r = 6; const ro1 = r;
-          CMP_OFI.forEach(([a, z, d, l, p, f]) => { S(w7, r, 1, '=B' + r + '&"|"&C' + r, CX.aux); S(w7, r, 2, a); S(w7, r, 3, z); S(w7, r, 4, d, CX.n); S(w7, r, 5, l, CX.n); S(w7, r, 6, p, CX.p); S(w7, r, 7, f, CX.txt); r++; });
-          const ro2 = r - 1;
-          W.nombre('OF_KEY', "'7 Metodología'!$A$" + ro1 + ':$A$' + ro2); W.nombre('OF_D', "'7 Metodología'!$D$" + ro1 + ':$D$' + ro2);
-          W.nombre('OF_L', "'7 Metodología'!$E$" + ro1 + ':$E$' + ro2); W.nombre('OF_P', "'7 Metodología'!$F$" + ro1 + ':$F$' + ro2);
-          r++;
+          const w7 = hojas['7 Metodología']; S(w7, 1, 1, 'Metodología y definiciones', CX.tit); W.merge(w7, 1, 1, 1, 8); w7.altos[1] = 24;
+          r = 3;
           [['Base', 'Hoja BASE: versión pública del REPD leída del Sheet del tablero (corte ' + (CUT_TEXT || cmpLab(CMP.corte)) + '). ' + N.toLocaleString('es-MX') + ' registros. Columnas S–Z calculadas por fórmula.'],
            ['Foto a la fecha', 'Desaparición ocurrida en el periodo, reportada a más tardar en el último mes del periodo; excluye registros con estatus CIERRE cuya fecha de cierre es igual o anterior al último mes; localizadas = estatus localizada con fecha de localización igual o anterior al último mes. Reproduce las cifras oficiales.'],
            ['Base vigente', 'Desaparición ocurrida en el periodo con cualquier fecha de reporte hasta el corte; excluye todo registro con estatus CIERRE; localizadas = estatus localizada al corte.'],
            ['Carpetas', 'Columna CARPETA DE INVESTIGACIÓN con su valor al corte en ambos criterios: la versión pública no publica la fecha de apertura.'],
            ['Avisos', 'Por fecha de reporte (cualquier fecha de desaparición), excluyendo cierres según el criterio. «De desapariciones anteriores» = fecha de desaparición anterior al inicio del periodo.'],
-           ['Comparación', 'Periodo ≤ 12 meses: mismos meses de cada año anterior hasta 2019. Periodo > 12 meses: periodo anterior inmediato de igual duración.'],
-           ['Redondeo', 'Porcentajes y variaciones truncados a 2 decimales (regla CGES). Las cifras oficiales se capturan como se publicaron.'],
+           ['Comparación', 'Periodo ≤ 12 meses: mismos meses de cada año anterior hasta 2019. Periodo > 12 meses: periodo anterior inmediato de igual duración, si la base lo cubre; si no, una sola fila. Serie: por mes hasta 96 meses; por año si el rango es mayor.'],
+           ['Años antes de 2019', 'Buena parte de los registros con desaparición anterior a 2019 proviene de captura retroactiva: su volumen refleja el crecimiento del registro, no sólo el fenómeno. Comparar con cautela.'],
+           ['Redondeo', 'Porcentajes y variaciones truncados a 2 decimales (regla CGES).'],
            ['Territorio', 'AMG = 9 municipios (Guadalajara, Zapopan, San Pedro Tlaquepaque, Tonalá, Tlajomulco de Zúñiga, El Salto, Juanacatlán, Ixtlahuacán de los Membrillos, Zapotlanejo). «Otra» = estado distinto de Jalisco o se ignora.'],
            ['Tasa', 'Desaparecidas del periodo ÷ 8,348,151 (INEGI, Censo 2020) × 100,000. No se anualiza.'],
            ['Referencias (APA 7)', 'Fiscalía del Estado de Jalisco / COBUPEJ. (2026). Registro Estatal de Personas Desaparecidas del Estado de Jalisco [versión pública]. · Gobierno del Estado de Jalisco. (2026). Segundo Informe de Gobierno, Eje 5. · INEGI. (2021). Censo de Población y Vivienda 2020.'],
@@ -18934,21 +18932,277 @@
         }
 
         /* =======================================================================
+           ETIQUETAS DE VALOR — todas las gráficas de la vista (se engancha en mkChart)
+           ======================================================================= */
+        function cmpLuz(col){
+          let r = 0, g = 0, b = 0, m;
+          col = String(col || '');
+          if ((m = col.match(/^#([0-9a-f]{6})/i))){ const n = parseInt(m[1], 16); r = n >> 16; g = (n >> 8) & 255; b = n & 255; }
+          else if ((m = col.match(/rgba?\((\d+)[ ,]+(\d+)[ ,]+(\d+)/i))){ r = +m[1]; g = +m[2]; b = +m[3]; }
+          else return 1;
+          return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        }
+        const CMP_ETIQ = { id: 'cmpEtiq', afterDatasetsDraw(ch){
+          const o = ch.options || {}, hor = o.indexAxis === 'y', ctx = ch.ctx, n = (ch.data.labels || []).length;
+          const val = hor ? ch.scales.x : ch.scales.y;
+          let pct = false;
+          try { const cb = val && val.options.ticks && val.options.ticks.callback; if (cb) pct = String(cb.call(val, 50, 0, [{ value: 50 }])).indexOf('%') >= 0; } catch (e) {}
+          const apil = !!(val && val.options && val.options.stacked);
+          const fmtV = v => pct ? (Number.isInteger(v) ? v : v.toFixed(2)) + '%' : (Number.isInteger(v) ? v.toLocaleString('es-MX') : v.toLocaleString('es-MX', { maximumFractionDigits: 2 }));
+          ctx.save(); ctx.font = "600 10px 'Poppins', sans-serif";
+          const usadas = [];                                                  // cajas ya dibujadas: no se encima ninguna etiqueta
+          const pon = (t, x, y, al, bl) => {
+            const w = ctx.measureText(t).width, h = 11;
+            const x0 = al === 'center' ? x - w / 2 : al === 'left' ? x : x - w, y0 = bl === 'middle' ? y - h / 2 : bl === 'bottom' ? y - h : y;
+            if (usadas.some(b => x0 < b[2] + 2 && x0 + w + 2 > b[0] && y0 < b[3] && y0 + h > b[1])) return;
+            usadas.push([x0, y0, x0 + w, y0 + h]); ctx.textAlign = al; ctx.textBaseline = bl; ctx.fillText(t, x, y);
+          };
+          ch.data.datasets.forEach((ds, di) => {
+            if (!ch.isDatasetVisible(di)) return;
+            const meta = ch.getDatasetMeta(di), tipo = meta.type;
+            meta.data.forEach((el, i) => {
+              if (n > 16 && i % 4 !== 0 && i !== n - 1) return;           // series densas: cada 4 valores y el último
+              let v = ds.data[i]; if (v && typeof v === 'object') v = hor ? v.x : v.y;
+              if (v === null || v === undefined || v === 0 || !isFinite(v)) return;
+              const t = fmtV(v);
+              if (tipo === 'doughnut' || tipo === 'pie'){
+                if ((el.endAngle - el.startAngle) < 0.3) return;
+                const p = el.tooltipPosition(); ctx.fillStyle = '#fff'; pon(t, p.x, p.y, 'center', 'middle'); return;
+              }
+              if (tipo === 'line'){ ctx.fillStyle = TEMA.ink; pon(t, el.x, el.y - 7, 'center', 'bottom'); return; }
+              const bg = Array.isArray(ds.backgroundColor) ? ds.backgroundColor[i] : ds.backgroundColor;
+              if (apil){
+                const largo = hor ? Math.abs(el.x - el.base) : Math.abs(el.base - el.y), ancho = ctx.measureText(t).width;
+                if (hor ? largo < ancho + 6 : largo < 13) return;
+                ctx.fillStyle = cmpLuz(bg) < 0.55 ? '#fff' : '#0F1E33';
+                pon(t, hor ? (el.x + el.base) / 2 : el.x, hor ? el.y : (el.y + el.base) / 2, 'center', 'middle'); return;
+              }
+              ctx.fillStyle = TEMA.ink;
+              if (hor) pon(t, el.x + 4, el.y, 'left', 'middle'); else pon(t, el.x, el.y - 3, 'center', 'bottom');
+            });
+          });
+          ctx.restore();
+        } };
+        /** Llamada desde mkChart(): añade las etiquetas y el margen para que no se recorten. */
+        function cmpEtiquetas(cfg){
+          if (!cfg) return;
+          cfg.options = cfg.options || {};
+          const hor = cfg.options.indexAxis === 'y', L = cfg.options.layout = cfg.options.layout || {};
+          const pad = typeof L.padding === 'object' && L.padding ? L.padding : {};
+          L.padding = Object.assign({ top: 18, right: hor ? 48 : 10 }, pad);
+          cfg.plugins = (cfg.plugins || []).concat([CMP_ETIQ]);
+        }
+        /** Gráficas fijas (réplica del sitio oficial): sello «Desde diciembre 2018». */
+        const CMP_FIJAS = ['c-resumen','c-carpeta','c-anio-sexo','c-enejul','c-edad-h','c-edad-m','c-cond-todas','c-cond-m','c-cond-h','c-pct-anual','c-pct-enejul','c-muni','c-violencia'];
+        function cmpSellos(){
+          CMP_FIJAS.forEach(id => {
+            const cv = AD(id), card = cv && cv.closest('.Audit-Desap-card'), h3 = card && card.querySelector('.Audit-Desap-card-head h3');
+            if (h3 && !h3.querySelector('.Audit-Desap-cmp-sello')) h3.insertAdjacentHTML('beforeend', ' <span class="Audit-Desap-cmp-sello" title="Gr&aacute;fica fija: r&eacute;plica del sitio oficial, no responde al filtro de temporalidad">Desde diciembre 2018</span>');
+          });
+        }
+        /** Tablas de la vista cuya primera columna es «#»: se inmoviliza también la segunda (municipio). */
+        function cmpInmoviliza(){
+          RAIZ().querySelectorAll('table.Audit-Desap-tabla').forEach(t => {
+            const th = t.querySelector('thead th');
+            if (th && th.textContent.trim() === '#') t.classList.add('Audit-Desap-cmp-fix2');
+          });
+        }
+
+        /* =======================================================================
+           ANÁLISIS EN WORD — nota de datos con el periodo y criterio activos
+           ======================================================================= */
+        function cmpAvisosCarpeta(a, z){
+          const X = CMP.A; let av = 0, c = 0;
+          for (let i = 0; i < CMP.n; i++){ const fr = X.FR[i]; if (fr >= a && fr <= z){ av++; if (X.CARP[i]) c++; } }
+          return { av, c, p: cmpDiv(c, av) };
+        }
+        function cmpTextoAnalisis(){
+          const R = CMP.res, o = R.filas[0], p = R.filas[1] || null, q = R.filas.length > 2 ? R.filas[R.filas.length - 1] : null;
+          const A = cmpLabP(o.a, o.z), B = p ? cmpLabP(p.a, p.z) : null, crit = R.foto ? 'foto a la fecha' : 'base vigente';
+          const pc = v => cmpPc(v), pp = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' puntos', vr = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(2) + '%';
+          const lo = cmpDiv(o.L, o.D), lp = p ? cmpDiv(p.L, p.D) : null;
+          const dD = p && p.D ? cmpTr(o.D / p.D - 1) : null, dL = p ? (lo - lp) * 100 : null;
+          const cco = cmpDiv(o.con_carpeta, o.D), ccp = p ? cmpDiv(p.con_carpeta, p.D) : null;
+          const sso = cmpDiv(o.siguen_sin_carpeta, o.siguen), ssp = p ? cmpDiv(p.siguen_sin_carpeta, p.siguen) : null;
+          const svo = cmpDiv(o.sin_vida, o.L), svp = p ? cmpDiv(p.sin_vida, p.L) : null;
+          const pz = R.puente[0], pb = R.puente[1] || null;
+          const fA = cmpDiv(pz.fL, pz.fD), vA = cmpDiv(pz.vL, pz.vD), fB = pb ? cmpDiv(pb.fL, pb.fD) : null, vB = pb ? cmpDiv(pb.vL, pb.vD) : null;
+          const ago = 202508, preA = cmpYm(cmpIdx(ago) - 12), preZ = cmpYm(cmpIdx(ago) - 1);
+          const c1 = cmpAvisosCarpeta(preA, preZ), c2 = CMP.corte >= ago ? cmpAvisosCarpeta(ago, CMP.corte) : null;
+          /* Titular: verbo según la dirección de cada indicador. */
+          let titulo, sumario;
+          if (p){
+            titulo = (dD < 0 ? 'Bajan ' : dD > 0 ? 'Suben ' : 'Se mantienen ') + (dD ? Math.abs(dD * 100).toFixed(2) + '% ' : '') + 'las desapariciones en ' + A +
+              (ccp !== null && cco < ccp ? '; cae la proporción de casos con carpeta de investigación' : (ccp !== null && cco > ccp ? '; sube la proporción de casos con carpeta de investigación' : ''));
+            sumario = 'Con el criterio de ' + crit + ', el registro contabiliza ' + cmpN(o.D) + ' personas desaparecidas en el periodo, contra ' + cmpN(p.D) + ' en ' + B + '. ' +
+              'La localización ' + (dL >= 0 ? 'sube' : 'baja') + ' ' + Math.abs(dL).toFixed(2) + ' puntos, a ' + pc(lo) + ', pero el resultado depende de la fecha en que se mide cada periodo.';
+          } else {
+            titulo = 'Se registran ' + cmpN(o.D) + ' desapariciones en ' + A + '; ' + pc(cmpDiv(o.siguen, o.D)) + ' sigue sin localizarse';
+            sumario = 'Con el criterio de ' + crit + ', el registro no tiene un periodo de comparación equivalente para este rango; las cifras se presentan sin variación.';
+          }
+          const S = [];
+          /* 1 · Qué dicen las cifras */
+          const p1 = ['Entre ' + A + ' el Registro Estatal de Personas Desaparecidas (REPD) contabiliza ' + cmpN(o.D) + ' personas cuya desaparición ocurrió en el periodo' +
+            (R.foto ? ' y fue reportada a más tardar al cierre del mismo' : '') + '. De ellas, ' + cmpN(o.L) + ' fueron localizadas (' + pc(lo) + ') y ' + cmpN(o.siguen) + ' seguían sin localizarse' +
+            (R.foto ? ' al cierre del periodo.' : ' a la fecha de corte de la base.')];
+          if (p) p1.push('Frente a ' + B + ', las desapariciones ' + (dD < 0 ? 'disminuyen ' : 'aumentan ') + Math.abs(dD * 100).toFixed(2) + '% y las localizaciones ' +
+            (o.L < p.L ? 'disminuyen ' : 'aumentan ') + Math.abs(cmpTr(o.L / p.L - 1) * 100).toFixed(2) + '%; el porcentaje de localización pasa de ' + pc(lp) + ' a ' + pc(lo) + ' (' + pp(dL) + ').');
+          if (q) p1.push('Contra ' + cmpLabP(q.a, q.z) + ', el periodo más antiguo de la serie, la variación de desapariciones es de ' + vr(cmpTr(o.D / q.D - 1)) + '.');
+          S.push({ h: 'Qué dicen las cifras', p: p1 });
+          /* 2 · Efecto fotografía */
+          const p2 = ['La misma pregunta —cuántas personas se localizaron— tiene respuestas distintas según la fecha en que se consulta el registro. Medido a la fecha de cierre de cada periodo («foto a la fecha»), ' + A + ' registra ' + pc(fA) +
+            ' de localización' + (pb ? ' y ' + cmpLabP(pb.a, pb.z) + ' registró ' + pc(fB) + ' (' + pp((fA - fB) * 100) + ').' : '.')];
+          if (pb) p2.push('Con la base vigente, en cambio, ' + cmpLabP(pb.a, pb.z) + ' aparece con ' + pc(vB) + ' porque ha tenido ' + pb.mad + ' meses de búsqueda después de su cierre, contra ' + pz.mad +
+            ' del periodo reciente (' + pc(vA) + '). Desde su cierre, ese periodo sumó ' + cmpN(pb.rep) + ' reportes tardíos, ' + cmpN(pb.cer) + ' registros cerrados y ' + cmpN(pb.ld + pb.lt) + ' localizaciones.',
+            'Comparar la cifra madura de un periodo con la recién cerrada de otro favorece siempre al periodo antiguo. Las comparaciones consistentes son foto contra foto (' + pc(fB) + ' → ' + pc(fA) + ') o vigente contra vigente (' + pc(vB) + ' → ' + pc(vA) + ').');
+          S.push({ h: 'La cifra depende de cuándo se mide', p: p2 });
+          /* 3 · Carpetas */
+          const p3 = [cmpN(o.con_carpeta) + ' de los ' + cmpN(o.D) + ' casos del periodo tienen hoy carpeta de investigación (' + pc(cco) + ')' + (p ? ', contra ' + pc(ccp) + ' en ' + B + ' (' + pp((cco - ccp) * 100) + ').' : '.')];
+          if (c2) p3.push('Por fecha de reporte, ' + pc(c1.p) + ' de los avisos recibidos entre ' + cmpLabP(preA, preZ) + ' tienen carpeta; de agosto de 2025 a ' + cmpLab(CMP.corte) + ' la proporción es de ' + pc(c2.p) + ' (' + pp((c2.p - c1.p) * 100) + ').');
+          p3.push('De las ' + cmpN(o.siguen) + ' personas que seguían desaparecidas al cierre, ' + cmpN(o.siguen_sin_carpeta) + ' no tienen carpeta (' + pc(sso) + ')' + (p ? '; en ' + B + ' eran ' + pc(ssp) + '.' : '.') +
+            ' Es el grupo que la caída en la apertura de carpetas afecta directamente: casos sin localizar y sin investigación ministerial abierta.');
+          S.push({ h: 'Menos casos con carpeta de investigación', p: p3 });
+          /* 4 · Localizadas */
+          S.push({ h: 'Cómo se localiza', p: ['De las ' + cmpN(o.L) + ' personas localizadas, ' + cmpN(o.con_vida) + ' fueron halladas con vida y ' + cmpN(o.sin_vida) + ' sin vida (' + pc(svo) + ')' +
+            (p ? ', contra ' + pc(svp) + ' en ' + B + '.' : '.') + ' ' + cmpN(o.cl_lg) + ' fueron clasificadas como víctimas de un delito de la Ley General, ' + cmpN(o.cl_div) + ' de un delito diverso y ' + cmpN(o.cl_sin) + ' sin ser víctimas de delito.',
+            pc(cmpDiv(o.loc_mes0, o.L)) + ' de las localizaciones ocurrió el mismo mes de la desaparición y ' + pc(cmpDiv(o.loc_2m, o.L)) + ' en dos meses o menos: el porcentaje de localización descansa, sobre todo, en búsquedas de los primeros días.'] });
+          /* 5 · Cierres */
+          S.push({ h: 'Registros que se cierran', p: [(R.foto ? cmpN(o.cierres_excl) + ' registros del periodo ya estaban cerrados al cierre y quedan fuera del conteo' : cmpN(o.cierres_excl) + ' registros del periodo tienen estatus de cierre y quedan fuera del conteo') +
+            ': ' + cmpN(o.ci_terr) + ' por no competencia territorial, ' + cmpN(o.ci_del) + ' por no competencia de delito, ' + cmpN(o.ci_acu) + ' por acumulación y ' + cmpN(o.ci_fam) + ' por búsqueda de familiares.' +
+            (R.foto && o.cierres_post ? ' Otros ' + cmpN(o.cierres_post) + ' se cerraron después del periodo y sí cuentan en la foto.' : '')] });
+          /* 6 · Dónde */
+          const top = R.mun.slice(0, 5).map(m => (m.nombre === 'OTRA ENTIDAD' ? 'otra entidad' : (typeof capMun === 'function' ? capMun(m.nombre) : m.nombre)) + ' (' + cmpN(m.sel) +
+            (m.ant ? ', ' + vr(cmpTr(m.sel / m.ant - 1)) : '') + ')');
+          S.push({ h: 'Dónde', p: ['El Área Metropolitana de Guadalajara concentra ' + pc(cmpDiv(o.D_amg, o.D)) + ' de las desapariciones del periodo. Ahí se localiza a ' + pc(cmpDiv(o.L_amg, o.D_amg)) +
+            ' de las personas; en el interior del estado, a ' + pc(cmpDiv(o.L_int, o.D_int)) + '.', 'Los cinco municipios con más casos: ' + top.join('; ') + '.'] });
+          /* 7 · Quiénes */
+          const jov = cmpDiv(o['e_15-19'] + o['e_20-29'], o.D), jovp = p ? cmpDiv(p['e_15-19'] + p['e_20-29'], p.D) : null;
+          S.push({ h: 'Quiénes', p: [pc(cmpDiv(o.D_m, o.D)) + ' de las personas desaparecidas son mujeres; su porcentaje de localización es ' + pc(cmpDiv(o.L_m, o.D_m)) + ', contra ' + pc(cmpDiv(o.L_h, o.D_h)) + ' de los hombres. ' +
+            'Las personas de 15 a 29 años representan ' + pc(jov) + ' del total' + (p ? ' (' + pc(jovp) + ' en ' + B + ').' : '.')] });
+          /* 8 · Lo que no dicen */
+          const lim = ['La carpeta de investigación se registra con su estatus vigente: el REPD no publica la fecha de apertura, así que los periodos antiguos han tenido más tiempo para que se abra una.',
+            'El registro se corrige mes con mes (reportes tardíos, cierres, reclasificaciones): una cifra publicada en el pasado puede no coincidir con la base actual sin que haya error.',
+            'El porcentaje de un periodo reciente seguirá subiendo conforme avance la búsqueda.'];
+          if (o.a < 201901) lim.push('Buena parte de los registros con desaparición anterior a 2019 proviene de captura retroactiva: su volumen refleja el crecimiento del registro, no sólo el fenómeno.');
+          S.push({ h: 'Lo que las cifras no dicen', b: lim });
+          S.push({ h: 'Metodología', p: ['Fuente: versión pública del REPD (COBUPEJ), corte ' + (CUT_TEXT || cmpLab(CMP.corte)) + ', ' + CMP.n.toLocaleString('es-MX') + ' registros. Periodo por fecha de desaparición. Criterio: ' + crit + '. ' +
+            (R.foto ? 'Foto a la fecha: desaparición ocurrida en el periodo, reportada a más tardar al cierre del periodo, sin los registros cerrados hasta esa fecha; localizadas hasta el cierre del periodo.'
+                    : 'Base vigente: desaparición ocurrida en el periodo con todo lo que se sabe al corte, sin registros con estatus de cierre; localizadas al corte.') +
+            ' Porcentajes truncados a dos decimales. AMG = 9 municipios. Elaboración: CGES/Arjona.'] });
+          return { titulo, sumario, S, A };
+        }
+        async function cmpDocx(){
+          const R = CMP.res, T = cmpTextoAnalisis(), esc = cmpEsc;
+          await cmpCargaZip();
+          /* Gráficas como imagen (chartPNG de la vista: fondo blanco, etiquetas, tema claro). */
+          const F = R.filas.slice().reverse(), Pz = R.puente.slice().reverse(), et = F.map(o => cmpLabP(o.a, o.z).replace(' – ', '–'));
+          const pcN = (a, b) => { const v = cmpDiv(a, b); return v === null ? null : +(v * 100).toFixed(2); };
+          const col = CMP_SERIE_CLARA, linea = (l, d, i) => ({ label: l, data: d, type: 'line', borderColor: col[i], backgroundColor: col[i], borderWidth: 2, pointRadius: 3 });
+          const barra = (l, d, i) => ({ label: l, data: d, backgroundColor: col[i], borderRadius: 3 });
+          const opt = (st, pct) => ({ plugins: { legend: { position: 'top', align: 'start' } }, scales: { x: { stacked: st, grid: { display: false } }, y: { stacked: st, beginAtZero: true, ticks: { callback: v => pct ? v + '%' : v.toLocaleString('es-MX') } } } });
+          const imgs = [];
+          if (F.length > 1) imgs.push(['% de localización: foto a la fecha contra base vigente', chartPNG({ type: 'line', data: { labels: et, datasets: [linea('Foto a la fecha', Pz.map(p => pcN(p.fL, p.fD)), 0), linea('Base vigente', Pz.map(p => pcN(p.vL, p.vD)), 1)] }, options: opt(false, true) }, 1100, 520)]);
+          imgs.push(['Siguen desaparecidas al cierre: con y sin carpeta de investigación', chartPNG({ type: 'bar', data: { labels: et, datasets: [barra('Con carpeta', F.map(o => o.siguen_con_carpeta), 0), barra('Sin carpeta', F.map(o => o.siguen_sin_carpeta), 1)] }, options: opt(true, false) }, 1100, 520)]);
+          const S = R.serie; if (S.length > 1) imgs.push(['% de avisos con carpeta de investigación, ' + (S[0].a === S[0].z ? 'por mes' : 'por año') + ' de reporte', chartPNG({ type: 'line', data: { labels: S.map(s => s.lab), datasets: [linea('% avisos con carpeta', S.map(s => pcN(s.avc, s.av)), 0)] }, options: Object.assign(opt(false, true), { plugins: { legend: { display: false } } }) }, 1100, 480)]);
+          /* WordprocessingML */
+          const run = (t, o) => { o = o || {}; return '<w:r><w:rPr>' + (o.b ? '<w:b/>' : '') + (o.i ? '<w:i/>' : '') + (o.color ? '<w:color w:val="' + o.color + '"/>' : '') + (o.sz ? '<w:sz w:val="' + o.sz + '"/><w:szCs w:val="' + o.sz + '"/>' : '') +
+            '</w:rPr><w:t xml:space="preserve">' + esc(t) + '</w:t></w:r>'; };
+          const par = (t, est, o) => '<w:p>' + (est ? '<w:pPr><w:pStyle w:val="' + est + '"/></w:pPr>' : '') + (Array.isArray(t) ? t.join('') : run(t, o)) + '</w:p>';
+          const vin = t => '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>' + run(t) + '</w:p>';
+          const W9 = 9360, cw = [1800, 1260, 1260, 1260, 1260, 1260, 1260];
+          const celda = (t, w, hdr, der) => '<w:tc><w:tcPr><w:tcW w:w="' + w + '" w:type="dxa"/>' + (hdr ? '<w:shd w:val="clear" w:color="auto" w:fill="18345D"/>' : '') +
+            '<w:tcMar><w:top w:w="60" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:start w:w="60" w:type="dxa"/><w:end w:w="60" w:type="dxa"/></w:tcMar></w:tcPr><w:p><w:pPr><w:spacing w:before="0" w:after="0"/>' +
+            (der ? '<w:jc w:val="right"/>' : '') + '</w:pPr>' + run(t, { b: hdr, color: hdr ? 'FFFFFF' : null, sz: hdr ? 15 : 16 }) + '</w:p></w:tc>';
+          const filaT = (vals, hdr) => '<w:tr>' + (hdr ? '<w:trPr><w:tblHeader/></w:trPr>' : '') + vals.map((v, i) => celda(v, cw[i], hdr, i > 0)).join('') + '</w:tr>';
+          const borde = '<w:tblBorders>' + ['top','left','bottom','right','insideH','insideV'].map(b => '<w:' + b + ' w:val="single" w:sz="4" w:space="0" w:color="BFC9D6"/>').join('') + '</w:tblBorders>';
+          const tabla = '<w:tbl><w:tblPr><w:tblW w:w="' + W9 + '" w:type="dxa"/>' + borde + '<w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid>' + cw.map(w => '<w:gridCol w:w="' + w + '"/>').join('') + '</w:tblGrid>' +
+            filaT(['Periodo', 'Desaparecidas', 'Localizadas', '% localización', 'Siguen desaparecidas', '% de ellas sin carpeta', '% sin vida'], true) +
+            R.filas.map(o => filaT([cmpLabP(o.a, o.z), cmpN(o.D), cmpN(o.L), cmpPc(cmpDiv(o.L, o.D)), cmpN(o.siguen), cmpPc(cmpDiv(o.siguen_sin_carpeta, o.siguen)), cmpPc(cmpDiv(o.sin_vida, o.L))])).join('') + '</w:tbl>';
+          const img = (k, titulo, alto) => {
+            const cx = 5943600, cy = Math.round(cx * alto);
+            return par(titulo, 'Pie') + '<w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:docPr id="' + (k + 1) + '" name="Grafica' + (k + 1) + '"/>' +
+              '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
+              '<pic:nvPicPr><pic:cNvPr id="' + (k + 1) + '" name="grafica' + (k + 1) + '.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdImg' + (k + 1) + '"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>' +
+              '<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' + cx + '" cy="' + cy + '"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+          };
+          const hoy = new Date(), fecha = hoy.getDate() + ' de ' + ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][hoy.getMonth()] + ' de ' + hoy.getFullYear();
+          let body = par([run('ANÁLISIS DE DATOS · PERSONAS DESAPARECIDAS EN JALISCO', { b: 1, color: 'F08013', sz: 18 })]) + par(T.titulo, 'Title') + par(T.sumario, 'Subtitle') +
+            par([run('CGES/Arjona · ' + fecha + ' · Periodo: ' + T.A + ' · Criterio: ' + (R.foto ? 'foto a la fecha' : 'base vigente'), { i: 1, color: '595959', sz: 18 })]);
+          T.S.forEach((s, i) => {
+            body += par(s.h, 'Heading1');
+            (s.p || []).forEach(t => body += par(t));
+            (s.b || []).forEach(t => body += vin(t));
+            if (i === 0) body += par('Comparativo por periodo', 'Pie') + tabla;
+            if (i === 1 && imgs[0]) body += img(0, imgs[0][0], 520 / 1100);
+            if (i === 2){ for (let k = 1; k < imgs.length; k++) body += img(k, imgs[k][0], (k === imgs.length - 1 && S.length > 1 ? 480 : 520) / 1100); }
+          });
+          const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ' +
+            'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+          const doc = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ' + NS + '><w:body>' + body +
+            '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>';
+          const st = (id, nombre, rpr, ppr, tipo) => '<w:style w:type="' + (tipo || 'paragraph') + '" w:styleId="' + id + '"><w:name w:val="' + nombre + '"/><w:basedOn w:val="Normal"/><w:qFormat/>' + (ppr ? '<w:pPr>' + ppr + '</w:pPr>' : '') + '<w:rPr>' + rpr + '</w:rPr></w:style>';
+          const styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial" w:eastAsia="Arial"/><w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="es-MX"/></w:rPr></w:rPrDefault>' +
+            '<w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="288" w:lineRule="auto"/><w:jc w:val="both"/></w:pPr></w:pPrDefault></w:docDefaults>' +
+            '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:rPr><w:color w:val="262626"/></w:rPr></w:style>' +
+            st('Title', 'Title', '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="0F1E33"/><w:sz w:val="40"/><w:szCs w:val="40"/>', '<w:spacing w:before="60" w:after="120" w:line="252" w:lineRule="auto"/><w:jc w:val="left"/><w:keepNext/>') +
+            st('Subtitle', 'Subtitle', '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:color w:val="18345D"/><w:sz w:val="24"/><w:szCs w:val="24"/>', '<w:spacing w:before="0" w:after="160"/><w:jc w:val="left"/>') +
+            st('Heading1', 'heading 1', '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="18345D"/><w:sz w:val="28"/><w:szCs w:val="28"/>', '<w:spacing w:before="280" w:after="100"/><w:jc w:val="left"/><w:keepNext/><w:outlineLvl w:val="0"/>') +
+            st('Pie', 'Caption', '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:b/><w:color w:val="595959"/><w:sz w:val="18"/><w:szCs w:val="18"/>', '<w:spacing w:before="160" w:after="60"/><w:jc w:val="left"/><w:keepNext/>') +
+            st('ListParagraph', 'List Paragraph', '', '<w:ind w:left="720" w:hanging="360"/><w:spacing w:after="80"/>') + '</w:styles>';
+          const numbering = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/>' +
+            '<w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>';
+          const zip = new JSZip();
+          zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/>' +
+            '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
+            '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>' +
+            '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>' +
+            '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>');
+          zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>' +
+            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>');
+          zip.file('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" ' +
+            'xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>' + esc(T.titulo) + '</dc:title><dc:creator>CGES/Arjona</dc:creator>' +
+            '<dcterms:created xsi:type="dcterms:W3CDTF">' + hoy.toISOString().replace(/\.\d+Z$/, 'Z') + '</dcterms:created></cp:coreProperties>');
+          zip.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rIdSt" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+            '<Relationship Id="rIdNum" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>' +
+            imgs.map((x, k) => '<Relationship Id="rIdImg' + (k + 1) + '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/grafica' + (k + 1) + '.png"/>').join('') + '</Relationships>');
+          zip.file('word/document.xml', doc); zip.file('word/styles.xml', styles); zip.file('word/numbering.xml', numbering);
+          imgs.forEach((x, k) => zip.file('word/media/grafica' + (k + 1) + '.png', x[1].split(',')[1], { base64: true }));
+          Object.keys(zip.files).forEach(k => { if (zip.files[k].dir) delete zip.files[k]; });
+          const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+          cmpBaja(blob, 'Analisis_REPD_' + R.a + '-' + R.z + '_' + (R.foto ? 'foto' : 'vigente') + '.docx');
+        }
+
+        /* =======================================================================
            MONTAJE Y EVENTOS
            ======================================================================= */
         function cmpMonta(){
           const cont = AD('vista'); if (!cont || AD('sec-comparativo')) return;
           cmpEstilos();
           cont.insertAdjacentHTML('beforeend', cmpMaquetado());
-          const sec = AD('sec-comparativo');
+          /* Criterio y descarga ligera en la barra del filtro de la vista. */
+          const filtro = AD('filtro'), fb = filtro && filtro.querySelector('.Audit-Desap-fbtns');
+          if (fb) fb.insertAdjacentHTML('beforeend',
+            '<span class="Audit-Desap-cmp-seg" role="group" aria-label="Criterio del comparativo" title="Criterio del comparativo por periodo (secci&oacute;n final)">' +
+              '<button type="button" data-cmp-crit="foto" aria-pressed="true">Foto a la fecha</button><button type="button" data-cmp-crit="vig" aria-pressed="false">Base vigente</button></span>' +
+            '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-cmp-btn-xlsx" title="Tablas del comparativo del periodo activo">&#11015; Descargar Excel</button>');
+          const tit = filtro && filtro.querySelector('.Audit-Desap-filtro-tit');
+          if (tit) tit.textContent = 'Filtro de temporalidad · gobierna el explorador, la tabla de detalle municipal y el comparativo por periodo (sección final)';
+          cmpSellos(); cmpInmoviliza();
+          const refiltra = () => setTimeout(() => { if (CMP.listo) { try { cmpDesdeFiltro(); } catch (e) { cmpError(e); } } }, 0);
+          ['f-modo','f-y1','f-m1','f-y2','f-m2'].forEach(id => { const el = AD(id); if (el) el.addEventListener('change', refiltra); });
+          cont.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', refiltra));
           const recalcula = () => { if (!CMP.listo) return; try { cmpCalcula(); cmpPinta(); } catch (e) { cmpError(e); } };
-          AD('cmp-ini').addEventListener('change', e => { CMP.sel.a = +e.target.value; recalcula(); });
-          AD('cmp-fin').addEventListener('change', e => { CMP.sel.z = +e.target.value; recalcula(); });
-          sec.addEventListener('click', e => {
+          cont.addEventListener('click', e => {
             const cb = e.target.closest('[data-cmp-crit]'); if (cb){ CMP.sel.foto = cb.getAttribute('data-cmp-crit') === 'foto'; recalcula(); return; }
             const gb = e.target.closest('[data-cmp-g]'); if (gb && CMP.res){ const g = gb.getAttribute('data-cmp-g'); CMP.grupos[g] = CMP.grupos[g] ? 0 : 1; cmpTablaComp(); return; }
             if (e.target.closest('#' + P + 'cmp-btn-mun') && CMP.res){ CMP.munTodos = !CMP.munTodos; cmpTablaMun(); return; }
             if (e.target.closest('#' + P + 'cmp-btn-xlsx') && CMP.res && CMP.res.V.length) cmpDescarga('cmp-btn-xlsx', cmpXlsxLigero);
+            if (e.target.closest('#' + P + 'cmp-btn-doc') && CMP.res && CMP.res.V.length) cmpDescarga('cmp-btn-doc', cmpDocx);
             if (e.target.closest('#' + P + 'cmp-btn-total') && CMP.listo) cmpDescarga('cmp-btn-total', cmpXlsxTotal);
           });
           AD('cmp-firma').addEventListener('dblclick', () => AD('cmp-btn-total').classList.toggle('Audit-Desap-cmp-oculto'));
