@@ -17880,15 +17880,21 @@
         const CMP_NOTA3 = [
           ['Foto a la fecha', 'cuenta lo que el registro tenía al cierre de cada periodo (lo reportado y localizado hasta ese mes, sin los registros ya cerrados). Es la que coincide con las cifras oficiales. Úsala para comparar años o periodos entre sí: todos se miden con el mismo tiempo de reporte y búsqueda.'],
           ['Base vigente (sin cierre)', 'cuenta todo lo que el registro sabe hoy, incluidos reportes tardíos y localizaciones posteriores, sin los registros cerrados. Úsala para saber cuántas personas desaparecieron en un periodo con la información más completa; los periodos recientes se ven más bajos porque han tenido menos tiempo.'],
-          ['Base vigente con cierre', 'igual que la anterior, pero también cuenta los registros cerrados (otra entidad, duplicados, otro delito o búsqueda de familiares). Úsala para medir la carga de trabajo atendida y transparentar los cierres; no para el % de localización, porque los registros cerrados nunca se «localizan» y lo bajan artificialmente.'],
-          ['Regla', 'compara siempre con el mismo criterio (foto contra foto o vigente contra vigente). Si una conclusión se sostiene en los tres criterios, es sólida.']
+          ['Vigente con cierre (base vigente con cierre)', 'igual que la anterior, pero también cuenta los registros cerrados (otra entidad, duplicados, otro delito o búsqueda de familiares). Úsala para medir la carga de trabajo atendida y transparentar los cierres; no para el % de localización, porque los registros cerrados nunca se «localizan» y lo bajan artificialmente.'],
+          ['Regla', 'compara siempre con el mismo criterio (foto contra foto, vigente contra vigente, con cierre contra con cierre). Si una conclusión se sostiene en los tres criterios, es sólida.']
         ];
+        /** Tres criterios del comparativo: foto a la fecha, base vigente (sin cierre) y vigente con cierre. */
+        const CMP_CRIT = { foto: { nom: 'Foto a la fecha', min: 'foto a la fecha', arch: 'foto' },
+                           vig:  { nom: 'Base vigente', min: 'base vigente', arch: 'vigente' },
+                           cc:   { nom: 'Vigente con cierre', min: 'vigente con cierre', arch: 'concierre' } };
+        const cmpK = c => c === true ? 'foto' : c === false ? 'vig' : (c || 'foto');
+        const CMP_AVISO_CC = 'Con «Vigente con cierre» el universo incluye los registros cerrados (no competencia territorial o de delito, acumulación, búsqueda de familiares). Mide el volumen total de reportes recibidos; su % de localización no es comparable con el de foto a la fecha ni con el de base vigente, porque los cerrados entran al total y nunca se cuentan como localizados.';
         /* Paleta categórica validada (dataviz: CVD, contraste, banda de luminosidad) — claro / oscuro. */
         const CMP_SERIE_CLARA  = ['#2a78d6','#eb6834','#1baf7a','#eda100'];
         const CMP_SERIE_OSCURA = ['#3987e5','#d95926','#199e70','#c98500'];
         const cmpColor = i => (esOscuro() ? CMP_SERIE_OSCURA : CMP_SERIE_CLARA)[i];
 
-        const CMP = { listo:false, n:0, raw:null, cols:null, corte:0, primer:0, muns:[], sel:{ a:0, z:0, foto:true }, grupos:{A:1,B:1,D:1}, munTodos:false, res:null };
+        const CMP = { listo:false, n:0, raw:null, cols:null, corte:0, primer:0, muns:[], sel:{ a:0, z:0, foto:true, crit:'foto' }, grupos:{A:1,B:1,D:1}, munTodos:false, res:null };
 
         /* ---------- utilidades de fecha y formato ---------- */
         const cmpIdx  = v => Math.floor(v / 100) * 12 + (v % 100) - 1;
@@ -17974,19 +17980,21 @@
           return out;
         }
         /** Indicadores de un periodo con el criterio dado (foto: zr = fin del periodo; vigente: zr = 999999). */
-        function cmpIndicadores(a, z, foto){
-          const X = CMP.A, zr = foto ? z : 999999, o = { a, z };
+        function cmpIndicadores(a, z, crit){
+          const K = cmpK(crit), cc_ = K === 'cc', X = CMP.A, zr = K === 'foto' ? z : 999999, o = { a, z };
+          let ci_n = 0, ci_c = 0, sg = 0, sgc = 0; const cit = [0,0,0,0,0];
           let D=0,L=0,cv=0,sv=0,lg=0,dv=0,sd=0,cc=0,sc=0,lcc=0,lsc=0,av=0,avA=0,avC=0,ce=0,cp=0,dh=0,dm=0,lh=0,lm=0,da=0,di=0,dot=0,la=0,li=0,sm=0,nm=0,m0=0,m2=0;
           const cet = [0,0,0,0,0], ed = [0,0,0,0,0,0,0];
           for (let i = 0; i < CMP.n; i++){
-            const fr = X.FR[i], ci = X.EST[i] === 3, cz = ci && X.FC[i] <= zr;
+            const fr = X.FR[i], ci = X.EST[i] === 3, cz = !cc_ && ci && X.FC[i] <= zr;
             if (fr >= a && fr <= z && !cz){ av++; if (X.FD[i] < a && X.FD[i] > 0) avA++; if (X.CARP[i]) avC++; }
             const fd = X.FD[i];
             if (fd < a || fd > z || fr > zr) continue;
             if (cz){ ce++; cet[X.TCIE[i]]++; continue; }
-            if (ci) cp++;
-            D++;
             const carp = X.CARP[i], sx = X.SEXO[i], te = X.TERR[i];
+            if (ci){ if (cc_){ ci_n++; cit[X.TCIE[i]]++; if (carp) ci_c++; } else cp++; }
+            D++;
+            if (!(ci && cc_) && !(X.EST[i] === 2 && X.FL[i] <= zr)){ sg++; if (carp) sgc++; }   // siguen desaparecidas, contadas aparte (control 6)
             if (carp) cc++; else sc++;
             if (sx === 1) dh++; else if (sx === 2) dm++;
             ed[X.EDAD[i]]++;
@@ -18003,8 +18011,9 @@
               if (mm > -32000){ sm += mm; nm++; if (mm <= 0) m0++; if (mm <= 2) m2++; }
             }
           }
-          Object.assign(o, { D, L, siguen: D - L, con_vida: cv, sin_vida: sv, cl_lg: lg, cl_div: dv, cl_sin: sd, cl_otra: L - lg - dv - sd,
-            con_carpeta: cc, sin_carpeta: sc, siguen_con_carpeta: cc - lcc, siguen_sin_carpeta: sc - lsc,
+          Object.assign(o, { D, L, siguen: sg, con_vida: cv, sin_vida: sv, cl_lg: lg, cl_div: dv, cl_sin: sd, cl_otra: L - lg - dv - sd,
+            con_carpeta: cc, sin_carpeta: sc, siguen_con_carpeta: sgc, siguen_sin_carpeta: sg - sgc,
+            cerr_inc: ci_n, cin_terr: cit[1], cin_del: cit[2], cin_acu: cit[3], cin_fam: cit[4], cin_otr: cit[0], cerr_inc_carpeta: ci_c,
             avisos: av, avisos_ant: avA, avisos_carpeta: avC, cierres_excl: ce, ci_terr: cet[1], ci_del: cet[2], ci_acu: cet[3], ci_fam: cet[4], cierres_post: cp,
             D_h: dh, D_m: dm, L_h: lh, L_m: lm, D_amg: da, D_int: di, D_otra: dot, L_amg: la, L_int: li,
             prom_meses: nm ? sm / nm : null, loc_mes0: m0, loc_2m: m2, TASA: Math.trunc(D / CMP_POB * 100000 * 100 + 1e-9) / 100 });
@@ -18014,11 +18023,11 @@
         /** Foto contra vigente y sus componentes, más los tres criterios de sensibilidad. */
         function cmpPuente(a, z){
           const X = CMP.A;
-          let fD=0,fL=0,vD=0,vL=0,rep=0,cer=0,ld=0,lt=0,cD=0,cL=0;
+          let fD=0,fL=0,vD=0,vL=0,rep=0,cer=0,ld=0,lt=0,cD=0,cL=0,ca=0;
           for (let i = 0; i < CMP.n; i++){
             const fd = X.FD[i]; if (fd < a || fd > z) continue;
             const fr = X.FR[i], ci = X.EST[i] === 3, loc = X.EST[i] === 2;
-            cD++; if (loc) cL++;
+            cD++; if (loc) cL++; if (ci) ca++;
             if (!ci){ vD++; if (loc) vL++; }
             if (fr <= z && !(ci && X.FC[i] <= z)){ fD++; if (loc && X.FL[i] <= z) fL++; }
             if (fr > z && !ci) rep++;
@@ -18026,7 +18035,7 @@
             if (fr <= z && loc && X.FL[i] > z) ld++;
             if (fr > z && loc) lt++;
           }
-          return { a, z, fD, fL, vD, vL, rep, cer, ld, lt, cD, cL, mad: cmpIdx(CMP.corte) - cmpIdx(z) };
+          return { a, z, fD, fL, vD, vL, rep, cer, ld, lt, cD, cL, ca, mad: cmpIdx(CMP.corte) - cmpIdx(z) };
         }
         /** Tramos de la serie: un mes por fila; si el rango pasa de 96 meses, un año por fila (recortado al rango). */
         function cmpTramos(a, z){
@@ -18038,32 +18047,33 @@
           }
           return out;
         }
-        function cmpSerie(a, z, foto){
-          const X = CMP.A, out = [];
+        function cmpSerie(a, z, crit){
+          const K = cmpK(crit), cc_ = K === 'cc', X = CMP.A, out = [];
           cmpTramos(a, z).forEach(t => {
-            const zr = foto ? t.z : 999999;
-            let D=0,L=0,cv=0,sv=0,cc=0,av=0,avc=0;
+            const zr = K === 'foto' ? t.z : 999999;
+            let D=0,L=0,cv=0,sv=0,cc=0,av=0,avc=0,ce=0;
             for (let i = 0; i < CMP.n; i++){
-              const ci = X.EST[i] === 3, cz = ci && X.FC[i] <= zr, fr = X.FR[i], fd = X.FD[i];
+              const ci = X.EST[i] === 3, cz = !cc_ && ci && X.FC[i] <= zr, fr = X.FR[i], fd = X.FD[i];
               if (fr >= t.a && fr <= t.z && !cz){ av++; if (X.CARP[i]) avc++; }
               if (fd < t.a || fd > t.z || fr > zr || cz) continue;
-              D++; if (X.CARP[i]) cc++;
+              D++; if (X.CARP[i]) cc++; if (ci && cc_) ce++;
               if (X.EST[i] === 2 && X.FL[i] <= zr){ L++; if (X.COND[i] === 1) cv++; else if (X.COND[i] === 2) sv++; }
             }
-            out.push({ m: t.a, a: t.a, z: t.z, lab: t.lab, D, L, cv, sv, siguen: D - L, cc, av, avc });
+            out.push({ m: t.a, a: t.a, z: t.z, lab: t.lab, D, L, cv, sv, siguen: D - L - ce, ce, cc, av, avc });
           });
           return out;
         }
-        function cmpMunicipios(V, foto){
+        function cmpMunicipios(V, crit){
+          const K = cmpK(crit), cc_ = K === 'cc';
           const X = CMP.A, nm = CMP.muns.length + 1;
           const mk = () => ({ D: new Int32Array(nm), L: new Int32Array(nm), CV: new Int32Array(nm), SV: new Int32Array(nm), CS: new Int32Array(nm) });
           const res = [V[0] ? mk() : null, V[1] ? mk() : null];
           [0, 1].forEach(w => {
             if (!V[w]) return;
-            const [a, z] = V[w], zr = foto ? z : 999999, R = res[w];
+            const [a, z] = V[w], zr = K === 'foto' ? z : 999999, R = res[w];
             for (let i = 0; i < CMP.n; i++){
               const fd = X.FD[i]; if (fd < a || fd > z || X.FR[i] > zr) continue;
-              if (X.EST[i] === 3 && X.FC[i] <= zr) continue;
+              if (!cc_ && X.EST[i] === 3 && X.FC[i] <= zr) continue;
               const j = X.MUN[i] >= 0 ? X.MUN[i] : nm - 1;
               R.D[j]++; if (X.CARP[i]) R.CS[j]++;
               if (X.EST[i] === 2 && X.FL[i] <= zr){ R.L[j]++; if (X.COND[i] === 1) R.CV[j]++; else if (X.COND[i] === 2) R.SV[j]++; }
@@ -18079,12 +18089,12 @@
           return filas;
         }
         function cmpCalcula(){
-          const { a, z, foto } = CMP.sel, V = cmpVentanas(a, z);
-          CMP.res = { a, z, foto, V,
-            filas: V.map(([x, y]) => cmpIndicadores(x, y, foto)),
+          const { a, z } = CMP.sel, crit = cmpK(CMP.sel.crit), foto = crit === 'foto', V = cmpVentanas(a, z);
+          CMP.res = { a, z, foto, crit, cc: crit === 'cc', C: CMP_CRIT[crit], V,
+            filas: V.map(([x, y]) => cmpIndicadores(x, y, crit)),
             puente: V.map(([x, y]) => cmpPuente(x, y)),
-            serie: V.length ? cmpSerie(a, z, foto) : [],
-            mun: V.length ? cmpMunicipios(V, foto) : [] };
+            serie: V.length ? cmpSerie(a, z, crit) : [],
+            mun: V.length ? cmpMunicipios(V, crit) : [] };
         }
 
         /* =======================================================================
@@ -18099,7 +18109,9 @@
           ['E','Avisos recibidos (fecha de reporte)',[['avisos','Avisos recibidos','n'],['avisos_ant','De desapariciones anteriores al periodo','n'],['%avisos_ant/avisos','% de anteriores','p'],
             ['avisos_carpeta','Avisos con carpeta','n'],['%avisos_carpeta/avisos','% avisos con carpeta','p']]],
           ['F','Cierres',[['cierres_excl','Cierres excluidos del universo','n'],['ci_terr','· No competencia territorial','n'],['ci_del','· No competencia de delito','n'],
-            ['ci_acu','· Por acumulación','n'],['ci_fam','· Búsqueda de familiares','n'],['cierres_post','Cerrados después del periodo (sí cuentan)','n']]],
+            ['ci_acu','· Por acumulación','n'],['ci_fam','· Búsqueda de familiares','n'],['cierres_post','Cerrados después del periodo (sí cuentan)','n'],
+            ['cerr_inc','Cerrados incluidos (vigente con cierre)','n'],['cin_terr','· Incluidos: no competencia territorial','n'],['cin_del','· Incluidos: no competencia de delito','n'],
+            ['cin_acu','· Incluidos: por acumulación','n'],['cin_fam','· Incluidos: búsqueda de familiares','n'],['cin_otr','· Incluidos: otro tipo','n'],['%cerr_inc/D','% cerrados entre desaparecidas','p']]],
           ['G','Sexo',[['D_h','Desaparecidos hombres','n'],['D_m','Desaparecidas mujeres','n'],['%D_m/D','% mujeres','p'],['L_h','Localizados hombres','n'],['L_m','Localizadas mujeres','n'],
             ['%L_h/D_h','% localización hombres','p'],['%L_m/D_m','% localización mujeres','p']]],
           ['H','Edad al desaparecer',[['e_0-14','0–14','n'],['e_15-19','15–19','n'],['e_20-29','20–29','n'],['e_30-44','30–44','n'],['e_45-59','45–59','n'],['e_60+','60 o más','n'],['e_Se ignora','Se ignora','n']]],
@@ -18109,7 +18121,8 @@
             ['loc_2m','Localizadas en ≤ 2 meses','n'],['%loc_2m/L','% en ≤ 2 meses','p']]],
           ['K','Tasa',[['TASA','Desaparecidas por 100 mil hab. (Censo 2020)','t']]],
           ['L','Controles (deben ser 0)',[['CTL1','Con + sin carpeta − desap.','c'],['CTL2','Hombres + mujeres − desap.','c'],['CTL3','Con + sin vida − localiz.','c'],
-            ['CTL4','Suma de edades − desap.','c'],['CTL5','AMG + interior + otra − desap.','c']]]
+            ['CTL4','Suma de edades − desap.','c'],['CTL5','AMG + interior + otra − desap.','c'],['CTL6','Localiz. + siguen + cerrados incl. − desap.','c'],
+            ['CTL7','Tipos de cierre incl. − cerrados incl.','c']]]
         ];
         function cmpValor(o, k, t){
           if (t === 'p'){ const [n, d] = k.slice(1).split('/'); return cmpDiv(o[n], o[d]); }
@@ -18118,6 +18131,8 @@
             if (k === 'CTL2') return o.D_h + o.D_m - o.D;
             if (k === 'CTL3') return o.con_vida + o.sin_vida - o.L;
             if (k === 'CTL4') return CMP_EDAD_G.reduce((s, g) => s + o['e_' + g], 0) - o.D;
+            if (k === 'CTL6') return o.L + o.siguen + o.cerr_inc - o.D;
+            if (k === 'CTL7') return o.cin_terr + o.cin_del + o.cin_acu + o.cin_fam + o.cin_otr - o.cerr_inc;
             return o.D_amg + o.D_int + o.D_otra - o.D;
           }
           return o[k];
@@ -18212,7 +18227,7 @@
         }
         const CMP_GRAF = [
           ['g-anual','Desaparecidas y localizadas por periodo','Mismos meses de cada año con el criterio elegido. Las barras muestran volumen; el % de localización está en la tabla y en la siguiente gráfica.'],
-          ['g-foto','% de localización: foto a la fecha contra base vigente','La distancia entre las dos líneas es el tiempo de búsqueda acumulado: los periodos antiguos ganan puntos con los años; el reciente apenas empieza.'],
+          ['g-foto','% de localización según el criterio','Entre foto y vigente, la distancia es el tiempo de búsqueda acumulado: los periodos antiguos ganan puntos con los años. «Vigente con cierre» queda abajo porque los cerrados entran al total.'],
           ['g-vida','Localizadas con vida y sin vida','Condición registrada de las personas localizadas en cada periodo, con el criterio elegido.'],
           ['g-carp','Siguen desaparecidas: con y sin carpeta','Personas sin localizar al cierre del periodo según si su caso tiene carpeta de investigación (estatus vigente al corte).'],
           ['g-mens','Serie del periodo seleccionado','Desaparecidas por mes de desaparición (por año si el rango pasa de 96 meses) y localizadas, con el criterio elegido.'],
@@ -18222,10 +18237,10 @@
           ['g-edad','Edad al desaparecer','Periodo seleccionado contra el periodo de comparación, por grupo de edad.']
         ];
         function cmpMaquetado(){
-          return '<section id="Audit-Desap-sec-comparativo">' + cab('Comparativo por periodo &middot; foto a la fecha y base vigente', 'Secci&oacute;n final &middot; responde al filtro de temporalidad') +
+          return '<section id="Audit-Desap-sec-comparativo">' + cab('Comparativo por periodo &middot; foto a la fecha, base vigente y vigente con cierre', 'Secci&oacute;n final &middot; responde al filtro de temporalidad') +
             '<div class="panel-cuerpo">' +
             '<p class="Audit-Desap-intro">R&eacute;plica del libro <b>REPD_Jalisco_Comparativo_Filtrable.xlsx</b>. La gobierna el <b>filtro de temporalidad</b> de la vista ' +
-              '(Desde / Hasta) y el criterio <b>Foto a la fecha / Base vigente</b> de la misma barra. Aqu&iacute; el periodo se aplica siempre a la <b>fecha de desaparici&oacute;n</b>, ' +
+              '(Desde / Hasta) y el criterio <b>Foto a la fecha / Base vigente / Vigente con cierre</b> de la misma barra. Aqu&iacute; el periodo se aplica siempre a la <b>fecha de desaparici&oacute;n</b>, ' +
               'sin importar el &laquo;Campo de fecha&raquo; elegido para el explorador; el criterio s&oacute;lo cambia esta secci&oacute;n.</p>' +
             '<div class="Audit-Desap-cmp-barra" id="Audit-Desap-cmp-barra">' +
               '<div class="Audit-Desap-cmp-estado" id="Audit-Desap-cmp-estado" role="status">Esperando datos&hellip;</div>' +
@@ -18238,7 +18253,7 @@
               '<div class="Audit-Desap-cmp-chips" id="Audit-Desap-cmp-chips" role="group" aria-label="Grupos de columnas"></div>' +
               '<div class="Audit-Desap-cmp-scroll"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-comp"></table></div>' +
               '<p class="Audit-Desap-cmp-mini">Porcentajes y variaciones truncados a 2 decimales. Los controles (grupo L) deben dar 0.</p>') +
-            cmpTarjeta('Efecto fotograf&iacute;a', 'Por qu&eacute; una misma cifra cambia seg&uacute;n la fecha en que se mide (no depende del criterio)',
+            cmpTarjeta('Efecto fotograf&iacute;a', 'Por qu&eacute; una misma cifra cambia seg&uacute;n la fecha en que se mide y seg&uacute;n si se cuentan los cierres (no depende del criterio)',
               '<div class="Audit-Desap-cmp-scroll"><table class="Audit-Desap-cmp-tabla" id="Audit-Desap-cmp-t-efecto"></table></div>' +
               '<ul class="Audit-Desap-cmp-frases" id="Audit-Desap-cmp-frases"></ul>') +
             cmpTarjeta('Sensibilidad a la definici&oacute;n del universo', 'Tres criterios a la vez para las mismas filas',
@@ -18270,7 +18285,7 @@
           if (!CMP.listo || !CMP.res) return;
           leeTema();
           const R = CMP.res, V = R.V, est = AD('cmp-estado');
-          document.querySelectorAll('#' + P + 'vista [data-cmp-crit]').forEach(b => b.setAttribute('aria-pressed', String((b.getAttribute('data-cmp-crit') === 'foto') === R.foto)));
+          document.querySelectorAll('#' + P + 'vista [data-cmp-crit]').forEach(b => b.setAttribute('aria-pressed', String(b.getAttribute('data-cmp-crit') === R.crit)));
           if (!V.length){
             est.textContent = '⚠ Periodo fuera del rango de la base.'; est.classList.add('Audit-Desap-cmp-mal');
             ['kpis','t-comp','t-efecto','t-sens','t-serie','t-mun','frases'].forEach(id => AD('cmp-' + id).innerHTML = '');
@@ -18278,10 +18293,11 @@
           }
           est.classList.remove('Audit-Desap-cmp-mal');
           const span = cmpIdx(R.z) - cmpIdx(R.a) + 1;
-          est.innerHTML = '<b>' + cmpLabP(R.a, R.z) + '</b> &middot; ' + span + (span === 1 ? ' mes' : ' meses') + ' &middot; criterio: <b>' + (R.foto ? 'Foto a la fecha' : 'Base vigente') + '</b> &middot; ' +
+          est.innerHTML = '<b>' + cmpLabP(R.a, R.z) + '</b> &middot; ' + span + (span === 1 ? ' mes' : ' meses') + ' &middot; criterio: <b>' + R.C.nom + '</b> &middot; ' +
             (V.length < 2 ? 'sin periodo de comparaci&oacute;n en la base' : span > 12 ? 'm&aacute;s de 12 meses: se compara contra el periodo anterior de igual duraci&oacute;n' : 'se compara contra los mismos meses de a&ntilde;os anteriores (desde 2019)') +
             (span > 96 ? ' &middot; serie agrupada por a&ntilde;o' : '') +
             ' &middot; corte de la base: ' + cmpLab(CMP.corte) + ' &middot; ' + CMP.n.toLocaleString('es-MX') + ' registros' +
+            (R.cc ? '<br>⚠ ' + CMP_AVISO_CC : '') +
             (R.a < 201901 ? '<br>⚠ El rango incluye a&ntilde;os anteriores a 2019: buena parte de esos registros proviene de captura retroactiva; comp&aacute;ralos con cautela.' : '');
           cmpKpis(); cmpTablaComp(); cmpTablaEfecto(); cmpTablaSens(); cmpTablaSerie(); cmpTablaMun(); cmpGraficas();
         }
@@ -18293,13 +18309,14 @@
             k(cmpN(o.D), 'Desaparecidas', vs(o.D, p && p.D, 'n')) +
             k(cmpN(o.L), 'Localizadas', vs(o.L, p && p.L, 'n')) +
             k(cmpPc(cmpDiv(o.L, o.D)), '% de localización', vs(cmpDiv(o.L, o.D), p && cmpDiv(p.L, p.D), 'p')) +
-            k(cmpN(o.siguen), 'Siguen desaparecidas al cierre', cmpPc(cmpDiv(o.siguen_sin_carpeta, o.siguen)) + ' sin carpeta') +
+            k(cmpN(o.siguen), 'Siguen desaparecidas al cierre', cmpPc(cmpDiv(o.siguen_sin_carpeta, o.siguen)) + ' sin carpeta' +
+              (R.cc ? ' &middot; m&aacute;s ' + cmpN(o.cerr_inc) + ' registros cerrados incluidos' : '')) +
             k(cmpPc(cmpDiv(o.sin_vida, o.L)), 'Localizadas sin vida', cmpN(o.sin_vida) + ' personas') +
             k(cmpPc(cmpDiv(o.avisos_carpeta, o.avisos)), 'Avisos recibidos con carpeta', cmpN(o.avisos_carpeta) + ' de ' + cmpN(o.avisos) + ' avisos del periodo');
         }
         function cmpTablaComp(){
           const R = CMP.res, G = CMP_GR.filter(g => CMP.grupos[g[0]]);
-          let h = '<thead><tr class="Audit-Desap-cmp-g"><th class="Audit-Desap-cmp-c0" rowspan="2">Periodo</th><th colspan="3">Base REPD &middot; ' + (R.foto ? 'foto a la fecha' : 'base vigente') + '</th>' +
+          let h = '<thead><tr class="Audit-Desap-cmp-g"><th class="Audit-Desap-cmp-c0" rowspan="2">Periodo</th><th colspan="3">Base REPD &middot; ' + R.C.min + '</th>' +
             G.map(g => '<th colspan="' + g[2].length + '">' + g[0] + '. ' + g[1] + '</th>').join('') + '</tr><tr>' +
             ['Desaparecidas','Localizadas','% localización'].map(t => '<th>' + t + '</th>').join('') +
             G.map(g => g[2].map(c => '<th>' + c[1] + '</th>').join('')).join('') + '</tr></thead><tbody>';
@@ -18327,13 +18344,15 @@
           const R = CMP.res;
           let h = '<thead><tr><th class="Audit-Desap-cmp-c0">Periodo</th><th>Meses entre el cierre y el corte</th><th>Desaparecidas &middot; foto</th><th>+ reportadas despu&eacute;s</th><th>&minus; cerradas despu&eacute;s</th>' +
             '<th>Desaparecidas &middot; vigente</th><th>Localizadas &middot; foto</th><th>+ localizadas despu&eacute;s (reporte a tiempo)</th><th>+ localizadas de reportes tard&iacute;os</th>' +
-            '<th>Localizadas &middot; vigente</th><th>% foto</th><th>% vigente</th><th>Diferencia</th><th>Controles</th></tr></thead><tbody>';
+            '<th>Localizadas &middot; vigente</th><th>% foto</th><th>% vigente</th><th>Diferencia</th><th>+ registros con estatus de cierre</th><th>Desaparecidas &middot; vigente con cierre</th>' +
+            '<th>% vigente con cierre</th><th>Controles</th></tr></thead><tbody>';
           R.puente.forEach((p, i) => {
-            const pf = cmpDiv(p.fL, p.fD), pv = cmpDiv(p.vL, p.vD), c1 = p.fD + p.rep - p.cer - p.vD, c2 = p.fL + p.ld + p.lt - p.vL;
+            const pf = cmpDiv(p.fL, p.fD), pv = cmpDiv(p.vL, p.vD), pc_ = cmpDiv(p.cL, p.cD), c1 = p.fD + p.rep - p.cer - p.vD, c2 = p.fL + p.ld + p.lt - p.vL, c3 = p.vD + p.ca - p.cD;
             h += '<tr' + (i === 0 ? ' class="Audit-Desap-cmp-sel"' : '') + '><td class="Audit-Desap-cmp-c0">' + cmpLabP(p.a, p.z) + '</td><td>' + p.mad + '</td><td data-k="fD" data-v="' + p.fD + '">' + cmpN(p.fD) + '</td><td>+' + cmpN(p.rep) +
               '</td><td>&minus;' + cmpN(p.cer) + '</td><td data-k="vD" data-v="' + p.vD + '">' + cmpN(p.vD) + '</td><td data-k="fL" data-v="' + p.fL + '">' + cmpN(p.fL) + '</td><td>+' + cmpN(p.ld) + '</td><td>+' + cmpN(p.lt) +
               '</td><td data-k="vL" data-v="' + p.vL + '">' + cmpN(p.vL) + '</td><td><b>' + cmpPc(pf) + '</b></td><td>' + cmpPc(pv) + '</td><td>' + cmpPp(pf !== null && pv !== null ? (pv - pf) * 100 : null) +
-              '</td><td class="Audit-Desap-cmp-ctl' + (c1 === 0 && c2 === 0 ? ' Audit-Desap-cmp-ok' : '') + '">' + c1 + ' / ' + c2 + '</td></tr>';
+              '</td><td>+' + cmpN(p.ca) + '</td><td data-k="cD" data-v="' + p.cD + '">' + cmpN(p.cD) + '</td><td>' + cmpPc(pc_) +
+              '</td><td class="Audit-Desap-cmp-ctl' + (c1 === 0 && c2 === 0 && c3 === 0 ? ' Audit-Desap-cmp-ok' : '') + '">' + c1 + ' / ' + c2 + ' / ' + c3 + '</td></tr>';
           });
           AD('cmp-t-efecto').innerHTML = h + '</tbody>';
           const F = [];
@@ -18343,6 +18362,8 @@
             F.push('Medido a la misma distancia de su cierre (foto a la fecha), el periodo <b>' + A + '</b> tiene <b>' + cmpPc(fa) + '</b> de localizaci&oacute;n y el periodo <b>' + B + '</b> tuvo <b>' + cmpPc(fb) + '</b>: una diferencia de ' + cmpPp((fa - fb) * 100) + '.');
             F.push('Con la base vigente, ' + B + ' muestra ' + cmpPc(vb) + ' porque ha tenido ' + b.mad + ' meses de b&uacute;squeda despu&eacute;s de su cierre; ' + A + ' apenas ' + a.mad + '. Comparar ' + cmpPc(vb) + ' contra ' + cmpPc(fa) + ' mezcla una cifra madura con una reci&eacute;n cerrada.');
             F.push('De las ' + cmpN(b.vD) + ' desapariciones de ' + B + ' que hoy registra la base, ' + cmpN(b.rep) + ' se reportaron despu&eacute;s del cierre del periodo y ' + cmpN(b.cer) + ' registros que entonces contaban se cerraron despu&eacute;s; de sus ' + cmpN(b.vL) + ' localizaciones vigentes, ' + cmpN(b.ld + b.lt) + ' ocurrieron despu&eacute;s del cierre.');
+            F.push('Si se suman los registros con estatus de cierre (' + cmpN(a.ca) + ' en ' + A + ', ' + cmpN(b.ca) + ' en ' + B + '), el criterio <b>vigente con cierre</b> da ' + cmpPc(cmpDiv(a.cL, a.cD)) + ' y ' + cmpPc(cmpDiv(b.cL, b.cD)) +
+              ': mide el volumen total de reportes, no la tasa de localizaci&oacute;n.');
             F.push('Comparaci&oacute;n consistente: foto contra foto (' + cmpPc(fb) + ' &rarr; ' + cmpPc(fa) + ') o vigente contra vigente (' + cmpPc(vb) + ' &rarr; ' + cmpPc(va) + '; el periodo reciente seguir&aacute; subiendo conforme avance la b&uacute;squeda).');
           } else F.push('Elige un periodo con al menos un periodo de comparaci&oacute;n.');
           AD('cmp-frases').innerHTML = F.map(t => '<li>' + t + '</li>').join('');
@@ -18358,14 +18379,15 @@
           AD('cmp-t-sens').innerHTML = h + '</tbody>';
         }
         function cmpTablaSerie(){
-          const S = CMP.res.serie;
+          const S = CMP.res.serie, cc_ = CMP.res.cc;
           const anual = S.length && S[0].a !== S[0].z;
           let h = '<thead><tr><th class="Audit-Desap-cmp-c0">' + (anual ? 'A&ntilde;o' : 'Mes') + '</th><th>Desaparecidas</th><th>Localizadas</th><th>% localizaci&oacute;n</th><th>Con vida</th><th>Sin vida</th><th>% sin vida</th>' +
-            '<th>Siguen desaparecidas</th><th>Con carpeta</th><th>% con carpeta</th><th>Avisos recibidos</th><th>Avisos con carpeta</th><th>% avisos con carpeta</th></tr></thead><tbody>';
-          const T = { D:0, L:0, cv:0, sv:0, siguen:0, cc:0, av:0, avc:0 };
+            '<th>Siguen desaparecidas</th><th>Con carpeta</th><th>% con carpeta</th><th>Avisos recibidos</th><th>Avisos con carpeta</th><th>% avisos con carpeta</th>' +
+            (cc_ ? '<th>Cerrados incluidos</th>' : '') + '</tr></thead><tbody>';
+          const T = { D:0, L:0, cv:0, sv:0, siguen:0, ce:0, cc:0, av:0, avc:0 };
           const fila = (lab, s, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td class="Audit-Desap-cmp-c0">' + lab + '</td><td data-v="' + s.D + '">' + cmpN(s.D) + '</td><td>' + cmpN(s.L) + '</td><td>' + cmpPc(cmpDiv(s.L, s.D)) + '</td><td>' + cmpN(s.cv) +
             '</td><td>' + cmpN(s.sv) + '</td><td>' + cmpPc(cmpDiv(s.sv, s.L)) + '</td><td>' + cmpN(s.siguen) + '</td><td>' + cmpN(s.cc) + '</td><td>' + cmpPc(cmpDiv(s.cc, s.D)) + '</td><td>' + cmpN(s.av) +
-            '</td><td>' + cmpN(s.avc) + '</td><td><b>' + cmpPc(cmpDiv(s.avc, s.av)) + '</b></td></tr>';
+            '</td><td>' + cmpN(s.avc) + '</td><td><b>' + cmpPc(cmpDiv(s.avc, s.av)) + '</b></td>' + (cc_ ? '<td>' + cmpN(s.ce) + '</td>' : '') + '</tr>';
           S.forEach(s => { Object.keys(T).forEach(k => T[k] += s[k]); h += fila(s.lab, s); });
           h += fila('Total del periodo', T, 'Audit-Desap-cmp-var');
           AD('cmp-t-serie').innerHTML = h + '</tbody>';
@@ -18408,7 +18430,8 @@
           const R = CMP.res, F = R.filas.slice().reverse(), Pz = R.puente.slice().reverse(), et = F.map(o => cmpLabP(o.a, o.z).replace(' – ', '–'));
           const pc = (a, b) => { const v = cmpDiv(a, b); return v === null ? null : +(v * 100).toFixed(2); };
           mkChart('cmp-g-anual', { type: 'bar', data: { labels: et, datasets: [cmpBarra('Desaparecidas', F.map(o => o.D), 0), cmpBarra('Localizadas', F.map(o => o.L), 2)] }, options: cmpOpts(false, false, false) });
-          mkChart('cmp-g-foto', { type: 'line', data: { labels: et, datasets: [cmpLinea('Foto a la fecha', Pz.map(p => pc(p.fL, p.fD)), 0), cmpLinea('Base vigente', Pz.map(p => pc(p.vL, p.vD)), 1)] }, options: cmpOpts(false, false, true) });
+          mkChart('cmp-g-foto', { type: 'line', data: { labels: et, datasets: [cmpLinea('Foto a la fecha', Pz.map(p => pc(p.fL, p.fD)), 0), cmpLinea('Base vigente', Pz.map(p => pc(p.vL, p.vD)), 1),
+            cmpLinea('Vigente con cierre', Pz.map(p => pc(p.cL, p.cD)), 3)] }, options: cmpOpts(false, false, true) });
           mkChart('cmp-g-vida', { type: 'bar', data: { labels: et, datasets: [cmpBarra('Con vida', F.map(o => o.con_vida), 2), cmpBarra('Sin vida', F.map(o => o.sin_vida), 1)] }, options: cmpOpts(true, false, false) });
           mkChart('cmp-g-carp', { type: 'bar', data: { labels: et, datasets: [cmpBarra('Con carpeta', F.map(o => o.siguen_con_carpeta), 0), cmpBarra('Sin carpeta', F.map(o => o.siguen_sin_carpeta), 1)] }, options: cmpOpts(true, false, false) });
           const S = R.serie, em = S.map(s => s.lab);
@@ -18567,7 +18590,7 @@
 
         /* ---------- descarga ligera: tablas del periodo, ya calculadas ---------- */
         async function cmpXlsxLigero(){
-          const R = CMP.res, W = CmpLibro(), crit = R.foto ? 'Foto a la fecha' : 'Base vigente';
+          const R = CMP.res, W = CmpLibro(), crit = R.C.nom;
           const encab = (h, titulo, nc) => { W.set(h, 1, 1, titulo, CX.tit); W.merge(h, 1, 1, 1, nc);
             W.set(h, 2, 1, 'Periodo: ' + cmpLabP(R.a, R.z) + ' · Criterio: ' + crit + ' · Corte de la base: ' + cmpLab(CMP.corte) + ' · ' + CMP.n.toLocaleString('es-MX') + ' registros', CX.est); W.merge(h, 2, 1, 2, nc); h.altos[1] = 24; };
           /* 1 · Comparativa (todas las columnas) */
@@ -18597,11 +18620,12 @@
           h1.cols[1] = { w: 22 }; for (let c = 2; c <= NC; c++) h1.cols[c] = { w: 11 }; h1.freeze = [5, 2];
           /* 2 · Efecto fotografía */
           const h2 = W.hoja('Efecto fotografía'), HE = ['Periodo','Meses entre el cierre y el corte','Desaparecidas · foto','+ reportadas después','− cerradas después','Desaparecidas · vigente',
-            'Localizadas · foto','+ localizadas después (reporte a tiempo)','+ localizadas de reportes tardíos','Localizadas · vigente','% foto','% vigente','Diferencia (pp)'];
+            'Localizadas · foto','+ localizadas después (reporte a tiempo)','+ localizadas de reportes tardíos','Localizadas · vigente','% foto','% vigente','Diferencia (pp)',
+            '+ registros con estatus de cierre','Desaparecidas · vigente con cierre','% vigente con cierre'];
           encab(h2, 'Efecto fotografía', HE.length); HE.forEach((t, j) => W.set(h2, 4, 1 + j, t, j === 0 ? CX.hdr : CX.hdr2)); h2.altos[4] = 52;
           R.puente.forEach((p, i) => { const rr = 5 + i, pf = cmpDiv(p.fL, p.fD), pv = cmpDiv(p.vL, p.vD);
-            [cmpLabP(p.a, p.z), p.mad, p.fD, p.rep, -p.cer, p.vD, p.fL, p.ld, p.lt, p.vL, pf, pv, pf !== null && pv !== null ? Math.round((pv - pf) * 1e8) / 1e6 : null].forEach((v, j) =>
-              W.set(h2, rr, 1 + j, v, j === 0 ? CX.txt : j >= 10 && j <= 11 ? CX.pb : j === 12 ? CX.pp : [3, 4, 7, 8].indexOf(j) >= 0 ? CX.di : CX.n)); });
+            [cmpLabP(p.a, p.z), p.mad, p.fD, p.rep, -p.cer, p.vD, p.fL, p.ld, p.lt, p.vL, pf, pv, pf !== null && pv !== null ? Math.round((pv - pf) * 1e8) / 1e6 : null, p.ca, p.cD, cmpDiv(p.cL, p.cD)].forEach((v, j) =>
+              W.set(h2, rr, 1 + j, v, j === 0 ? CX.txt : (j >= 10 && j <= 11) || j === 15 ? CX.pb : j === 12 ? CX.pp : [3, 4, 7, 8, 13].indexOf(j) >= 0 ? CX.di : CX.n)); });
           let r2 = 6 + R.puente.length;
           Array.from(AD('cmp-frases').querySelectorAll('li')).forEach(li => { W.set(h2, r2, 1, li.textContent, CX.nota); W.merge(h2, r2, 1, r2, HE.length); h2.altos[r2] = 30; r2++; });
           h2.cols[1] = { w: 22 }; for (let c = 2; c <= HE.length; c++) h2.cols[c] = { w: 13 }; h2.freeze = [5, 2];
@@ -18614,10 +18638,10 @@
           let r3 = 6 + R.puente.length; CMP_NOTA3.forEach(([t, d]) => { W.set(h3, r3, 1, t + ': ' + d, CX.nota); W.merge(h3, r3, 1, r3, 10); h3.altos[r3] = 30; r3++; });
           h3.cols[1] = { w: 22 }; for (let c = 2; c <= 10; c++) h3.cols[c] = { w: 13 }; h3.freeze = [5, 2];
           /* 4 · Serie mensual */
-          const h4 = W.hoja('Serie'), HS = [(R.serie.length && R.serie[0].a !== R.serie[0].z) ? 'Año' : 'Mes','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta','Avisos recibidos','Avisos con carpeta','% avisos con carpeta'];
+          const h4 = W.hoja('Serie'), HS = [(R.serie.length && R.serie[0].a !== R.serie[0].z) ? 'Año' : 'Mes','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta','Avisos recibidos','Avisos con carpeta','% avisos con carpeta'].concat(R.cc ? ['Cerrados incluidos'] : []);
           encab(h4, 'Serie mensual del periodo', HS.length); HS.forEach((t, j) => W.set(h4, 4, 1 + j, t, CX.hdr)); h4.altos[4] = 40;
           R.serie.forEach((s, i) => { const rr = 5 + i;
-            [s.lab, s.D, s.L, cmpDiv(s.L, s.D), s.cv, s.sv, cmpDiv(s.sv, s.L), s.siguen, s.cc, cmpDiv(s.cc, s.D), s.av, s.avc, cmpDiv(s.avc, s.av)]
+            [s.lab, s.D, s.L, cmpDiv(s.L, s.D), s.cv, s.sv, cmpDiv(s.sv, s.L), s.siguen, s.cc, cmpDiv(s.cc, s.D), s.av, s.avc, cmpDiv(s.avc, s.av)].concat(R.cc ? [s.ce] : [])
               .forEach((v, j) => W.set(h4, rr, 1 + j, v, j === 0 ? CX.txt : [3, 6, 9, 12].indexOf(j) >= 0 ? CX.p : CX.n)); });
           h4.cols[1] = { w: 11 }; for (let c = 2; c <= HS.length; c++) h4.cols[c] = { w: 12 }; h4.freeze = [5, 2];
           /* 5 · Municipios */
@@ -18631,12 +18655,12 @@
           /* 6 · Notas */
           const h6 = W.hoja('Notas'); W.set(h6, 1, 1, 'Notas metodológicas', CX.tit); W.merge(h6, 1, 1, 1, 2);
           [['Periodo', cmpLabP(R.a, R.z)], ['Criterio', crit], ['Corte de la base', cmpLab(CMP.corte) + (CUT_TEXT ? ' (' + CUT_TEXT + ')' : '')],
-           ...CMP_NOTA3, ['Carpetas', 'Estatus vigente al corte en ambos criterios: la versión pública no publica la fecha de apertura.'],
+           ...CMP_NOTA3, ...(R.cc ? [['Advertencia', CMP_AVISO_CC]] : []), ['Carpetas', 'Estatus vigente al corte en los tres criterios: la versión pública no publica la fecha de apertura.'],
            ['Redondeo', 'Porcentajes y variaciones truncados a 2 decimales (regla CGES).'], ['Elaboró', 'CGES/Arjona · Coordinación General Estratégica de Seguridad, Gobierno de Jalisco.']]
             .forEach(([k, t], i) => { W.set(h6, 3 + i, 1, k, CX.hdr); W.set(h6, 3 + i, 2, t, CX.txtw); h6.altos[3 + i] = 34; });
           h6.cols[1] = { w: 22 }; h6.cols[2] = { w: 120 };
           const blob = await W.blob({ titulo: 'Comparativo REPD · ' + cmpLabP(R.a, R.z) });
-          cmpBaja(blob, 'REPD_Comparativo_' + R.a + '-' + R.z + '_' + (R.foto ? 'foto' : 'vigente') + '.xlsx');
+          cmpBaja(blob, 'REPD_Comparativo_' + R.a + '-' + R.z + '_' + R.C.arch + '.xlsx');
         }
 
         /* ---------- descarga total: libro con BASE y fórmulas (mismo diseño que el Excel filtrable) ---------- */
@@ -18691,7 +18715,7 @@
           S(wc, 1, 1, 'Comparativo REPD Jalisco · Panel de control', Object.assign({}, CX.tit, { sz: 13 })); W.merge(wc, 1, 1, 1, 6); wc.altos[1] = 28;
           S(wc, 2, 1, 'Elige Inicio, Final y Criterio en las celdas amarillas. Todas las hojas se recalculan a partir de la hoja BASE (REPD completo).', CX.sub); W.merge(wc, 2, 1, 2, 6);
           [[4, 'Inicio (mes / año)', cmpLab(sel.a), '=IFERROR(INDEX(LS_YM,MATCH(C4,LS_LAB,0)),0)'], [5, 'Final (mes / año)', cmpLab(sel.z), '=IFERROR(INDEX(LS_YM,MATCH(C5,LS_LAB,0)),0)'],
-           [6, 'Criterio', sel.foto ? 'Foto a la fecha' : 'Base vigente', '=IF(C6="Base vigente",0,1)']].forEach(([rr, l, v, f]) => { S(wc, rr, 2, l, { b: 1, al: 'left' }); S(wc, rr, 3, v, CX.inp); S(wc, rr, 4, f, CX.aux); wc.altos[rr] = 20; });
+           [6, 'Criterio', CMP_CRIT[cmpK(sel.crit)].nom, '=IFERROR(MATCH(C6,{"Foto a la fecha","Base vigente","Vigente con cierre"},0),1)']].forEach(([rr, l, v, f]) => { S(wc, rr, 2, l, { b: 1, al: 'left' }); S(wc, rr, 3, v, CX.inp); S(wc, rr, 4, f, CX.aux); wc.altos[rr] = 20; });
           S(wc, 7, 2, 'Corte de la base (último mes de reporte)', { b: 1, al: 'left' }); S(wc, 7, 4, '=MAX(B_FR)', CX.aux); S(wc, 7, 3, '=' + MESF('D7'), { b: 1 });
           S(wc, 8, 2, 'Meses en el periodo', { b: 1, al: 'left' }); S(wc, 8, 3, '=IF(D5<D4,0,' + IDXF('D5') + '-' + IDXF('D4') + '+1)', { b: 1 });
           S(wc, 9, 2, 'Filas de comparación', { b: 1, al: 'left' }); S(wc, 9, 3, '=IF(OR(D4=0,D5=0,D5<D4,D5>D7),0,IF(C8<=12,MAX(1,MIN(8,INT(D5/100)-2019+1)),IF(' + YMF(IDXF('D4') + '-C8') + '>=D12,2,1)))', { b: 1 });
@@ -18699,9 +18723,9 @@
           S(wc, 10, 3, '=IF(OR(D4=0,D5=0),"⚠ Elige Inicio y Final de la lista",IF(D5<D4,"⚠ El Final es anterior al Inicio",IF(D5>D7,"⚠ El Final pasa el corte de la base",IF(C9=1,"✓ Periodo válido · sin periodo de comparación en la base",IF(C8>12,"✓ Periodo válido · más de 12 meses: se compara contra el periodo anterior de igual duración","✓ Periodo válido · se compara contra los mismos meses de años anteriores (desde 2019)")))&IF(D4<201901," · ⚠ incluye años antes de 2019 (captura retroactiva): comparar con cautela","")&IF(C8>96," · serie agrupada por año","")))', { b: 1, al: 'left' });
           W.merge(wc, 10, 3, 10, 6);
           S(wc, 11, 2, 'Qué cuenta el criterio', { b: 1, al: 'left' }); W.merge(wc, 11, 3, 11, 6); wc.altos[11] = 54;
-          S(wc, 11, 3, '=IF(D6=1,"FOTO A LA FECHA: desaparición ocurrida en el periodo y reportada a más tardar al cierre del periodo; excluye los cierres hechos hasta esa fecha; localizadas = localizadas hasta el cierre del periodo. Reproduce las cifras oficiales y compara años con el mismo tiempo de reporte y búsqueda.","BASE VIGENTE: desaparición ocurrida en el periodo con todo lo que se sabe al corte (incluye reportes tardíos y localizaciones posteriores); excluye todos los registros con estatus CIERRE. Los periodos recientes se ven más bajos porque han tenido menos tiempo de reporte y búsqueda.")', CX.txtw);
+          S(wc, 11, 3, '=IF(D6=1,"FOTO A LA FECHA: desaparición ocurrida en el periodo y reportada a más tardar al cierre del periodo; excluye los cierres hechos hasta esa fecha; localizadas = localizadas hasta el cierre del periodo. Reproduce las cifras oficiales y compara años con el mismo tiempo de reporte y búsqueda.",IF(D6=3,"VIGENTE CON CIERRE: igual que la base vigente, pero incluye los registros con estatus CIERRE (no competencia territorial o de delito, acumulación, búsqueda de familiares). Desaparecidas = localizadas + siguen desaparecidas + cerrados incluidos. Mide el volumen total de reportes; su % de localización no es comparable con los otros dos criterios.","BASE VIGENTE: desaparición ocurrida en el periodo con todo lo que se sabe al corte (incluye reportes tardíos y localizaciones posteriores); excluye todos los registros con estatus CIERRE. Los periodos recientes se ven más bajos porque han tenido menos tiempo de reporte y búsqueda."))', CX.txtw);
           S(wc, 12, 2, 'Primer mes con datos en la base', { b: 1, al: 'left' }); S(wc, 12, 4, '=_xlfn.MINIFS(B_FD,B_FD,">0")', CX.aux); S(wc, 12, 3, '=' + MESF('D12'), { b: 1 });
-          wc.val.push({ sqref: 'C4:C5', f: 'Listas!$B$2:$B$' + NL }, { sqref: 'C6', f: '"Foto a la fecha,Base vigente"' });
+          wc.val.push({ sqref: 'C4:C5', f: 'Listas!$B$2:$B$' + NL }, { sqref: 'C6', f: '"Foto a la fecha,Base vigente,Vigente con cierre"' });
           notas(wc, 14, 6, ['CÓMO ACTUALIZAR LA BASE', '1. Descarga la versión pública del REPD (hoja DATOS). 2. En la hoja BASE borra las filas 2 en adelante de las columnas A a R. 3. Pega los registros (sin encabezados) a partir de A2, con el mismo orden de las 18 columnas. 4. Las columnas S a Z se calculan solas hasta la fila ' + NMAX.toLocaleString('es-MX') + '. 5. El corte y el primer mes se detectan solos; la lista de meses va de ene 1940 a dic 2030.',
             'Las hojas 1 a 7 dependen solo de esta hoja y de BASE. Las proporciones y variaciones están truncadas a 2 decimales (regla CGES). Las carpetas reflejan el estatus vigente al corte (la base no publica la fecha de apertura).', CMP_FIRMA], 44);
           [2, 34, 30, 12, 20, 20].forEach((w, i) => wc.cols[i + 1] = { w });
@@ -18722,11 +18746,13 @@
           ws.altos[4] = 22; ws.altos[5] = 30; ws.altos[6] = 52;
           const R1 = 7, RN = 14;
           const SPEC = {
-            siguen: r => 'D' + r + '-E' + r, con_vida: 'L:,B_COND,"CON VIDA"', sin_vida: 'L:,B_COND,"SIN VIDA"', cl_lg: 'L:,B_CLAS,"VICTIMA DE DELITO CONTEMPLADO EN LA LEY GENERAL"',
+            siguen: r => 'D' + r + '-E' + r + '-' + colof.cerr_inc + r, con_vida: 'L:,B_COND,"CON VIDA"', sin_vida: 'L:,B_COND,"SIN VIDA"', cl_lg: 'L:,B_CLAS,"VICTIMA DE DELITO CONTEMPLADO EN LA LEY GENERAL"',
             cl_div: 'L:,B_CLAS,"VICTIMA DE DELITO DIVERSO"', cl_sin: 'L:,B_CLAS,"SIN SER VICTIMA DE DELITO"', con_carpeta: 'D:,B_CARP,"SI"', sin_carpeta: 'D:,B_CARP,"NO"',
             siguen_con_carpeta: 'SC:SI', siguen_sin_carpeta: 'SC:NO', avisos: 'A:', avisos_ant: 'A:,B_FD,"<"&$B{r},B_FD,">0"', avisos_carpeta: 'A:,B_CARP,"SI"', cierres_excl: 'CE:',
             ci_terr: 'CE:,B_TCIE,"NO COMPETENCIA TERRITORIAL"', ci_del: 'CE:,B_TCIE,"NO COMPETENCIA DE DELITO"', ci_acu: 'CE:,B_TCIE,"POR ACUMULACION"', ci_fam: 'CE:,B_TCIE,"POR BUSQUEDA DE FAMILIARES"',
-            cierres_post: 'CP:', D_h: 'D:,B_SEXO,"HOMBRE"', D_m: 'D:,B_SEXO,"MUJER"', L_h: 'L:,B_SEXO,"HOMBRE"', L_m: 'L:,B_SEXO,"MUJER"', D_amg: 'D:,B_TERR,"AMG"', D_int: 'D:,B_TERR,"INTERIOR"',
+            cierres_post: 'CP:', cerr_inc: 'CI:', cin_terr: 'CI:,B_TCIE,"NO COMPETENCIA TERRITORIAL"', cin_del: 'CI:,B_TCIE,"NO COMPETENCIA DE DELITO"',
+            cin_acu: 'CI:,B_TCIE,"POR ACUMULACION"', cin_fam: 'CI:,B_TCIE,"POR BUSQUEDA DE FAMILIARES"',
+            cin_otr: 'CI:,B_TCIE,"<>NO COMPETENCIA TERRITORIAL",B_TCIE,"<>NO COMPETENCIA DE DELITO",B_TCIE,"<>POR ACUMULACION",B_TCIE,"<>POR BUSQUEDA DE FAMILIARES"', D_h: 'D:,B_SEXO,"HOMBRE"', D_m: 'D:,B_SEXO,"MUJER"', L_h: 'L:,B_SEXO,"HOMBRE"', L_m: 'L:,B_SEXO,"MUJER"', D_amg: 'D:,B_TERR,"AMG"', D_int: 'D:,B_TERR,"INTERIOR"',
             D_otra: 'D:,B_TERR,"OTRA"', L_amg: 'L:,B_TERR,"AMG"', L_int: 'L:,B_TERR,"INTERIOR"', loc_mes0: 'L:,B_MESES,"<=0"', loc_2m: 'L:,B_MESES,"<=2"'
           };
           CMP_EDAD_G.forEach(g => SPEC['e_' + g] = 'D:,B_EDAD,"' + g + '"');
@@ -18740,21 +18766,24 @@
             if (k === 'prom_meses') return 'IFERROR(AVERAGEIFS(B_MESES,' + q.base + ',B_EST,"PERSONA LOCALIZADA",B_FL,"<="&$' + ZR + r + '),"—")';
             const [kind, ex0] = [s.split(':')[0], s.slice(s.indexOf(':') + 1).replace(/\{r\}/g, r)];
             if (kind === 'D') return q.Dx(ex0); if (kind === 'L') return q.Lx(ex0); if (kind === 'A') return q.Ax(ex0);
-            if (kind === 'SC') return '(' + q.Dx(',B_CARP,"' + ex0 + '"') + '-' + q.Lx(',B_CARP,"' + ex0 + '"') + ')';
+            if (kind === 'SC') return '(' + q.Dx(',B_CARP,"' + ex0 + '"') + '-' + q.Lx(',B_CARP,"' + ex0 + '"') + '-(CTL_FOTO=3)*COUNTIFS(' + q.base + ',B_EST,"CIERRE",B_CARP,"' + ex0 + '"))';
+            if (kind === 'CI') return '(CTL_FOTO=3)*COUNTIFS(' + q.base + ',B_EST,"CIERRE"' + ex0 + ')';
             if (kind === 'CE') return 'COUNTIFS(' + q.base + ',' + q.cie + ex0 + ')';
-            if (kind === 'CP') return 'COUNTIFS(' + q.base + ',B_EST,"CIERRE",B_FC,">"&$' + ZC + r + ')';
+            if (kind === 'CP') return '(CTL_FOTO<>3)*COUNTIFS(' + q.base + ',B_EST,"CIERRE",B_FC,">"&$' + ZC + r + ')';
             throw new Error('spec ' + k);
           };
           const CTLF = { CTL1: r => colof.con_carpeta + r + '+' + colof.sin_carpeta + r + '-D' + r, CTL2: r => colof.D_h + r + '+' + colof.D_m + r + '-D' + r,
             CTL3: r => colof.con_vida + r + '+' + colof.sin_vida + r + '-E' + r, CTL4: r => 'SUM(' + colof['e_0-14'] + r + ':' + colof['e_Se ignora'] + r + ')-D' + r,
-            CTL5: r => colof.D_amg + r + '+' + colof.D_int + r + '+' + colof.D_otra + r + '-D' + r };
+            CTL5: r => colof.D_amg + r + '+' + colof.D_int + r + '+' + colof.D_otra + r + '-D' + r,
+            CTL6: r => 'E' + r + '+' + colof.siguen + r + '+' + colof.cerr_inc + r + '-D' + r,
+            CTL7: r => colof.cin_terr + r + '+' + colof.cin_del + r + '+' + colof.cin_acu + r + '+' + colof.cin_fam + r + '+' + colof.cin_otr + r + '-' + colof.cerr_inc + r };
           for (let k = 0; k < 8; k++){
             const rr = R1 + k, q = crit(rr), key = '$B' + rr + '&"|"&$C' + rr;
             ws.altos[rr] = 16; S(ws, rr, VC, k, CX.aux);
             S(ws, rr, 2, k ? '=IF(' + k + '>=CTL_NROWS,"",IF(CTL_SPAN<=12,CTL_A-100*' + k + ',' + YMF(IDXF('CTL_A') + '-CTL_SPAN') + '))' : '=IF(CTL_NROWS<1,"",CTL_A)', CX.aux);
             S(ws, rr, 3, k ? '=IF(' + k + '>=CTL_NROWS,"",IF(CTL_SPAN<=12,CTL_Z-100*' + k + ',' + YMF(IDXF('CTL_A') + '-1') + '))' : '=IF(CTL_NROWS<1,"",CTL_Z)', CX.aux);
             S(ws, rr, 1, '=IF($B' + rr + '="","",' + MESF('$B' + rr) + '&IF($B' + rr + '=$C' + rr + ',""," – "&' + MESF('$C' + rr) + '))', Object.assign({}, CX.txt, k === 0 ? { b: 1 } : {}));
-            S(ws, rr, ZRC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',999999))', CX.aux); S(ws, rr, ZCC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',999999))', CX.aux);
+            S(ws, rr, ZRC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',999999))', CX.aux); S(ws, rr, ZCC, '=IF($B' + rr + '="","",IF(CTL_FOTO=1,$C' + rr + ',IF(CTL_FOTO=3,0,999999)))', CX.aux);
             S(ws, rr, 4, '=IF($B' + rr + '="","",' + q.Dx() + ')', k ? CX.n : CX.nb); S(ws, rr, 5, '=IF($B' + rr + '="","",' + q.Lx() + ')', k ? CX.n : CX.nb);
             S(ws, rr, 6, '=IF($B' + rr + '="","",IFERROR(TRUNC(E' + rr + '/D' + rr + ',4),"—"))', CX.pl);
             COLS.forEach(x => {
@@ -18779,7 +18808,8 @@
           });
           notas(ws, RN + 4, 30, ['LECTURA', '1. Con «Foto a la fecha» cada fila se mide con lo que se sabía al cierre de ese periodo: reproduce las cifras oficiales y compara años con el mismo tiempo de reporte y búsqueda.',
             '2. Con «Base vigente» cada fila incluye reportes tardíos y localizaciones posteriores: los periodos antiguos se ven más completos que los recientes. La diferencia se explica en la hoja «2 Efecto fotografía».',
-            '3. Carpetas: estatus vigente al corte en ambos criterios (la base no publica la fecha de apertura).',
+            '3. Con «Vigente con cierre» se suman los registros con estatus CIERRE (grupo F, «Cerrados incluidos»): desaparecidas = localizadas + siguen + cerrados incluidos. Mide el volumen total de reportes; su % de localización no es comparable con los otros dos criterios.',
+            '4. Carpetas: estatus vigente al corte en los tres criterios (la base no publica la fecha de apertura).',
             'Los controles (grupo L) deben dar 0. Si no hay periodo de comparación en la base, la tabla muestra una sola fila.', CMP_FIRMA]);
           ws.cols[1] = { w: 22 }; ws.cols[2] = { w: 9 }; ws.cols[3] = { w: 9 }; for (let c = 4; c <= NC; c++) ws.cols[c] = { w: 11 };
           [ZRC, ZCC, VC].forEach(c => ws.cols[c] = { w: 6, hidden: true }); ws.freeze = [R1, 2]; ws.zoom = 85;
@@ -18787,9 +18817,10 @@
           const T1 = "'1 Tabla comparativa'", we = hojas['2 Efecto fotografía'];
           const HE = ['Periodo','Desde','Hasta','Meses entre el cierre del periodo y el corte','Desaparecidas · foto a la fecha','+ ocurridas en el periodo y reportadas después','− cerradas después del periodo',
             'Desaparecidas · base vigente (resultado)','Control','Localizadas · foto a la fecha','+ localizadas después del cierre (reportadas a tiempo)','+ localizadas de reportes tardíos',
-            'Localizadas · base vigente (resultado)','Control','% localización · foto','% localización · base vigente','Diferencia (pp)'];
-          titulo(we, 'Efecto fotografía: por qué una misma cifra cambia según la fecha en que se mide', 'Para cada fila de la hoja 1 se descompone la diferencia entre la «foto a la fecha» (lo que se sabía al cierre del periodo) y la «base vigente» (lo que se sabe al corte). No depende del selector Criterio.', HE.length);
-          estado(we, 3, HE.length); HE.forEach((t, i) => S(we, 5, 1 + i, t, [4, 9, 14].indexOf(i) >= 0 ? CX.ver : i < 4 ? CX.hdr : CX.hdr2)); we.altos[5] = 66;
+            'Localizadas · base vigente (resultado)','Control','% localización · foto','% localización · base vigente','Diferencia (pp)',
+            '+ registros con estatus de cierre','Desaparecidas · vigente con cierre (resultado)','Control','% localización · vigente con cierre'];
+          titulo(we, 'Efecto fotografía: por qué una misma cifra cambia según la fecha en que se mide', 'Para cada fila de la hoja 1 se descompone la diferencia entre la «foto a la fecha» (lo que se sabía al cierre del periodo), la «base vigente» (lo que se sabe al corte) y la «vigente con cierre» (más los registros cerrados). No depende del selector Criterio.', HE.length);
+          estado(we, 3, HE.length); HE.forEach((t, i) => S(we, 5, 1 + i, t, [4, 9, 14].indexOf(i) >= 0 ? CX.ver : i < 4 ? CX.hdr : i === 19 ? CX.gris : CX.hdr2)); we.altos[5] = 66;
           for (let k = 0; k < 8; k++){
             const rr = 6 + k, rt = R1 + k, G = e => '=IF($B' + rr + '="","",' + e + ')', fr_ = 'B_FD,">="&$B' + rr + ',B_FD,"<="&$C' + rr;
             S(we, rr, 1, '=IF(' + T1 + '!$B' + rt + '="","",' + T1 + '!A' + rt + ')', Object.assign({}, CX.txt, k === 0 ? { b: 1 } : {}));
@@ -18805,14 +18836,17 @@
             S(we, rr, 13, G('COUNTIFS(' + fr_ + ',B_EST,"PERSONA LOCALIZADA")'), CX.nb); S(we, rr, 14, G('J' + rr + '+K' + rr + '+L' + rr + '-M' + rr), CX.ctl);
             S(we, rr, 15, G('IFERROR(TRUNC(J' + rr + '/E' + rr + ',4),"—")'), CX.pl); S(we, rr, 16, G('IFERROR(TRUNC(M' + rr + '/H' + rr + ',4),"—")'), CX.pb);
             S(we, rr, 17, G('IFERROR((P' + rr + '-O' + rr + ')*100,"—")'), CX.pp);
+            S(we, rr, 18, G('COUNTIFS(' + fr_ + ',B_EST,"CIERRE")'), CX.di); S(we, rr, 19, G('COUNTIFS(' + fr_ + ')'), CX.nb);
+            S(we, rr, 20, G('H' + rr + '+R' + rr + '-S' + rr), CX.ctl); S(we, rr, 21, G('IFERROR(TRUNC(M' + rr + '/S' + rr + ',4),"—")'), CX.pb);
           }
           S(we, 16, 1, 'CÓMO SE LEE (texto automático para el periodo seleccionado y su periodo de comparación)', CX.notaT); W.merge(we, 16, 1, 16, HE.length);
           ['=IF(CTL_NROWS<2,"Elige un periodo con al menos un periodo de comparación.","Medido a la misma distancia de su cierre (foto a la fecha), el periodo "&A6&" tiene "&TEXT(O6,"0.00%")&" de localización y el periodo "&A7&" tuvo "&TEXT(O7,"0.00%")&": una diferencia de "&TEXT((O6-O7)*100,"+0.00;-0.00")&" puntos.")',
            '=IF(CTL_NROWS<2,"","Con la base vigente, "&A7&" muestra "&TEXT(P7,"0.00%")&" porque ha tenido "&D7&" meses de búsqueda después de su cierre; "&A6&" apenas "&D6&". Comparar "&TEXT(P7,"0.00%")&" contra "&TEXT(O6,"0.00%")&" mezcla una cifra madura con una recién cerrada.")',
            '=IF(CTL_NROWS<2,"","De las "&TEXT(H7,"#,##0")&" desapariciones de "&A7&" que hoy registra la base, "&TEXT(F7,"#,##0")&" se reportaron después del cierre del periodo y "&TEXT(-G7,"#,##0")&" registros que entonces contaban se cerraron después; de sus "&TEXT(M7,"#,##0")&" localizaciones vigentes, "&TEXT(K7+L7,"#,##0")&" ocurrieron después del cierre.")',
+           '=IF(CTL_NROWS<2,"","Si se suman los registros con estatus de cierre ("&TEXT(R6,"#,##0")&" en "&A6&", "&TEXT(R7,"#,##0")&" en "&A7&"), el criterio vigente con cierre da "&TEXT(U6,"0.00%")&" y "&TEXT(U7,"0.00%")&": mide el volumen total de reportes, no la tasa de localización.")',
            '=IF(CTL_NROWS<2,"","Comparación consistente: foto contra foto ("&TEXT(O7,"0.00%")&" → "&TEXT(O6,"0.00%")&") o vigente contra vigente ("&TEXT(P7,"0.00%")&" → "&TEXT(P6,"0.00%")&"; el periodo reciente seguirá subiendo conforme avance la búsqueda).")']
             .forEach((f, i) => { S(we, 17 + i, 1, f, CX.nota); W.merge(we, 17 + i, 1, 17 + i, HE.length); we.altos[17 + i] = 30; });
-          notas(we, 22, HE.length, ['', 'Los controles deben dar 0: foto + reportadas después − cerradas después = vigente; foto + localizadas después + localizadas de reportes tardíos = vigente. Las carpetas no tienen fecha en la base, por eso no se descomponen aquí.', CMP_FIRMA]);
+          notas(we, 23, HE.length, ['', 'Los controles deben dar 0: foto + reportadas después − cerradas después = vigente; foto + localizadas después + localizadas de reportes tardíos = vigente; vigente + registros con estatus de cierre = vigente con cierre. Las carpetas no tienen fecha en la base, por eso no se descomponen aquí.', CMP_FIRMA]);
           we.cols[1] = { w: 22 }; we.cols[2] = { w: 9 }; we.cols[3] = { w: 9 }; for (let c = 4; c <= HE.length; c++) we.cols[c] = { w: 13 }; we.freeze = [6, 2];
           /* --- 3 Sensibilidad --- */
           const w3 = hojas['3 Sensibilidad']; titulo(w3, 'Sensibilidad de las cifras a la definición del universo', 'Mismas filas de la hoja 1, tres criterios a la vez (no depende del selector Criterio).', 12); estado(w3, 3, 12);
@@ -18830,12 +18864,12 @@
           w3.cols[1] = { w: 22 }; for (let c = 2; c <= 12; c++) w3.cols[c] = { w: 12 }; w3.freeze = [6, 2];
           /* --- 4 Serie (mensual; anual si el rango pasa de 96 meses) --- */
           const w4 = hojas['4 Serie mensual'], HS = ['Mes / año','Desde','Hasta','Desaparecidas','Localizadas','% localización','Con vida','Sin vida','% sin vida','Siguen desaparecidas','Con carpeta','% con carpeta',
-            'Avisos recibidos','Avisos con carpeta','% avisos con carpeta','Control: con + sin vida − localiz.'];
-          titulo(w4, 'Serie del periodo seleccionado', 'Una fila por mes entre Inicio y Final; si el rango pasa de 96 meses, una fila por año (recortada al rango). Cada tramo se mide con el criterio del panel: con «Foto a la fecha», lo reportado y localizado hasta el cierre del tramo; con «Base vigente», todo lo conocido al corte. Avisos por fecha de reporte.', HS.length);
+            'Avisos recibidos','Avisos con carpeta','% avisos con carpeta','Control: con + sin vida − localiz.','Cerrados incluidos (vigente con cierre)'];
+          titulo(w4, 'Serie del periodo seleccionado', 'Una fila por mes entre Inicio y Final; si el rango pasa de 96 meses, una fila por año (recortada al rango). Cada tramo se mide con el criterio del panel: con «Foto a la fecha», lo reportado y localizado hasta el cierre del tramo; con «Base vigente», todo lo conocido al corte sin cierres; con «Vigente con cierre», todo lo conocido al corte incluidos los cierres. Avisos por fecha de reporte.', HS.length);
           estado(w4, 3, HS.length); HS.forEach((t, i) => S(w4, 5, 1 + i, t, CX.hdr)); w4.altos[5] = 40;
           for (let i = 0; i < 96; i++){
             const rr = 6 + i, yy = '(INT(CTL_A/100)+' + i + ')';
-            const zr = 'IF(CTL_FOTO=1,$C' + rr + ',999999)', base = 'B_FD,">="&$B' + rr + ',B_FD,"<="&$C' + rr + ',B_FR,"<="&' + zr, cie = 'B_EST,"CIERRE",B_FC,"<="&' + zr;
+            const zr = 'IF(CTL_FOTO=1,$C' + rr + ',999999)', zc = 'IF(CTL_FOTO=1,$C' + rr + ',IF(CTL_FOTO=3,0,999999))', base = 'B_FD,">="&$B' + rr + ',B_FD,"<="&$C' + rr + ',B_FR,"<="&' + zr, cie = 'B_EST,"CIERRE",B_FC,"<="&' + zc;
             const avb = 'B_FR,">="&$B' + rr + ',B_FR,"<="&$C' + rr;
             const Dx = ex => '(COUNTIFS(' + base + (ex || '') + ')-COUNTIFS(' + base + ',' + cie + (ex || '') + '))', Lx = ex => 'COUNTIFS(' + base + ',B_EST,"PERSONA LOCALIZADA",B_FL,"<="&' + zr + (ex || '') + ')';
             const G = e => '=IF($B' + rr + '="","",' + e + ')';
@@ -18844,16 +18878,16 @@
             S(w4, rr, 1, '=IF($B' + rr + '="","",IF($B' + rr + '=$C' + rr + ',' + MESF('$B' + rr) + ',IF(AND(MOD($B' + rr + ',100)=1,MOD($C' + rr + ',100)=12),""&INT($B' + rr + '/100),' + MESF('$B' + rr) + '&" – "&' + MESF('$C' + rr) + ')))', CX.txt);
             S(w4, rr, 4, G(Dx()), CX.n); S(w4, rr, 5, G(Lx()), CX.n); S(w4, rr, 6, G('IFERROR(TRUNC(E' + rr + '/D' + rr + ',4),"—")'), CX.p);
             S(w4, rr, 7, G(Lx(',B_COND,"CON VIDA"')), CX.n); S(w4, rr, 8, G(Lx(',B_COND,"SIN VIDA"')), CX.n); S(w4, rr, 9, G('IFERROR(TRUNC(H' + rr + '/E' + rr + ',4),"—")'), CX.p);
-            S(w4, rr, 10, G('D' + rr + '-E' + rr), CX.n); S(w4, rr, 11, G(Dx(',B_CARP,"SI"')), CX.n); S(w4, rr, 12, G('IFERROR(TRUNC(K' + rr + '/D' + rr + ',4),"—")'), CX.p);
+            S(w4, rr, 10, G('D' + rr + '-E' + rr + '-Q' + rr), CX.n); S(w4, rr, 17, G('(CTL_FOTO=3)*COUNTIFS(' + base + ',B_EST,"CIERRE")'), CX.n); S(w4, rr, 11, G(Dx(',B_CARP,"SI"')), CX.n); S(w4, rr, 12, G('IFERROR(TRUNC(K' + rr + '/D' + rr + ',4),"—")'), CX.p);
             S(w4, rr, 13, G('COUNTIFS(' + avb + ')-COUNTIFS(' + avb + ',' + cie + ')'), CX.n);
             S(w4, rr, 14, G('COUNTIFS(' + avb + ',B_CARP,"SI")-COUNTIFS(' + avb + ',B_CARP,"SI",' + cie + ')'), CX.n);
             S(w4, rr, 15, G('IFERROR(TRUNC(N' + rr + '/M' + rr + ',4),"—")'), CX.pb); S(w4, rr, 16, G('G' + rr + '+H' + rr + '-E' + rr), CX.ctl);
           }
           const rT = 102; S(w4, rT, 1, 'Total del periodo', CX.blk); S(w4, rT, 2, null, CX.blkv); S(w4, rT, 3, null, CX.blkv);
-          [4, 5, 7, 8, 10, 11, 13, 14].forEach(c => S(w4, rT, c, '=SUM(' + cmpCol(c) + '6:' + cmpCol(c) + (rT - 1) + ')', Object.assign({}, CX.nb, { fill: 'DCE4EE' })));
+          [4, 5, 7, 8, 10, 11, 13, 14, 17].forEach(c => S(w4, rT, c, '=SUM(' + cmpCol(c) + '6:' + cmpCol(c) + (rT - 1) + ')', Object.assign({}, CX.nb, { fill: 'DCE4EE' })));
           [[6, 'E', 'D'], [9, 'H', 'E'], [12, 'K', 'D'], [15, 'N', 'M']].forEach(([c, nn, dd]) => S(w4, rT, c, '=IFERROR(TRUNC(' + nn + rT + '/' + dd + rT + ',4),"—")', Object.assign({}, CX.pb, { fill: 'DCE4EE' })));
           S(w4, rT, 16, '=G' + rT + '+H' + rT + '-E' + rT, CX.ctl);
-          notas(w4, rT + 2, HS.length, ['', 'Con «Foto a la fecha», la suma de los tramos no es igual a la fila del periodo en la hoja 1: cada tramo se cierra en su propio fin. Con «Base vigente» sí coinciden.', CMP_FIRMA]);
+          notas(w4, rT + 2, HS.length, ['', 'Con «Foto a la fecha», la suma de los tramos no es igual a la fila del periodo en la hoja 1: cada tramo se cierra en su propio fin. Con «Base vigente» y «Vigente con cierre» sí coinciden.', CMP_FIRMA]);
           w4.cols[1] = { w: 16 }; for (let c = 2; c <= HS.length; c++) w4.cols[c] = { w: 12 }; w4.freeze = [6, 2];
           /* --- 5 Municipios --- */
           const w5 = hojas['5 Municipios'], MUNS = CMP.muns.concat(['OTRA ENTIDAD']), HM = ['#','Municipio','AMG','Periodo anterior','Periodo seleccionado','Var.','Localizadas','% loc.','Con vida','Sin vida','Con carpeta','% con carpeta','% del estado'];
@@ -18861,8 +18895,9 @@
           estado(w5, 3, HM.length); HM.forEach((t, i) => S(w5, 5, 1 + i, t, CX.hdr)); w5.altos[5] = 32;
           const CB = 16; ['Municipio (cálculo)','Ant.','Sel.','Loc.','Con vida','Sin vida','Con carpeta','Clave de orden'].forEach((t, i) => S(w5, 5, CB + i, t, CX.aux));
           const a1 = T1 + '!$B$' + R1, z1 = T1 + '!$C$' + R1, zr1 = T1 + '!$' + ZR + '$' + R1, a2 = T1 + '!$B$' + (R1 + 1), z2 = T1 + '!$C$' + (R1 + 1), zr2 = T1 + '!$' + ZR + '$' + (R1 + 1);
+          const zcOf = zr => zr.replace('!$' + ZR + '$', '!$' + ZC + '$');
           const mcrit = (m, a, z, zr, rr) => { const loc = m === 'OTRA ENTIDAD' ? 'B_EDO,"<>JALISCO"' : 'B_EDO,"JALISCO",B_MUN,' + cmpCol(CB) + rr;
-            return ['B_FD,">="&' + a + ',B_FD,"<="&' + z + ',B_FR,"<="&' + zr + ',' + loc, 'B_EST,"CIERRE",B_FC,"<="&' + zr]; };
+            return ['B_FD,">="&' + a + ',B_FD,"<="&' + z + ',B_FR,"<="&' + zr + ',' + loc, 'B_EST,"CIERRE",B_FC,"<="&' + zcOf(zr)]; };
           MUNS.forEach((m, i) => {
             const rr = 6 + i; S(w5, rr, CB, m, Object.assign({}, CX.aux, { al: 'left' }));
             [[a2, z2, zr2], [a1, z1, zr1]].forEach(([a, z, zr], j) => { const [b, ci] = mcrit(m, a, z, zr, rr); S(w5, rr, CB + 1 + j, '=IF(' + a + '="",0,COUNTIFS(' + b + ')-COUNTIFS(' + b + ',' + ci + '))', CX.aux); });
@@ -18910,7 +18945,8 @@
           [['Base', 'Hoja BASE: versión pública del REPD leída del Sheet del tablero (corte ' + (CUT_TEXT || cmpLab(CMP.corte)) + '). ' + N.toLocaleString('es-MX') + ' registros. Columnas S–Z calculadas por fórmula.'],
            ['Foto a la fecha', 'Desaparición ocurrida en el periodo, reportada a más tardar en el último mes del periodo; excluye registros con estatus CIERRE cuya fecha de cierre es igual o anterior al último mes; localizadas = estatus localizada con fecha de localización igual o anterior al último mes. Reproduce las cifras oficiales.'],
            ['Base vigente', 'Desaparición ocurrida en el periodo con cualquier fecha de reporte hasta el corte; excluye todo registro con estatus CIERRE; localizadas = estatus localizada al corte.'],
-           ['Carpetas', 'Columna CARPETA DE INVESTIGACIÓN con su valor al corte en ambos criterios: la versión pública no publica la fecha de apertura.'],
+           ['Vigente con cierre', 'Igual que la base vigente, pero incluye los registros con estatus CIERRE de cualquier tipo. Desaparecidas = localizadas + siguen desaparecidas + cerrados incluidos (desglosados por tipo de cierre en el grupo F de la hoja 1). Mide el volumen total de reportes recibidos; su % de localización no es comparable con los otros dos criterios porque los cerrados entran al total y nunca se cuentan como localizados.'],
+           ['Carpetas', 'Columna CARPETA DE INVESTIGACIÓN con su valor al corte en los tres criterios: la versión pública no publica la fecha de apertura.'],
            ['Avisos', 'Por fecha de reporte (cualquier fecha de desaparición), excluyendo cierres según el criterio. «De desapariciones anteriores» = fecha de desaparición anterior al inicio del periodo.'],
            ['Comparación', 'Periodo ≤ 12 meses: mismos meses de cada año anterior hasta 2019. Periodo > 12 meses: periodo anterior inmediato de igual duración, si la base lo cubre; si no, una sola fila. Serie: por mes hasta 96 meses; por año si el rango es mayor.'],
            ['Años antes de 2019', 'Buena parte de los registros con desaparición anterior a 2019 proviene de captura retroactiva: su volumen refleja el crecimiento del registro, no sólo el fenómeno. Comparar con cautela.'],
@@ -19018,7 +19054,7 @@
         }
         function cmpTextoAnalisis(){
           const R = CMP.res, o = R.filas[0], p = R.filas[1] || null, q = R.filas.length > 2 ? R.filas[R.filas.length - 1] : null;
-          const A = cmpLabP(o.a, o.z), B = p ? cmpLabP(p.a, p.z) : null, crit = R.foto ? 'foto a la fecha' : 'base vigente';
+          const A = cmpLabP(o.a, o.z), B = p ? cmpLabP(p.a, p.z) : null, crit = R.C.min;
           const pc = v => cmpPc(v), pp = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2) + ' puntos', vr = v => (v >= 0 ? '+' : '−') + Math.abs(v * 100).toFixed(2) + '%';
           const lo = cmpDiv(o.L, o.D), lp = p ? cmpDiv(p.L, p.D) : null;
           const dD = p && p.D ? cmpTr(o.D / p.D - 1) : null, dL = p ? (lo - lp) * 100 : null;
@@ -19034,7 +19070,7 @@
           if (p){
             titulo = (dD < 0 ? 'Bajan ' : dD > 0 ? 'Suben ' : 'Se mantienen ') + (dD ? Math.abs(dD * 100).toFixed(2) + '% ' : '') + 'las desapariciones en ' + A +
               (ccp !== null && cco < ccp ? '; cae la proporción de casos con carpeta de investigación' : (ccp !== null && cco > ccp ? '; sube la proporción de casos con carpeta de investigación' : ''));
-            sumario = 'Con el criterio de ' + crit + ', el registro contabiliza ' + cmpN(o.D) + ' personas desaparecidas en el periodo, contra ' + cmpN(p.D) + ' en ' + B + '. ' +
+            sumario = 'Con el criterio de ' + crit + ', el registro contabiliza ' + cmpN(o.D) + (R.cc ? ' registros de personas desaparecidas en el periodo (incluidos ' + cmpN(o.cerr_inc) + ' cerrados)' : ' personas desaparecidas en el periodo') + ', contra ' + cmpN(p.D) + ' en ' + B + '. ' +
               'La localización ' + (dL >= 0 ? 'sube' : 'baja') + ' ' + Math.abs(dL).toFixed(2) + ' puntos, a ' + pc(lo) + ', pero el resultado depende de la fecha en que se mide cada periodo.';
           } else {
             titulo = 'Se registran ' + cmpN(o.D) + ' desapariciones en ' + A + '; ' + pc(cmpDiv(o.siguen, o.D)) + ' sigue sin localizarse';
@@ -19043,8 +19079,8 @@
           const S = [];
           /* 1 · Qué dicen las cifras */
           const p1 = ['Entre ' + A + ' el Registro Estatal de Personas Desaparecidas (REPD) contabiliza ' + cmpN(o.D) + ' personas cuya desaparición ocurrió en el periodo' +
-            (R.foto ? ' y fue reportada a más tardar al cierre del mismo' : '') + '. De ellas, ' + cmpN(o.L) + ' fueron localizadas (' + pc(lo) + ') y ' + cmpN(o.siguen) + ' seguían sin localizarse' +
-            (R.foto ? ' al cierre del periodo.' : ' a la fecha de corte de la base.')];
+            (R.foto ? ' y fue reportada a más tardar al cierre del mismo' : '') + (R.cc ? ', contando los ' + cmpN(o.cerr_inc) + ' registros que hoy tienen estatus de cierre' : '') + '. De ellas, ' + cmpN(o.L) + ' fueron localizadas (' + pc(lo) + ') y ' + cmpN(o.siguen) + ' seguían sin localizarse' +
+            (R.foto ? ' al cierre del periodo.' : ' a la fecha de corte de la base' + (R.cc ? '; los ' + cmpN(o.cerr_inc) + ' restantes son registros cerrados.' : '.'))];
           if (p) p1.push('Frente a ' + B + ', las desapariciones ' + (dD < 0 ? 'disminuyen ' : 'aumentan ') + Math.abs(dD * 100).toFixed(2) + '% y las localizaciones ' +
             (o.L < p.L ? 'disminuyen ' : 'aumentan ') + Math.abs(cmpTr(o.L / p.L - 1) * 100).toFixed(2) + '%; el porcentaje de localización pasa de ' + pc(lp) + ' a ' + pc(lo) + ' (' + pp(dL) + ').');
           if (q) p1.push('Contra ' + cmpLabP(q.a, q.z) + ', el periodo más antiguo de la serie, la variación de desapariciones es de ' + vr(cmpTr(o.D / q.D - 1)) + '.');
@@ -19067,7 +19103,9 @@
             (p ? ', contra ' + pc(svp) + ' en ' + B + '.' : '.') + ' ' + cmpN(o.cl_lg) + ' fueron clasificadas como víctimas de un delito de la Ley General, ' + cmpN(o.cl_div) + ' de un delito diverso y ' + cmpN(o.cl_sin) + ' sin ser víctimas de delito.',
             pc(cmpDiv(o.loc_mes0, o.L)) + ' de las localizaciones ocurrió el mismo mes de la desaparición y ' + pc(cmpDiv(o.loc_2m, o.L)) + ' en dos meses o menos: el porcentaje de localización descansa, sobre todo, en búsquedas de los primeros días.'] });
           /* 5 · Cierres */
-          S.push({ h: 'Registros que se cierran', p: [(R.foto ? cmpN(o.cierres_excl) + ' registros del periodo ya estaban cerrados al cierre y quedan fuera del conteo' : cmpN(o.cierres_excl) + ' registros del periodo tienen estatus de cierre y quedan fuera del conteo') +
+          S.push({ h: 'Registros que se cierran', p: [R.cc ? cmpN(o.cerr_inc) + ' registros del periodo tienen estatus de cierre y, con este criterio, sí se incluyen en el conteo: ' + cmpN(o.cin_terr) + ' por no competencia territorial, ' +
+            cmpN(o.cin_del) + ' por no competencia de delito, ' + cmpN(o.cin_acu) + ' por acumulación y ' + cmpN(o.cin_fam) + ' por búsqueda de familiares' + (o.cin_otr ? ' (' + cmpN(o.cin_otr) + ' de otro tipo)' : '') +
+            '. Representan ' + pc(cmpDiv(o.cerr_inc, o.D)) + ' del total' + (p ? ' (' + pc(cmpDiv(p.cerr_inc, p.D)) + ' en ' + B + ').' : '.') : (R.foto ? cmpN(o.cierres_excl) + ' registros del periodo ya estaban cerrados al cierre y quedan fuera del conteo' : cmpN(o.cierres_excl) + ' registros del periodo tienen estatus de cierre y quedan fuera del conteo') +
             ': ' + cmpN(o.ci_terr) + ' por no competencia territorial, ' + cmpN(o.ci_del) + ' por no competencia de delito, ' + cmpN(o.ci_acu) + ' por acumulación y ' + cmpN(o.ci_fam) + ' por búsqueda de familiares.' +
             (R.foto && o.cierres_post ? ' Otros ' + cmpN(o.cierres_post) + ' se cerraron después del periodo y sí cuentan en la foto.' : '')] });
           /* 6 · Dónde */
@@ -19083,10 +19121,12 @@
           const lim = ['La carpeta de investigación se registra con su estatus vigente: el REPD no publica la fecha de apertura, así que los periodos antiguos han tenido más tiempo para que se abra una.',
             'El registro se corrige mes con mes (reportes tardíos, cierres, reclasificaciones): una cifra publicada en el pasado puede no coincidir con la base actual sin que haya error.',
             'El porcentaje de un periodo reciente seguirá subiendo conforme avance la búsqueda.'];
+          if (R.cc) lim.unshift(CMP_AVISO_CC);
           if (o.a < 201901) lim.push('Buena parte de los registros con desaparición anterior a 2019 proviene de captura retroactiva: su volumen refleja el crecimiento del registro, no sólo el fenómeno.');
           S.push({ h: 'Lo que las cifras no dicen', b: lim });
           S.push({ h: 'Metodología', p: ['Fuente: versión pública del REPD (COBUPEJ), corte ' + (CUT_TEXT || cmpLab(CMP.corte)) + ', ' + CMP.n.toLocaleString('es-MX') + ' registros. Periodo por fecha de desaparición. Criterio: ' + crit + '. ' +
             (R.foto ? 'Foto a la fecha: desaparición ocurrida en el periodo, reportada a más tardar al cierre del periodo, sin los registros cerrados hasta esa fecha; localizadas hasta el cierre del periodo.'
+             : R.cc ? 'Vigente con cierre: desaparición ocurrida en el periodo con todo lo que se sabe al corte, incluidos los registros con estatus de cierre; localizadas al corte. Desaparecidas = localizadas + siguen desaparecidas + registros cerrados.'
                     : 'Base vigente: desaparición ocurrida en el periodo con todo lo que se sabe al corte, sin registros con estatus de cierre; localizadas al corte.') +
             ' Porcentajes truncados a dos decimales. AMG = 9 municipios. Elaboración: CGES/Arjona.'] });
           return { titulo, sumario, S, A };
@@ -19101,7 +19141,8 @@
           const barra = (l, d, i) => ({ label: l, data: d, backgroundColor: col[i], borderRadius: 3 });
           const opt = (st, pct) => ({ plugins: { legend: { position: 'top', align: 'start' } }, scales: { x: { stacked: st, grid: { display: false } }, y: { stacked: st, beginAtZero: true, ticks: { callback: v => pct ? v + '%' : v.toLocaleString('es-MX') } } } });
           const imgs = [];
-          if (F.length > 1) imgs.push(['% de localización: foto a la fecha contra base vigente', chartPNG({ type: 'line', data: { labels: et, datasets: [linea('Foto a la fecha', Pz.map(p => pcN(p.fL, p.fD)), 0), linea('Base vigente', Pz.map(p => pcN(p.vL, p.vD)), 1)] }, options: opt(false, true) }, 1100, 520)]);
+          if (F.length > 1) imgs.push(['% de localización según el criterio: foto a la fecha, base vigente y vigente con cierre', chartPNG({ type: 'line', data: { labels: et, datasets: [linea('Foto a la fecha', Pz.map(p => pcN(p.fL, p.fD)), 0), linea('Base vigente', Pz.map(p => pcN(p.vL, p.vD)), 1),
+            linea('Vigente con cierre', Pz.map(p => pcN(p.cL, p.cD)), 3)] }, options: opt(false, true) }, 1100, 520)]);
           imgs.push(['Siguen desaparecidas al cierre: con y sin carpeta de investigación', chartPNG({ type: 'bar', data: { labels: et, datasets: [barra('Con carpeta', F.map(o => o.siguen_con_carpeta), 0), barra('Sin carpeta', F.map(o => o.siguen_sin_carpeta), 1)] }, options: opt(true, false) }, 1100, 520)]);
           const S = R.serie; if (S.length > 1) imgs.push(['% de avisos con carpeta de investigación, ' + (S[0].a === S[0].z ? 'por mes' : 'por año') + ' de reporte', chartPNG({ type: 'line', data: { labels: S.map(s => s.lab), datasets: [linea('% avisos con carpeta', S.map(s => pcN(s.avc, s.av)), 0)] }, options: Object.assign(opt(false, true), { plugins: { legend: { display: false } } }) }, 1100, 480)]);
           /* WordprocessingML */
@@ -19127,7 +19168,7 @@
           };
           const hoy = new Date(), fecha = hoy.getDate() + ' de ' + ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][hoy.getMonth()] + ' de ' + hoy.getFullYear();
           let body = par([run('ANÁLISIS DE DATOS · PERSONAS DESAPARECIDAS EN JALISCO', { b: 1, color: 'F08013', sz: 18 })]) + par(T.titulo, 'Title') + par(T.sumario, 'Subtitle') +
-            par([run('CGES/Arjona · ' + fecha + ' · Periodo: ' + T.A + ' · Criterio: ' + (R.foto ? 'foto a la fecha' : 'base vigente'), { i: 1, color: '595959', sz: 18 })]);
+            par([run('CGES/Arjona · ' + fecha + ' · Periodo: ' + T.A + ' · Criterio: ' + R.C.min, { i: 1, color: '595959', sz: 18 })]);
           T.S.forEach((s, i) => {
             body += par(s.h, 'Heading1');
             (s.p || []).forEach(t => body += par(t));
@@ -19174,7 +19215,7 @@
           imgs.forEach((x, k) => zip.file('word/media/grafica' + (k + 1) + '.png', x[1].split(',')[1], { base64: true }));
           Object.keys(zip.files).forEach(k => { if (zip.files[k].dir) delete zip.files[k]; });
           const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-          cmpBaja(blob, 'Analisis_REPD_' + R.a + '-' + R.z + '_' + (R.foto ? 'foto' : 'vigente') + '.docx');
+          cmpBaja(blob, 'Analisis_REPD_' + R.a + '-' + R.z + '_' + R.C.arch + '.docx');
         }
 
         /* =======================================================================
@@ -19188,7 +19229,8 @@
           const filtro = AD('filtro'), fb = filtro && filtro.querySelector('.Audit-Desap-fbtns');
           if (fb) fb.insertAdjacentHTML('beforeend',
             '<span class="Audit-Desap-cmp-seg" role="group" aria-label="Criterio del comparativo" title="Criterio del comparativo por periodo (secci&oacute;n final)">' +
-              '<button type="button" data-cmp-crit="foto" aria-pressed="true">Foto a la fecha</button><button type="button" data-cmp-crit="vig" aria-pressed="false">Base vigente</button></span>' +
+              '<button type="button" data-cmp-crit="foto" aria-pressed="true">Foto a la fecha</button><button type="button" data-cmp-crit="vig" aria-pressed="false">Base vigente</button>' +
+              '<button type="button" data-cmp-crit="cc" aria-pressed="false" title="Base vigente con cierre: incluye los registros cerrados">Vigente con cierre</button></span>' +
             '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-cmp-btn-xlsx" title="Tablas del comparativo del periodo activo">&#11015; Descargar Excel</button>');
           const tit = filtro && filtro.querySelector('.Audit-Desap-filtro-tit');
           if (tit) tit.textContent = 'Filtro de temporalidad · gobierna el explorador, la tabla de detalle municipal y el comparativo por periodo (sección final)';
@@ -19198,7 +19240,7 @@
           cont.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', refiltra));
           const recalcula = () => { if (!CMP.listo) return; try { cmpCalcula(); cmpPinta(); } catch (e) { cmpError(e); } };
           cont.addEventListener('click', e => {
-            const cb = e.target.closest('[data-cmp-crit]'); if (cb){ CMP.sel.foto = cb.getAttribute('data-cmp-crit') === 'foto'; recalcula(); return; }
+            const cb = e.target.closest('[data-cmp-crit]'); if (cb){ const c = cb.getAttribute('data-cmp-crit'); CMP.sel.crit = c; CMP.sel.foto = c === 'foto'; if (c === 'cc') CMP.grupos.F = 1; recalcula(); return; }
             const gb = e.target.closest('[data-cmp-g]'); if (gb && CMP.res){ const g = gb.getAttribute('data-cmp-g'); CMP.grupos[g] = CMP.grupos[g] ? 0 : 1; cmpTablaComp(); return; }
             if (e.target.closest('#' + P + 'cmp-btn-mun') && CMP.res){ CMP.munTodos = !CMP.munTodos; cmpTablaMun(); return; }
             if (e.target.closest('#' + P + 'cmp-btn-xlsx') && CMP.res && CMP.res.V.length) cmpDescarga('cmp-btn-xlsx', cmpXlsxLigero);
