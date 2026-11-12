@@ -1701,6 +1701,46 @@
             .hd-jer .hd-tog { width: 20px; }
         }
     </style>
+
+    <style id="ajustes-espacio">
+        /* Ajustes de espacio (12-11-2026) · logos sin cambio de tamaño */
+        .header-content { padding-top: 6px; padding-bottom: 6px; }
+        .header-logo-box, .header-logo-box-left { padding-top: 4px; padding-bottom: 4px; }
+        .btn-nav { padding: 8px 14px 6px; }
+        header { transition: transform .25s ease; will-change: transform; }
+        body.cab-oculta header { transform: translateY(-100%); }
+        .mun-barra-fija { transition: top .25s ease; }
+        /* Pantallas muy anchas: título y pestañas en un solo renglón */
+        @media (min-width: 1900px) {
+            header { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; column-gap: 18px; padding: 6px 22px; }
+            header .header-content { display: contents; }
+            header .header-logo-box-left { grid-column: 1; grid-row: 1; }
+            header .header-title-center { grid-column: 2; grid-row: 1; }
+            header .header-right { grid-column: 4; grid-row: 1; }
+            header nav.tabs { grid-column: 3; grid-row: 1; max-width: none; margin: 0; padding: 0; justify-content: center; align-self: end; }
+        }
+        /* Filtro de Auditoría: una sola fila y controles más compactos */
+        body #Audit-Desap-vista .Audit-Desap-filtro { padding: 9px 14px; transition: top .25s ease; }
+        body #Audit-Desap-vista .Audit-Desap-filtro-row { flex-wrap: wrap; gap: 8px 12px; }
+        body #Audit-Desap-vista .Audit-Desap-fgrp { gap: 6px; }
+        body #Audit-Desap-vista .Audit-Desap-fgrp label { font-size: 10px; letter-spacing: .06em; }
+        body #Audit-Desap-vista .Audit-Desap-pair { gap: 4px; }
+        body #Audit-Desap-vista .Audit-Desap-fsel { font-size: 12.5px; padding: 5px 6px; min-width: 0; }
+        body #Audit-Desap-vista #Audit-Desap-f-modo { min-width: 0 !important; max-width: 200px; }
+        body #Audit-Desap-vista .Audit-Desap-fbtns { gap: 6px; flex-wrap: wrap; margin-left: 0; }
+        body #Audit-Desap-vista .Audit-Desap-cmp-critbox { display: flex; gap: 6px; align-items: center; margin-left: auto; }
+        body #Audit-Desap-vista .Audit-Desap-cmp-salto { flex-basis: 100%; height: 0; }
+        body #Audit-Desap-vista .Audit-Desap-filtro-row > .Audit-Desap-fstate { flex: 1 1 260px; min-width: 0; margin-top: 0; }
+        body #Audit-Desap-vista .Audit-Desap-fbtn { font-size: 11.5px; padding: 5px 10px; white-space: nowrap; }
+        body #Audit-Desap-vista .Audit-Desap-fbtns .Audit-Desap-cmp-seg button { font-size: 11.5px; padding: 5px 9px; white-space: nowrap; }
+        body #Audit-Desap-vista .Audit-Desap-fstate { margin-top: 6px; padding: 4px 10px; font-size: 12px; line-height: 1.4;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: help; }
+        /* Filtro reducido al bajar: sólo listas y criterio */
+        body #Audit-Desap-vista .Audit-Desap-filtro.Audit-Desap-filtro-mini { padding-top: 6px; padding-bottom: 6px; }
+        body #Audit-Desap-vista .Audit-Desap-filtro-mini .Audit-Desap-fbtns,
+        body #Audit-Desap-vista .Audit-Desap-filtro-mini .Audit-Desap-cmp-salto,
+        body #Audit-Desap-vista .Audit-Desap-filtro-mini .Audit-Desap-fstate { display: none; }
+    </style>
 </head>
 <body>
     <!-- =====================================================================
@@ -1714,8 +1754,7 @@
             </div>
 
             <div class="header-title-center">
-                <span class="eyebrow">Centro de Mando · CGES Jalisco</span>
-                <h1><span class="titulo-prefijo">Reporte Semanal de </span>Incidencia Delictiva y Personas Desaparecidas</h1>
+                <h1>Reportes</h1>
             </div>
 
             <div class="header-right">
@@ -15740,10 +15779,10 @@
           const esTodo    = FILTRO.a === LIM.a && FILTRO.b === LIM.b;
 
           AD('f-state').innerHTML =
-            'Periodo activo: <b>' + largo(FILTRO.a) + '</b> a <b>' + largo(FILTRO.b) + '</b> · ' +
-            nMeses + (nMeses === 1 ? ' mes' : ' meses') + ' · Campo de fecha: <b>' + MODO_TXT[FILTRO.modo] + '</b> · ' +
-            'Registros en el periodo: <b>' + fmt(S.length) + '</b>' +
-            (esTodo ? ' <span class="Audit-Desap-mini">— sin acotar: se muestra toda la temporalidad disponible en el registro.</span>' : '');
+            '<b>' + rango + '</b> · ' + nMeses + (nMeses === 1 ? ' mes' : ' meses') + ' · <b>' + fmt(S.length) + '</b> registros por ' + MODO_TXT[FILTRO.modo] +
+            (esTodo ? ' <span class="Audit-Desap-mini">· toda la temporalidad</span>' : '');
+          AD('f-state').title = 'Periodo activo: ' + largo(FILTRO.a) + ' a ' + largo(FILTRO.b) + ' · ' + nMeses + (nMeses === 1 ? ' mes' : ' meses') +
+            ' · Campo de fecha: ' + MODO_TXT[FILTRO.modo] + ' · Registros en el periodo: ' + fmt(S.length) + (esTodo ? ' · sin acotar: toda la temporalidad disponible en el registro' : '');
 
           AD('kpi-exp').innerHTML =
             kpi('Reportes recibidos en el periodo', fmt(reportes),
@@ -16396,7 +16435,7 @@
           if (!w){
             AD('err-box').innerHTML =
               '<div class="Audit-Desap-err"><b>El navegador bloqueó la ventana emergente.</b><br>' +
-              'Permite las ventanas emergentes para este sitio y vuelve a pulsar «Descargar reporte».</div>';
+              'Permite las ventanas emergentes para este sitio y vuelve a pulsar «Reporte».</div>';
             return;
           }
           w.document.open(); w.document.write(html); w.document.close();
@@ -17417,8 +17456,8 @@
             padding:14px 18px; margin-bottom:var(--gap,18px); }
           #Audit-Desap-vista .Audit-Desap-filtro-tit { font-size:10.5px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
             color:var(--accent); margin-bottom:9px; }
-          #Audit-Desap-vista .Audit-Desap-filtro-row { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; }
-          #Audit-Desap-vista .Audit-Desap-fgrp { display:flex; flex-direction:column; gap:5px; }
+          #Audit-Desap-vista .Audit-Desap-filtro-row { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; }
+          #Audit-Desap-vista .Audit-Desap-fgrp { display:flex; flex-direction:row; align-items:center; gap:8px; }
           #Audit-Desap-vista .Audit-Desap-fgrp label { font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); font-weight:700; }
           #Audit-Desap-vista .Audit-Desap-pair { display:flex; gap:6px; }
           #Audit-Desap-vista .Audit-Desap-fsel { font-family:inherit; font-size:13px; padding:7px 10px; border:1px solid var(--line);
@@ -17555,7 +17594,6 @@
 
           /* ---------- Filtro de temporalidad ---------- */
           '<div class="Audit-Desap-filtro" id="Audit-Desap-filtro">' +
-            '<div class="Audit-Desap-filtro-tit">Filtro de temporalidad &middot; gobierna el explorador y la tabla de detalle municipal</div>' +
             '<div class="Audit-Desap-filtro-row">' +
               '<div class="Audit-Desap-fgrp"><label for="Audit-Desap-f-modo">Campo de fecha</label>' +
                 '<select class="Audit-Desap-fsel" id="Audit-Desap-f-modo" style="min-width:290px">' +
@@ -17574,7 +17612,7 @@
                 '<button type="button" class="Audit-Desap-fbtn Audit-Desap-solid" data-preset="todo">Toda la temporalidad</button>' +
                 '<button type="button" class="Audit-Desap-fbtn" data-preset="anio" id="Audit-Desap-p-anio">A&ntilde;o en curso</button>' +
                 '<button type="button" class="Audit-Desap-fbtn" data-preset="12m">&Uacute;ltimos 12 meses</button>' +
-                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-reporte">&#128196; Descargar reporte</button>' +
+                '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-reporte">&#128196; Reporte</button>' +
                 '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-btn-pptx" title="L&aacute;minas con las cifras al corte y el periodo activo">&#11015; PPTX</button>' +
               '</div>' +
             '</div>' +
@@ -17845,7 +17883,7 @@
            bloque agrega a la barra del filtro. Contiene tabla comparativa por
            periodo, efecto fotografía, sensibilidad, serie mensual (anual si el rango
            pasa de 96 meses), municipios y un banco de gráficas; descarga ligera
-           (botón «Descargar Excel» en la barra), descarga total oculta (doble clic
+           (botón «Excel» en la barra), descarga total oculta (doble clic
            en la firma «CGES/Arjona» del pie) y análisis en Word.
            También aporta: etiquetas de valor para TODAS las gráficas de la vista
            (cmpEtiquetas, llamado desde mkChart), sello «Desde diciembre 2018» en las
@@ -19231,7 +19269,14 @@
             '<span class="Audit-Desap-cmp-seg" role="group" aria-label="Criterio del comparativo" title="Criterio del comparativo por periodo (secci&oacute;n final)">' +
               '<button type="button" data-cmp-crit="foto" aria-pressed="true">Foto a la fecha</button><button type="button" data-cmp-crit="vig" aria-pressed="false">Base vigente</button>' +
               '<button type="button" data-cmp-crit="cc" aria-pressed="false" title="Base vigente con cierre: incluye los registros cerrados">Vigente con cierre</button></span>' +
-            '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-cmp-btn-xlsx" title="Tablas del comparativo del periodo activo">&#11015; Descargar Excel</button>');
+            '<button type="button" class="Audit-Desap-fbtn Audit-Desap-oro" id="Audit-Desap-cmp-btn-xlsx" title="Tablas del comparativo del periodo activo">&#11015; Excel</button>');
+          /* Fila 1: listas + criterio + Excel; fila 2: accesos rápidos, Reporte, PPTX y la línea del periodo activo. */
+          const fila = filtro && filtro.querySelector('.Audit-Desap-filtro-row'), seg = fb && fb.querySelector('.Audit-Desap-cmp-seg'), bx = AD('cmp-btn-xlsx'), est_ = AD('f-state');
+          if (fila && seg && bx){
+            const caja = document.createElement('div'); caja.className = 'Audit-Desap-cmp-critbox'; caja.append(seg, bx);
+            const salto = document.createElement('div'); salto.className = 'Audit-Desap-cmp-salto';
+            fila.insertBefore(caja, fb); fila.insertBefore(salto, fb); if (est_) fila.appendChild(est_);
+          }
           const tit = filtro && filtro.querySelector('.Audit-Desap-filtro-tit');
           if (tit) tit.textContent = 'Filtro de temporalidad · gobierna el explorador, la tabla de detalle municipal y el comparativo por periodo (sección final)';
           cmpSellos(); cmpInmoviliza();
@@ -19256,6 +19301,47 @@
         })();
         /* ═══════════ FIN · MÓDULO AUDITORÍA DESAPARECIDOS (Audit-Desap-) ═══════════ */
 
+    </script>
+    <script>
+    /* Ajustes de espacio (12-11-2026): al bajar se oculta el encabezado y el filtro de Auditoría
+       se reduce a listas y criterio; al subir vuelven completos. Sólo cuando el encabezado es fijo. */
+    (function () {
+        const h = document.querySelector('header');
+        if (!h) return;
+        let y0 = window.scrollY, oculto = false, mini = false;
+        const fijo = () => getComputedStyle(h).position === 'sticky' || getComputedStyle(h).position === 'fixed';
+        const topes = () => {
+            const a = h.offsetHeight;
+            document.documentElement.style.setProperty('--offset-fijo', (oculto ? 6 : a + 6) + 'px');
+            const f = document.getElementById('Audit-Desap-filtro');   // en el filtro, no en la vista: la vista tiene un observador que recalcula su tope
+            if (f) { if (oculto) f.style.setProperty('--Audit-Desap-tope', '0px'); else f.style.removeProperty('--Audit-Desap-tope'); }
+        };
+        const cabecera = (o) => { if (o === oculto) return; oculto = o; document.body.classList.toggle('cab-oculta', o); topes(); };
+        const filtro = (m) => {
+            const f = document.getElementById('Audit-Desap-filtro');
+            if (!f || !f.offsetParent) { mini = false; return; }
+            if (m === mini) return;
+            mini = m;
+            if (m) {
+                const H = f.offsetHeight, mb = parseFloat(getComputedStyle(f).marginBottom) || 0;
+                f.dataset.mb = f.style.marginBottom || '';
+                f.classList.add('Audit-Desap-filtro-mini');
+                f.style.marginBottom = (mb + H - f.offsetHeight) + 'px';   // mismo alto en el flujo: la página no salta
+            } else {
+                f.classList.remove('Audit-Desap-filtro-mini');
+                f.style.marginBottom = f.dataset.mb || '';
+            }
+        };
+        window.addEventListener('scroll', () => {
+            const y = window.scrollY;
+            if (!fijo()) { cabecera(false); filtro(false); y0 = y; return; }
+            if (y < h.offsetHeight + 40) { cabecera(false); filtro(false); y0 = y; return; }
+            if (y > y0 + 8) { cabecera(true); if (y > 420) filtro(true); y0 = y; }
+            else if (y < y0 - 8) { cabecera(false); filtro(false); y0 = y; }
+        }, { passive: true });
+        window.addEventListener('resize', () => setTimeout(topes, 120), { passive: true });
+        document.addEventListener('click', (e) => { if (e.target.closest('header .btn-nav')) { cabecera(false); filtro(false); } });
+    })();
     </script>
 </body>
 </html>
